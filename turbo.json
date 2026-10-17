@@ -7,6 +7,6 @@
     "lint": {},
     "test": { "dependsOn": ["^build"], "outputs": ["coverage/**"] },
     "test:int": { "dependsOn": ["^build"], "cache": false },
-    "dev": { "cache": false, "persistent": true }
+    "dev": { "dependsOn": ["^build"], "cache": false, "persistent": true }
   }
 }

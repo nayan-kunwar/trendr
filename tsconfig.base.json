@@ -3,6 +3,13 @@
     "target": "ES2023",
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
+    "paths": {
+      "@trendr/config": ["./packages/config/src/index.ts"],
+      "@trendr/core": ["./packages/core/src/index.ts"],
+      "@trendr/db": ["./packages/db/src/index.ts"],
+      "@trendr/logger": ["./packages/logger/src/index.ts"],
+      "@trendr/sources": ["./packages/sources/src/index.ts"]
+    },
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "exactOptionalPropertyTypes": true,

@@ -10,7 +10,17 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit"
   },
+  "dependencies": {
+    "@fastify/cors": "^11",
+    "@fastify/helmet": "^13",
+    "@trendr/config": "workspace:*",
+    "@trendr/core": "workspace:*",
+    "@trendr/logger": "workspace:*",
+    "fastify": "^5",
+    "prom-client": "^15"
+  },
   "devDependencies": {
+    "@types/node": "^22",
     "eslint": "^9",
     "tsup": "^8",
     "tsx": "^4",
