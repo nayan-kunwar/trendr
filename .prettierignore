@@ -1,0 +1,8 @@
+pnpm-lock.yaml
+TRENDR_SPEC.md
+docs/
+node_modules/
+dist/
+.next/
+coverage/
+.turbo/

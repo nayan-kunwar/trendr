@@ -20,9 +20,31 @@
     "db:seed": "pnpm --filter @trendr/db db:seed",
     "fixtures:record": "pnpm --filter @trendr/sources fixtures:record",
     "ingest:bootstrap": "pnpm --filter @trendr/worker ingest:bootstrap",
-    "worker:score": "pnpm --filter @trendr/worker worker:score"
+    "worker:score": "pnpm --filter @trendr/worker worker:score",
+    "prepare": "husky"
   },
   "devDependencies": {
-    "turbo": "^2"
+    "@commitlint/cli": "^19",
+    "@commitlint/config-conventional": "^19",
+    "@eslint/js": "^9",
+    "eslint": "^9",
+    "eslint-config-prettier": "^10",
+    "eslint-plugin-boundaries": "^4",
+    "globals": "^15",
+    "husky": "^9",
+    "lint-staged": "^15",
+    "prettier": "^3",
+    "turbo": "^2",
+    "typescript": "^5",
+    "typescript-eslint": "^8"
+  },
+  "lint-staged": {
+    "*.{ts,tsx,mts,cts,js,jsx,mjs,cjs}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{json,md,yml,yaml}": [
+      "prettier --write"
+    ]
   }
 }
