@@ -1,0 +1,28 @@
+{
+  "name": "trendr",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "packageManager": "pnpm@11.7.0",
+  "engines": {
+    "node": ">=22",
+    "pnpm": ">=11"
+  },
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "test:int": "turbo run test:int",
+    "db:generate": "pnpm --filter @trendr/db db:generate",
+    "db:migrate": "pnpm --filter @trendr/db db:migrate",
+    "db:seed": "pnpm --filter @trendr/db db:seed",
+    "fixtures:record": "pnpm --filter @trendr/sources fixtures:record",
+    "ingest:bootstrap": "pnpm --filter @trendr/worker ingest:bootstrap",
+    "worker:score": "pnpm --filter @trendr/worker worker:score"
+  },
+  "devDependencies": {
+    "turbo": "^2"
+  }
+}

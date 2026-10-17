@@ -1,0 +1,3 @@
+# Normalize line endings for a mixed Windows/Linux (Docker) workflow:
+# files are stored and checked out with LF everywhere.
+* text=auto eol=lf
