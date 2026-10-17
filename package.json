@@ -13,8 +13,8 @@
     "build": "turbo run build",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
-    "test": "turbo run test",
-    "test:int": "turbo run test:int",
+    "test": "vitest run --project unit --passWithNoTests",
+    "test:int": "vitest run --project int --passWithNoTests",
     "db:generate": "pnpm --filter @trendr/db db:generate",
     "db:migrate": "pnpm --filter @trendr/db db:migrate",
     "db:seed": "pnpm --filter @trendr/db db:seed",
@@ -29,14 +29,14 @@
     "@eslint/js": "^9",
     "eslint": "^9",
     "eslint-config-prettier": "^10",
-    "eslint-plugin-boundaries": "^4",
     "globals": "^15",
     "husky": "^9",
     "lint-staged": "^15",
     "prettier": "^3",
     "turbo": "^2",
     "typescript": "^5",
-    "typescript-eslint": "^8"
+    "typescript-eslint": "^8",
+    "vitest": "^3"
   },
   "lint-staged": {
     "*.{ts,tsx,mts,cts,js,jsx,mjs,cjs}": [

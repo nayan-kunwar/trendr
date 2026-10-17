@@ -1,12 +1,29 @@
 import eslint from '@eslint/js';
 import prettier from 'eslint-config-prettier';
-import boundaries from 'eslint-plugin-boundaries';
 import globals from 'globals';
 import tseslint from 'typescript-eslint';
 
+// Dependency direction (spec §4): config ← logger ← core ← db ← sources ← apps.
+// A package may only import from layers to its left; `core` must never import `db`.
+// eslint-plugin-boundaries has no stable ESLint 9 flat-config release, so the
+// direction is enforced with the core `no-restricted-imports` rule instead.
+const LAYER_RESTRICTIONS = [
+  { layer: 'config', forbidden: ['logger', 'core', 'db', 'sources'] },
+  { layer: 'logger', forbidden: ['core', 'db', 'sources'] },
+  { layer: 'core', forbidden: ['db', 'sources'] },
+  { layer: 'db', forbidden: ['sources'] },
+];
+
 export default tseslint.config(
   {
-    ignores: ['**/node_modules/**', '**/dist/**', '**/.next/**', '**/coverage/**', '**/.turbo/**'],
+    ignores: [
+      '**/node_modules/**',
+      '**/dist/**',
+      '**/.next/**',
+      '**/coverage/**',
+      '**/.turbo/**',
+      '**/next-env.d.ts',
+    ],
   },
   eslint.configs.recommended,
   {
@@ -17,44 +34,31 @@ export default tseslint.config(
     files: ['**/*.{ts,tsx,mts,cts}'],
     extends: [...tseslint.configs.strictTypeChecked, ...tseslint.configs.stylisticTypeChecked],
     languageOptions: {
-      parserOptions: { projectService: true, tsconfigRootDir: import.meta.dirname },
+      parserOptions: {
+        projectService: true,
+        tsconfigRootDir: import.meta.dirname,
+      },
       globals: { ...globals.node },
     },
     rules: {
       '@typescript-eslint/no-explicit-any': 'error',
     },
   },
-  {
-    // Dependency direction (spec §4): config ← logger ← core ← db ← sources ← apps.
-    // `core` must not import `db`.
-    files: ['packages/**/*.{ts,tsx,mts,cts}', 'apps/**/*.{ts,tsx,mts,cts}'],
-    plugins: { boundaries },
-    settings: {
-      'boundaries/elements': [
-        { type: 'config', pattern: 'packages/config/src/**' },
-        { type: 'logger', pattern: 'packages/logger/src/**' },
-        { type: 'core', pattern: 'packages/core/src/**' },
-        { type: 'db', pattern: 'packages/db/src/**' },
-        { type: 'sources', pattern: 'packages/sources/src/**' },
-        { type: 'apps', pattern: 'apps/*/src/**' },
-      ],
-      'boundaries/ignore': ['**/*.test.ts', '**/*.test.tsx', '**/*.config.ts'],
-    },
+  ...LAYER_RESTRICTIONS.map(({ layer, forbidden }) => ({
+    files: [`packages/${layer}/**/*.{ts,tsx,mts,cts}`],
     rules: {
-      'boundaries/element-types': [
+      'no-restricted-imports': [
         'error',
         {
-          default: 'disallow',
-          rules: [
-            { from: 'logger', allow: ['config'] },
-            { from: 'core', allow: ['config', 'logger'] },
-            { from: 'db', allow: ['config', 'logger', 'core'] },
-            { from: 'sources', allow: ['config', 'logger', 'core'] },
-            { from: 'apps', allow: ['config', 'logger', 'core', 'db', 'sources'] },
+          patterns: [
+            {
+              group: forbidden.flatMap((name) => [`@trendr/${name}`, `@trendr/${name}/*`]),
+              message: `@trendr/${layer} may only import from layers to its left (spec §4).`,
+            },
           ],
         },
       ],
     },
-  },
+  })),
   prettier,
 );

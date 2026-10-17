@@ -33,3 +33,6 @@ Thumbs.db
 .vscode/*
 !.vscode/extensions.json
 !.vscode/settings.json
+
+# Next.js — generated types, rewritten on every build/dev run
+next-env.d.ts
