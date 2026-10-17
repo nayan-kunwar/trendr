@@ -3,6 +3,8 @@ import { createHash } from 'node:crypto';
 import { pino } from 'pino';
 import type { DestinationStream, Logger, LoggerOptions } from 'pino';
 
+export type { Logger } from 'pino';
+
 export type ServiceName = 'api' | 'worker' | 'mcp' | 'web';
 
 export type LogLevel = 'fatal' | 'error' | 'warn' | 'info' | 'debug' | 'trace';

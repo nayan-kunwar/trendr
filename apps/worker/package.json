@@ -10,7 +10,14 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit"
   },
+  "dependencies": {
+    "@trendr/config": "workspace:*",
+    "@trendr/logger": "workspace:*",
+    "ioredis": "^5",
+    "prom-client": "^15"
+  },
   "devDependencies": {
+    "@types/node": "^22",
     "eslint": "^9",
     "tsup": "^8",
     "tsx": "^4",

@@ -42,6 +42,8 @@ export default tseslint.config(
     },
     rules: {
       '@typescript-eslint/no-explicit-any': 'error',
+      // Ports, status codes, and counts are idiomatic in template literals.
+      '@typescript-eslint/restrict-template-expressions': ['error', { allowNumber: true }],
     },
   },
   ...LAYER_RESTRICTIONS.map(({ layer, forbidden }) => ({
