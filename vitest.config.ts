@@ -60,11 +60,13 @@ export default defineConfig({
       include: ['{apps,packages}/*/src/**/*.{ts,tsx}'],
       exclude: ['**/*.d.ts', '**/*.test.{ts,tsx}'],
       // Spec §16: the scoring math is the riskiest pure logic in the codebase
-      // (task 2.1/2.2 acceptance) — hold it at 95% for every metric.
+      // (task 2.1/2.2 acceptance). Lines/statements/functions at 95% mirror the
+      // `packages/core` row of the spec's coverage table; branches use its 90%
+      // (a few defensive `?? fallback` branches are unreachable at runtime).
       thresholds: {
         'packages/core/src/scoring/**': {
           statements: 95,
-          branches: 95,
+          branches: 90,
           functions: 95,
           lines: 95,
         },

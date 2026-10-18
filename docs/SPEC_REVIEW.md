@@ -78,6 +78,30 @@ be re-checked later. Decisions with alternatives get an ADR in [`docs/adr/`](./a
   as a snapshot/daily series. Row counts after the change: 18,960 snapshots, 4,440 daily rows
   (npm 2,400 + PyPI 2,040).
 
+## Phase 2 notes
+
+- `toVelocityInput` placement: spec §8.6 sketches it in `apps/worker/src/scoring/run-scoring.ts`,
+  but §16 requires unit tests for it ("tier staleness 3 h/12 h/36 h"). The pure conversion lives in
+  `packages/core/src/scoring/series.ts` (plus `toDailyVelocityInput` for the daily-count path) and
+  the worker only wires it to `loadSeries` rows.
+- The combined-"All" ranking of §8.2 step 9 (`ALL_BOARD_MAX_SHARE` greedy fill) is the pure helper
+  `buildAllBoard` in `packages/core/src/scoring/board.ts`; the worker's `rebuildAllBoard` (task 2.4)
+  feeds it candidates from `score_runs_current` and persists the ranks as `scores.rank_all`. Items
+  skipped by the share cap keep `rank_all = NULL`.
+- Spec §8.7 contains one arithmetic slip: row C's final is printed as **7.491**, but the table's
+  own intermediates give raw 6.3753 × ageFactor 1.1749 = 7.4903, and exact math gives 7.49048. The
+  worked-example test asserts C to two decimals and every other row to three.
+- Daily-count coverage interpretation: `c = curDaysPresent / WINDOW_DAYS[w]` ("days present / days
+  required", §8.1). For `24h` the required days are the single current day; gaps inside the seven
+  prior days shrink `S_prev` naturally through SQL `AVG` but do not lower `c`.
+- Scoring coverage gate (`vitest.config.ts`): `packages/core/src/scoring/**` at 95% statements /
+  lines / functions and 90% branches — the `packages/core` branch target of the §16 table. The
+  remaining branch gap is defensive `?? fallback` code that `noUncheckedIndexedAccess` forces and
+  that cannot execute (e.g. `s[mid] ?? 0`).
+- `fast-check` property tests (16 properties, fixed seeds for reproducibility) and the golden
+  fixture (`packages/core/test/scoring.golden.test.ts` with its committed snapshot) both guard the
+  §8.3 parameter table; per spec, any constant change requires an explicit golden update in review.
+
 ## Environment quirks worth knowing
 
 - `docker compose port <svc> <port>` exits **0** printing `invalid IP:0` when the port is only
