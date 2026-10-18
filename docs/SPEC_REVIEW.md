@@ -47,6 +47,10 @@ be re-checked later. Decisions with alternatives get an ADR in [`docs/adr/`](./a
   Nuance: `docker compose up --wait` can return while a (re)created one-shot `migrate` container
   is still running; dependents remain correctly gated by `service_completed_successfully`
   (ADR-0005). Scripts that need completion should use `docker compose run --rm migrate`.
+- `@types/node` (^22) is a **root** devDependency. Plain `tsc` resolved `node:*` types only
+  through the vitest test files (which `@trendr/core`'s tsconfig includes); tsup's dts build of
+  the production graph (zod only) failed with `TS2307: Cannot find module 'node:crypto'` until the
+  types were declared at the workspace root, where every package's resolution walk finds them.
 
 ## Environment quirks worth knowing
 
