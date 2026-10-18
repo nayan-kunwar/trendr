@@ -170,9 +170,18 @@ importers:
       '@trendr/config':
         specifier: workspace:*
         version: link:../../packages/config
+      '@trendr/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@trendr/db':
+        specifier: workspace:*
+        version: link:../../packages/db
       '@trendr/logger':
         specifier: workspace:*
         version: link:../../packages/logger
+      drizzle-orm:
+        specifier: ^0.45.4
+        version: 0.45.4(@opentelemetry/api@1.9.1)(@types/pg@8.23.1)(pg@8.23.1)
       ioredis:
         specifier: ^5
         version: 5.11.1

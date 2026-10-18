@@ -133,6 +133,35 @@ be re-checked later. Decisions with alternatives get an ADR in [`docs/adr/`](./a
   of the base, so the old range could never clear `minDelta(arxiv:upvotes, 24h) = 3` and the
   arxiv 24 h board would stay empty in every environment.
 
+### Task 2.4 notes
+
+- `runScoring` (spec §8.4) lives in `apps/worker/src/scoring/run-scoring.ts`; the `scoring` queue
+  processor (task 2.6) is its only caller. It holds `lock:score:{source}` (120 s, skip when held,
+  compare-and-del release), runs both series paths per window, normalizes within (source, window),
+  inserts eligible rows + `swapCurrentRun` in one transaction, rebuilds the combined board and
+  fans out `evaluate-alerts`.
+- `rank_source` is assigned at insert time: eligible rows sorted by final desc, tie-broken by z
+  desc then itemId asc. The spec fixes only that it is 1-based and read by §7.8 tiering ("rank_source
+  ≤ 200/2000 in any window of the current run"), so the tie-break is ours; it is dense (1..n).
+- The combined board is the exported `rebuildAllBoard(db, window)`: it re-reads every source's
+  *current* run for that window (so it converges regardless of which source scored last), runs
+  `buildAllBoard` and persists `rank_all` through a `VALUES (item_id, rank)` join. Unlike the
+  spec's single UPDATE it first clears `rank_all` on current-run rows, because the board is rebuilt
+  after every source run and a shrinking board must not keep stale ranks.
+- The §8.6 burst second pass loads hourly increments for the top 500 candidates by raw score per
+  (source, window) and recomputes the score with `anomalyPenalty = 0.5` (which adds the
+  `burst_suspected` score flag). Daily spikes come from `detectDailySpike` (0.7) and counter resets
+  are logged and counted. All three feed `trendr_scoring_anomalies_total`.
+- `evaluate-alerts` is enqueued through a structural `NotifyQueue` slice (`add(name, data, {jobId})`)
+  so the scoring module needs no `bullmq` dependency until the queue processor lands (task 2.6);
+  the deterministic jobId is `jobId.evaluateAlerts(runId)` from core.
+- Metrics (§14.1): `apps/worker/src/metrics.ts` owns the process-wide registry (also served by
+  `startMetricsServer`), plus `trendr_scoring_items` (eligible/ineligible per source/window — the
+  task 2.4 acceptance compares its eligible label against the `scores` row count),
+  `trendr_scoring_duration_seconds` and `trendr_scoring_anomalies_total`.
+- Scoring instants are floored to the last complete hour (`floorToHour(now)`, §8.1) so intra-hour
+  run jitter cannot change `t`; `computedAt` uses the same instant for every row of a run.
+
 ## Environment quirks worth knowing
 
 - `docker compose port <svc> <port>` exits **0** printing `invalid IP:0` when the port is only

@@ -4,6 +4,7 @@ import { env } from '@trendr/config';
 import { createLogger } from '@trendr/logger';
 
 import { startMetricsServer } from './metrics-server.js';
+import { registry } from './metrics.js';
 
 const logger = createLogger({ service: 'worker', level: env.LOG_LEVEL });
 
@@ -16,6 +17,7 @@ redis.on('error', (error: unknown) => {
 const metricsServer = await startMetricsServer({
   port: env.WORKER_METRICS_PORT,
   metricsToken: env.METRICS_TOKEN,
+  registry,
   logger,
   getHealth: () => ({
     redis: redis.status === 'ready' ? 'connected' : 'disconnected',

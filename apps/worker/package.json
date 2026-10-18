@@ -12,7 +12,10 @@
   },
   "dependencies": {
     "@trendr/config": "workspace:*",
+    "@trendr/core": "workspace:*",
+    "@trendr/db": "workspace:*",
     "@trendr/logger": "workspace:*",
+    "drizzle-orm": "^0.45.4",
     "ioredis": "^5",
     "prom-client": "^15"
   },

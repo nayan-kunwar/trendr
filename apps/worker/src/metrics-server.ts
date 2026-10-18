@@ -1,9 +1,11 @@
 import { createServer } from 'node:http';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
-import { Registry, collectDefaultMetrics } from 'prom-client';
+import { Registry } from 'prom-client';
 
 import type { Logger } from '@trendr/logger';
+
+import { createRegistry } from './metrics.js';
 
 export interface WorkerHealth {
   redis: 'connected' | 'disconnected';
@@ -16,6 +18,8 @@ export interface MetricsServerOptions {
   port: number;
   /** Bearer token required by GET /metrics (env: METRICS_TOKEN). */
   metricsToken: string;
+  /** Registry to serve; defaults to a fresh registry with process metrics. */
+  registry?: Registry;
   getHealth: () => WorkerHealth;
   logger?: Logger;
 }
@@ -34,8 +38,7 @@ export interface RunningMetricsServer {
 export async function startMetricsServer(
   options: MetricsServerOptions,
 ): Promise<RunningMetricsServer> {
-  const registry = new Registry();
-  collectDefaultMetrics({ prefix: 'trendr_', register: registry });
+  const registry = options.registry ?? createRegistry();
 
   const server = createServer((request, response) => {
     void handleRequest(request, response, options, registry);
