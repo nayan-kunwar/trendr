@@ -1,0 +1,37 @@
+# Spec review — TRENDR_SPEC.md v1.1
+
+Living document, updated as each phase executes. The spec is **frozen and never edited**; this file
+records where the implementation deviates, what was verified against the real world, and what must
+be re-checked later. Decisions with alternatives get an ADR in [`docs/adr/`](./adr/).
+
+## Deviations and findings (Phase 0)
+
+| #    | Spec location       | Finding                                                                                                              | Resolution                                                    |
+| ---- | ------------------- | -------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| R-1  | §17.2 web.Dockerfile | `COPY … ./apps/web/public   # comment` — Dockerfiles have no inline comments; COPY parsed extra args (`"/#": not found`) | comment moved to its own line                                 |
+| R-2  | §17.2 node.Dockerfile | copying `packages/db/dist` loose breaks `pg` resolution under pnpm-deploy's layout (`ERR_MODULE_NOT_FOUND` at runtime) | symlink `packages/db` → deployed `@trendr/db` (ADR-0006)       |
+| R-3  | §17.2                | `turbo prune` output omits root `tsconfig.base.json`, which packages `extends` → `TS5083` cascade inside image builds | explicit `COPY --from=pruner` (ADR-0009)                      |
+| R-4  | §17.4                | `pnpm turbo run test -- --coverage` is a no-op without per-package test scripts; pnpm 11 forwards the `--` literally | root Vitest workspace + `pnpm test:coverage` (ADR-0008)        |
+| R-5  | §2 stack table       | lists Vitest 5.x; implementation is on 3.x (stable line, same `projects` API)                                        | ADR-0008 — revisit at Phase 2                                 |
+| R-6  | §17.4 security job   | `pnpm audit --prod --audit-level high` fails out of the box: `next@15.5.28` pins `postcss 8.4.31` (two high advisories) | pnpm override `postcss ^8.5.23` in `pnpm-workspace.yaml`      |
+| R-7  | §17.4 compose-smoke  | seed step needs `packages/db/dist/seed.js` (Phase 1); task 0.8 says "without the seed step yet"                      | deferred with comment in `ci.yml`; enabled at Phase 3.7        |
+| R-8  | §17.4                | OpenAPI-export step needs Phase 3.1; nightly contract job needs Phase 5.6 (`test:contract` script)                   | deferred with comments in `ci.yml`                            |
+| R-9  | §17.2                | `next build` warns "The Next.js plugin was not detected in your ESLint configuration" (repo lints with its own flat config) | decide at Phase 6.1: add `eslint-config-next` or `eslint.ignoreDuringBuilds` |
+| R-10 | §18 task 0.9         | no `docs/SPEC_REVIEW.md` existed despite the baseline commit message (this file)                                      | created with task 0.9                                         |
+
+## Verified "open decision" gaps resolved so far
+
+- **GAP-10** — `docker compose up --wait` with the one-shot `migrate` container: verified OK on
+  Compose v5.4.0 / Docker Desktop 29.7.2 (`migrate` `Exited (0)` is accepted; see ADR-0005).
+- **GAP-11** — `pnpm deploy` flags on the pinned major: `--prod --legacy` works on pnpm 11.7.0; the
+  deployed-layout caveat is handled in the image (ADR-0006).
+
+## Environment quirks worth knowing
+
+- `docker compose port <svc> <port>` exits **0** printing `invalid IP:0` when the port is only
+  `expose`d — use `docker inspect … NetworkSettings.Ports` (all `null` = unpublished) or a host
+  `curl` (connection refused) to verify.
+- `postgres:16-alpine` logs a harmless `no usable system locales were found` warning during init.
+- The worker metrics port (`9464`) is `expose`d for Prometheus and must never be published; the
+  acceptance check does an in-network GET (`docker compose exec api …`) plus a host-side refusal
+  check.
