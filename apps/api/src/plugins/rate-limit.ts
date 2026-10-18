@@ -2,12 +2,11 @@ import rateLimit from '@fastify/rate-limit';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { Redis } from 'ioredis';
 
+import { API_RATE_LIMIT_KEY_PREFIX } from '@trendr/core';
+
 /** Anonymous tier (spec §10.5): 60 requests per minute per client IP. */
 export const ANONYMOUS_MAX = 60;
 export const ANONYMOUS_WINDOW_MS = 60_000;
-
-/** Redis namespace for limiter counters (separate from `lb:`, `item:` etc.). */
-export const RATE_LIMIT_NAMESPACE = 'ratelimit:';
 
 export interface RateLimitPluginOptions {
   /** Redis-backed counters for multi-replica correctness; omitted → in-memory (tests). */
@@ -55,7 +54,8 @@ export async function registerRateLimit(
     keyGenerator: (request) => rateLimitKey(request, trustProxy),
     enableDraftSpec: true,
     skipOnError: true,
-    nameSpace: RATE_LIMIT_NAMESPACE,
+    // Spec §9.1: `apirl:{keyId|ip}` is the inbound API rate-limit key space.
+    nameSpace: API_RATE_LIMIT_KEY_PREFIX,
     ...(options.redis ? { redis: options.redis } : {}),
   });
 }

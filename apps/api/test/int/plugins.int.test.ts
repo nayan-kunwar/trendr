@@ -93,7 +93,7 @@ describe('api plugins over real Postgres + Redis (task 3.1)', () => {
   });
 
   it('rate limits through the shared Redis store (spec §10.5)', async () => {
-    const stale = await redis.keys('ratelimit:*');
+    const stale = await redis.keys('apirl:*');
     if (stale.length > 0) {
       await redis.del(...stale);
     }
@@ -109,7 +109,7 @@ describe('api plugins over real Postgres + Redis (task 3.1)', () => {
         expect(limited.headers['retry-after']).toBeDefined();
         expect(limited.headers['ratelimit-limit']).toBe('2');
 
-        const keys = await redis.keys('ratelimit:*');
+        const keys = await redis.keys('apirl:*');
         expect(keys.length).toBeGreaterThan(0);
         await redis.del(...keys);
       },

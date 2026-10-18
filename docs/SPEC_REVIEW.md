@@ -288,10 +288,10 @@ be re-checked later. Decisions with alternatives get an ADR in [`docs/adr/`](./a
   `config: { cacheControl: CACHE_CONTROL.publicLong }` — and are applied to the 304 too.
 - `plugins/rate-limit.ts`: `@fastify/rate-limit` with the Redis store when a client is passed
   (in-memory otherwise), `enableDraftSpec: true` (`RateLimit-*` + `Retry-After`), `skipOnError:
-  true` (fail-open, matching §9.3), namespace `ratelimit:` (the spec does not fix limiter key
-  names). Anonymous tier: 60/min; the key is `CF-Connecting-IP` (only behind `TRUST_PROXY=true`,
-  else the socket peer) until task 3.5 adds the API-key/JWT tiers of §10.5. `rateLimit: false`
-  disables the plugin for tooling.
+  true` (fail-open, matching §9.3), namespace `apirl:` (§9.1's inbound-limiter prefix, imported
+  from `@trendr/core`). Anonymous tier: 60/min; the key is `CF-Connecting-IP` (only behind
+  `TRUST_PROXY=true`, else the socket peer) until task 3.5 adds the API-key/JWT tiers of §10.5.
+  `rateLimit: false` disables the plugin for tooling.
 - `plugins/openapi.ts`: the Zod type provider (`fastify-type-provider-zod` ^7 + zod 4.6) serves
   as validator compiler, serializer compiler and swagger transform; `@fastify/swagger` 9 + UI 6
   at `/docs`; the document is served at `/openapi.json` (hidden from itself, `/docs*` skipped)
