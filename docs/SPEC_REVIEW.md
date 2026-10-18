@@ -40,6 +40,13 @@ be re-checked later. Decisions with alternatives get an ADR in [`docs/adr/`](./a
   starts `postgres:16-alpine` + `redis:7-alpine` via Testcontainers, exports `DATABASE_URL` /
   `REDIS_URL` (inherited by the workers) and applies migrations with the real migrator before any
   test runs. Verified on Docker Desktop (Windows) and on the GitHub runner.
+- Task 1.3 verified against the compose stack: the rebuilt `migrate` one-shot applied `0000` +
+  `0001` on the dev database (journal = 2 rows, 26 relations, 6 monthly partitions + default,
+  database TimeZone = UTC). A second run — through both `docker compose run --rm migrate` and
+  `docker compose up` — exits 0 and leaves the journal rows identical: re-run is a no-op.
+  Nuance: `docker compose up --wait` can return while a (re)created one-shot `migrate` container
+  is still running; dependents remain correctly gated by `service_completed_successfully`
+  (ADR-0005). Scripts that need completion should use `docker compose run --rm migrate`.
 
 ## Environment quirks worth knowing
 
