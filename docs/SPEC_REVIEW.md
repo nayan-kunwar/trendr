@@ -102,6 +102,24 @@ be re-checked later. Decisions with alternatives get an ADR in [`docs/adr/`](./a
   fixture (`packages/core/test/scoring.golden.test.ts` with its committed snapshot) both guard the
   §8.3 parameter table; per spec, any constant change requires an explicit golden update in review.
 
+### Task 2.3 notes
+
+- `loadSeries` (§8.6) lives in `packages/db/src/repositories/series.repo.ts`, split by metric kind
+  (`loadCumulativeSeries`, `loadDailySeries`, `loadDailyFallback`, `loadHourlySeries`) because MCP
+  carries mixed primary metrics (registry servers score `stars`, npm-alias fallbacks score
+  `downloads`); the worker runs both paths per (source, window). Bounds are passed as computed
+  timestamps instead of SQL interval arithmetic, except the window-length offsets, which cast
+  their bound integers explicitly — Postgres resolves an untyped `date − $n` as `date − date`.
+- Daily `D` selection: `max(day) < (t AT TIME ZONE 'UTC')::date`, i.e. strictly complete UTC days,
+  so a partially written current-day row can never become `D`. The §8.1 `D ≥ today − 3` freshness
+  check still runs in TS and yields `insufficient_data` for older data.
+- The §8.6 fallback pass reads the item's *primary* metric from `daily_metrics` for the UTC day
+  before `t−W`. For cumulative metrics that works because `rollupDailyMetrics` stores the
+  end-of-day counter under the same metric name; the seed writes no cumulative daily rows, so the
+  integration test covers the pass with explicit fixtures.
+- Raw `db.execute` results bypass drizzle's column mappers: `timestamptz` columns arrive as text.
+  `series.repo.ts` normalizes every date and bigint column before mapping into the core row shapes.
+
 ## Environment quirks worth knowing
 
 - `docker compose port <svc> <port>` exits **0** printing `invalid IP:0` when the port is only
