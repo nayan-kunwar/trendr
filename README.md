@@ -14,9 +14,9 @@ an MCP server for agents.
 | Phase | Scope                                            | State   |
 | ----- | ------------------------------------------------ | ------- |
 | 0     | Scaffolding, tooling, CI skeleton, Compose stack | ✅ done |
-| 1     | Database + core domain                           | ⏳ next |
-| 2     | Scoring engine (TDD)                             | ⏳      |
-| 3     | Read API (public)                                | ⏳      |
+| 1     | Database + core domain                           | ✅ done |
+| 2     | Scoring engine (TDD)                             | ✅ done |
+| 3     | Read API (public)                                | ⏳ next |
 | 4     | Ingestion framework + GitHub adapter             | ⏳      |
 | 5     | npm, PyPI, Hugging Face, arXiv, MCP adapters     | ⏳      |
 | 6     | Web frontend                                     | ⏳      |
