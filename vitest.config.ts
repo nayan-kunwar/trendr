@@ -32,5 +32,14 @@ export default defineConfig({
         },
       },
     ],
+    // CI uploads coverage/coverage-summary.json as an artifact (spec §17.4).
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'json-summary'],
+      reportsDirectory: 'coverage',
+      // Measure sources only: no build output, no configs, no type-only files.
+      include: ['{apps,packages}/*/src/**/*.{ts,tsx}'],
+      exclude: ['**/*.d.ts', '**/*.test.{ts,tsx}'],
+    },
   },
 });
