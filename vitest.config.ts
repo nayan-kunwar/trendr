@@ -29,7 +29,14 @@ export default defineConfig({
         resolve: { alias: workspaceAliases },
         test: {
           name: 'unit',
-          include: ['{apps,packages}/*/src/**/*.test.{ts,tsx}'],
+          include: [
+            '{apps,packages}/*/src/**/*.test.{ts,tsx}',
+            // Package-level test roots (spec §16): top level and an optional
+            // `unit/` subtree — both non-recursive past that, so `test/int/**`
+            // int tests never leak into the unit project.
+            '{apps,packages}/*/test/*.test.{ts,tsx}',
+            '{apps,packages}/*/test/unit/**/*.test.{ts,tsx}',
+          ],
         },
       },
       {
@@ -52,6 +59,16 @@ export default defineConfig({
       // Measure sources only: no build output, no configs, no type-only files.
       include: ['{apps,packages}/*/src/**/*.{ts,tsx}'],
       exclude: ['**/*.d.ts', '**/*.test.{ts,tsx}'],
+      // Spec §16: the scoring math is the riskiest pure logic in the codebase
+      // (task 2.1/2.2 acceptance) — hold it at 95% for every metric.
+      thresholds: {
+        'packages/core/src/scoring/**': {
+          statements: 95,
+          branches: 95,
+          functions: 95,
+          lines: 95,
+        },
+      },
     },
   },
 });
