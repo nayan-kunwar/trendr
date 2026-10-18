@@ -4,9 +4,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "tsup src/main.ts --format esm --sourcemap --clean",
+    "build": "tsup src/main.ts src/score-cli.ts --format esm --sourcemap --clean",
     "dev": "tsx watch src/main.ts",
     "start": "node dist/main.js",
+    "worker:score": "node dist/score-cli.js",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit"
   },
@@ -15,6 +16,7 @@
     "@trendr/core": "workspace:*",
     "@trendr/db": "workspace:*",
     "@trendr/logger": "workspace:*",
+    "bullmq": "^6.3.16",
     "drizzle-orm": "^0.45.4",
     "ioredis": "^5",
     "prom-client": "^15"

@@ -204,6 +204,51 @@ be re-checked later. Decisions with alternatives get an ADR in [`docs/adr/`](./a
   loop hammers the live key during a 1,200-row swap and only ever observes the complete old board
   or the complete new one.
 
+### Task 2.6 notes
+
+- `apps/worker/src/queues.ts` owns the BullMQ plumbing (spec §7.5/§5.2): the producer connection
+  (`maxRetriesPerRequest: null`), `defaultJobOpts` (5 attempts, `custom` backoff through
+  `backoffDelay(5 s … 30 min)`, `removeOnComplete` 24 h/2000, `removeOnFail` 7 days), the queue
+  registry (`scoring`, `notify`, `dead-letter`) and `enqueueScoringRun`, which adds
+  `compute-scores` with the deterministic slot jobId `score.{source}.YYYY-MM-DDTHH-mm` (UTC,
+  floored to ten minutes); a second add inside the same slot returns the existing job.
+- The `scoring` processor (`apps/worker/src/scoring/processor.ts`) validates every payload with
+  `ScoringJobSchema` first — invalid data throws `UnrecoverableError` (no retries) — then runs
+  `runScoring` (the per-source Redis lock lives there, §8.4) and returns `{ source, windows }` as
+  the job result. Concurrency is 1: a run is CPU-bound and the Redis lock serializes sources
+  anyway. `Queues.scoring`/`Worker` are typed `Queue<ScoringJob, ScoringResult>` so the result
+  type survives to `waitUntilFinished`.
+- `attachDeadLetter` (`apps/worker/src/dlq.ts`) copies §7.7's payload into the `dead-letter`
+  queue once the last attempt failed (or immediately on `UnrecoverableError`).
+- **`score-safety` is per source.** §7.2 lists one row (`scoring` `compute-scores` per source,
+  `40 * * * *`), but a BullMQ scheduler template carries one fixed payload and scheduler ids are
+  unique per queue, so the row is read per source: six schedulers `score-safety-{source}` (hyphen,
+  not colon — scheduler ids become Redis key segments), pattern `40 * * * *`, tz UTC, job data
+  `{ source, windows: all three, trigger: 'schedule' }` and the default job options. Registration
+  is idempotent (`upsertJobScheduler`); `main.ts` only registers when `WORKER_ROLES` includes
+  `scheduler` *and* `SCHEDULER_ENABLED` is true.
+- `main.ts` starts processors by role: `scheduler` registers the schedulers, `scoring` starts the
+  worker wired to `queues.notify` (the `evaluate-alerts` fan-out target) and
+  `queues.deadLetter`; `/healthz` now reports a real `schedulerRegistered` flag and
+  `lastJobByQueue` (updated on completed scoring jobs), and shutdown closes the worker, queues,
+  the db pool and Redis in that order.
+- `worker:score` (`apps/worker/src/score-cli.ts`) is a thin producer: parse `--source` (required,
+  one of §2's sources) and optional `--windows 24h,7d` (defaults to all), enqueue with trigger
+  `admin`, exit. Its package script is `node dist/score-cli.js` — the `db:migrate`/`db:seed`
+  convention, and the only form that works in the compose image, which deploys production
+  dependencies (no tsx) and no pnpm. The direct-run guard and `.env` pickup are copied from the
+  seed CLI; real environment variables always win over `.env` values.
+- Tests: unit coverage of the argv parser and slot flooring
+  (`apps/worker/test/unit/score-args.test.ts`); the int test
+  (`apps/worker/test/int/scoring-queue.int.test.ts`) runs a real worker over the containerized
+  Redis/Postgres — end-to-end `compute-scores` (run row `succeeded`, current-run scores, board
+  key, `evaluate-alerts` jobId), slot dedupe, unrecoverable invalid payload → dead-letter entry,
+  idempotent scheduler registration (pattern, tz, template data), and a spawned `worker:score`
+  CLI whose job the worker then processes.
+- Dependency note: BullMQ pulls `msgpackr`; its optional native accelerator `msgpackr-extract`
+  is set to `false` in `pnpm-workspace.yaml` `allowBuilds` (pnpm 11 otherwise blocks on the
+  undecided build script) — the pure-JS fallback is used.
+
 ## Environment quirks worth knowing
 
 - `docker compose port <svc> <port>` exits **0** printing `invalid IP:0` when the port is only

@@ -3,11 +3,12 @@ packages:
   - 'packages/*'
 
 # pnpm 11 blocks dependency build scripts by default; esbuild (used by tsup/tsx/vitest) needs its postinstall.
-# cpu-features/protobufjs/ssh2 (dockerode deps) ship pure-JS fallbacks — their native
-# build scripts stay off.
+# cpu-features/protobufjs/ssh2 (dockerode deps) and msgpackr-extract (bullmq's native
+# msgpackr accelerator) ship pure-JS fallbacks — their native build scripts stay off.
 allowBuilds:
   cpu-features: false
   esbuild: true
+  msgpackr-extract: false
   protobufjs: false
   ssh2: false
 
