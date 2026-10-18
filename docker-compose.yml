@@ -1,0 +1,148 @@
+name: trendr
+
+x-node-env: &node-env
+  NODE_ENV: ${NODE_ENV:-development}
+  LOG_LEVEL: ${LOG_LEVEL:-info}
+  DATABASE_URL: postgres://trendr:trendr@postgres:5432/trendr
+  REDIS_URL: redis://redis:6379
+  API_PUBLIC_URL: ${API_PUBLIC_URL:-http://localhost:4000}
+  API_INTERNAL_URL: http://api:4000
+  WEB_PUBLIC_URL: ${WEB_PUBLIC_URL:-http://localhost:3000}
+
+services:
+  postgres:
+    image: postgres:16-alpine # set TIMESCALE_ENABLED=true and image timescale/timescaledb:latest-pg16 for the Timescale variant
+    command: ['postgres', '-c', 'timezone=UTC'] # partition + rollup math assumes UTC sessions (6.3); prod override adds -c shared_buffers=256MB
+    environment:
+      POSTGRES_USER: trendr
+      POSTGRES_PASSWORD: trendr
+      POSTGRES_DB: trendr
+    ports: ['5432:5432']
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U trendr -d trendr']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    command: ['redis-server', '--appendonly', 'yes', '--maxmemory-policy', 'noeviction'] # BullMQ requires noeviction
+    ports: ['6379:6379']
+    volumes: [redisdata:/data]
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  migrate:
+    build: { context: ., dockerfile: infra/docker/node.Dockerfile, args: { APP: api } }
+    command: ['node', 'packages/db/dist/migrate.js']
+    environment: { <<: *node-env }
+    env_file: [.env]
+    depends_on:
+      postgres: { condition: service_healthy }
+    restart: 'no'
+
+  api:
+    build: { context: ., dockerfile: infra/docker/node.Dockerfile, args: { APP: api } }
+    environment: { <<: *node-env, API_PORT: '4000' }
+    env_file: [.env]
+    ports: ['4000:4000']
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      redis: { condition: service_healthy }
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://localhost:4000/readyz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  worker:
+    build: { context: ., dockerfile: infra/docker/node.Dockerfile, args: { APP: worker } }
+    environment:
+      <<: *node-env
+      WORKER_ROLES: scheduler,ingest,scoring,notify
+      WORKER_METRICS_PORT: '9464'
+      SMTP_URL: smtp://mailpit:1025
+    env_file: [.env]
+    expose: ['9464'] # internal only: Prometheus scrapes worker:9464; /metrics needs Bearer METRICS_TOKEN
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      redis: { condition: service_healthy }
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://localhost:9464/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  web:
+    build: { context: ., dockerfile: infra/docker/web.Dockerfile }
+    environment:
+      API_INTERNAL_URL: http://api:4000
+      NEXT_PUBLIC_API_URL: ${API_PUBLIC_URL:-http://localhost:4000}
+      PORT: '3000'
+    ports: ['3000:3000']
+    depends_on:
+      api: { condition: service_healthy }
+    restart: unless-stopped
+
+  mcp:
+    build: { context: ., dockerfile: infra/docker/node.Dockerfile, args: { APP: mcp } }
+    environment:
+      <<: *node-env
+      MCP_TRANSPORT: http
+      MCP_PORT: '4100'
+    env_file: [.env]
+    ports: ['4100:4100']
+    depends_on:
+      api: { condition: service_healthy }
+    restart: unless-stopped
+
+  mailpit:
+    image: axllent/mailpit:latest
+    ports: ['8025:8025', '1025:1025']
+
+  prometheus:
+    image: prom/prometheus:latest
+    profiles: ['obs']
+    volumes:
+      - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./infra/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+    ports: ['9090:9090']
+
+  grafana:
+    image: grafana/grafana:latest
+    profiles: ['obs']
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_AUTH_ANONYMOUS_ENABLED: 'true'
+    volumes:
+      - ./infra/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./infra/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports: ['3001:3000']
+    depends_on: [prometheus]
+
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    profiles: ['obs']
+    ports: ['16686:16686', '4318:4318']
+
+volumes:
+  pgdata:
+  redisdata:

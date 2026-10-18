@@ -15,6 +15,7 @@
     "@fastify/helmet": "^13",
     "@trendr/config": "workspace:*",
     "@trendr/core": "workspace:*",
+    "@trendr/db": "workspace:*",
     "@trendr/logger": "workspace:*",
     "fastify": "^5",
     "prom-client": "^15"

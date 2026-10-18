@@ -1,0 +1,3 @@
+# Alert rules arrive with the observability phase (spec §14.5); the file must
+# exist so the compose `obs` profile mounts resolve.
+groups: []
