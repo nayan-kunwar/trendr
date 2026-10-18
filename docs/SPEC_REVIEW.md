@@ -120,6 +120,19 @@ be re-checked later. Decisions with alternatives get an ADR in [`docs/adr/`](./a
 - Raw `db.execute` results bypass drizzle's column mappers: `timestamptz` columns arrive as text.
   `series.repo.ts` normalizes every date and bigint column before mapping into the core row shapes.
 
+### Seed fixture notes (task 2.4 driver)
+
+- The seed now writes a trailing 48 h **hourly tail** for cumulative/gauge series (points on the
+  hour grid, linearly interpolated from the daily buckets, exact daily buckets skipped). Without
+  it a 24 h window had nothing to measure: its only snapshots were 24 h apart, so
+  `toVelocityInput` could never interpolate around `t − W` and `V_first` always equalled `V_now`.
+  Hours after the last daily bucket continue the last day's increment (a projected partial current
+  day) so a run at any hour of the anchor day sees ~one full day of growth. Snapshot counts:
+  316 series × (60 daily + 46 hourly) = 33,496; daily_metrics unchanged (4,440).
+- Arxiv upvote bases were raised to `10 + 2500·rand³` (was `5 + 600·rand³`): growth is a fraction
+  of the base, so the old range could never clear `minDelta(arxiv:upvotes, 24h) = 3` and the
+  arxiv 24 h board would stay empty in every environment.
+
 ## Environment quirks worth knowing
 
 - `docker compose port <svc> <port>` exits **0** printing `invalid IP:0` when the port is only

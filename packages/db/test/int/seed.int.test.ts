@@ -1,6 +1,6 @@
 import { createHmac } from 'node:crypto';
 
-import { count, eq, inArray, max, min, sql } from 'drizzle-orm';
+import { and, count, eq, inArray, max, min, sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { createDb, type Connection, type Db } from '../../src/client.js';
@@ -84,7 +84,9 @@ describe('seed.ts (spec §7.3 bootstrap, task 1.6)', () => {
     });
     expect(report.apiKey).toMatch(/^dt_live_[0-9A-Za-z]{8}_[0-9A-Za-z]{32}$/);
     expect(report.apiKey.startsWith(`${report.apiKeyPrefix}_`)).toBe(true);
-    expect(report.snapshots).toBeGreaterThan(15_000);
+    // 316 cumulative/gauge series × 60 daily rows + 46 hourly tail points each
+    // (48 h minus the two exact daily buckets).
+    expect(report.snapshots).toBe(33_496);
     // npm 40×60 + PyPI 34×60; HF `downloads` is latest-only (spec §7.3.4).
     expect(report.dailyMetrics).toBe(4_440);
     expect(report.itemTopics).toBeGreaterThan(300);
@@ -106,7 +108,8 @@ describe('seed.ts (spec §7.3 bootstrap, task 1.6)', () => {
     expect(counts.dailyMetrics).toBe(report.dailyMetrics);
     expect(counts.itemTopics).toBe(report.itemTopics);
 
-    // 60 days of daily buckets ending on the anchor day.
+    // 60 days of daily buckets ending on the anchor day, plus a trailing 48 h
+    // hourly tail whose newest point is the last complete hour (anchor − 1 h).
     const windowRow = single(
       await db
         .select({
@@ -116,8 +119,21 @@ describe('seed.ts (spec §7.3 bootstrap, task 1.6)', () => {
         .from(snapshots)
         .where(inArray(snapshots.itemId, ids)),
     );
-    expect(windowRow.max?.toISOString()).toBe('2026-10-18T00:00:00.000Z');
+    expect(windowRow.max?.toISOString()).toBe('2026-10-18T11:00:00.000Z');
     expect(windowRow.min?.toISOString()).toBe('2026-08-20T00:00:00.000Z');
+
+    const hourlyRows = single(
+      await db
+        .select({ n: count() })
+        .from(snapshots)
+        .where(
+          and(
+            inArray(snapshots.itemId, ids),
+            sql`(${snapshots.capturedAt} AT TIME ZONE 'UTC')::time <> '00:00:00'`,
+          ),
+        ),
+    );
+    expect(hourlyRows.n).toBe(14_536);
 
     // Admin user + API key: only the HMAC-SHA256(pepper, raw) is stored.
     const admin = single(await db.select().from(users).where(eq(users.email, ADMIN_EMAIL)));

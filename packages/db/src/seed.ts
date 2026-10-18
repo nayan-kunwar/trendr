@@ -32,8 +32,9 @@ import { apiKeys, users } from './schema/users.js';
 
 /**
  * Dev seed (spec §7.3 bootstrap, §18 task 1.6): ≈ 200 fixture items across all
- * six sources with 60 days of synthetic-but-realistic series so the UI and the
- * scoring pipeline work offline. Every write goes through the Phase-1
+ * six sources with 60 days of synthetic-but-realistic series (daily buckets
+ * plus a trailing 48 h hourly tail) so the UI and the scoring pipeline work
+ * offline. Every write goes through the Phase-1
  * repositories and their natural keys, which is what makes `pnpm db:seed`
  * idempotent; the series comes from a seeded PRNG (and its timestamps from the
  * run's UTC day), so re-runs inside one UTC day are byte-identical. One admin
@@ -44,6 +45,14 @@ import { apiKeys, users } from './schema/users.js';
 /** Series length in days (spec §7.3 backfill windows; UI sparklines). */
 const DAYS = 60;
 const DAY_MS = 86_400_000;
+const HOUR_MS = 3_600_000;
+/**
+ * Hourly snapshots for the trailing window (spec §7.7 cadence for tracked
+ * items). Without the tail a 24 h scoring window would compare a single daily
+ * bucket with itself and every Δ would be 0 (task 2.4 acceptance: scores for
+ * all sources × windows on seed data).
+ */
+const HOURLY_TAIL_HOURS = 48;
 /** Fixed PRNG seed — the whole fixture series is reproducible. */
 const PRNG_SEED = 0x7f3d2a19;
 /** Deterministic dev key material: `dt_live_` + 8-char prefix + 32 base62 chars. */
@@ -407,12 +416,52 @@ function utcMidnight(date: Date): Date {
   return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
 }
 
+/** Floor to the UTC hour — the end of the last complete hour (spec §8.1). */
+function utcHour(date: Date): Date {
+  return new Date(Math.floor(date.getTime() / HOUR_MS) * HOUR_MS);
+}
+
 function isoDay(date: Date): string {
   return date.toISOString().slice(0, 10);
 }
 
 function daysAgo(anchor: Date, days: number): Date {
   return new Date(anchor.getTime() - days * DAY_MS);
+}
+
+/**
+ * The trailing hourly snapshots (spec §7.7 cadence): points on the hour grid
+ * from `anchorHour − 48 h` up to `anchorHour − 1 h`, linearly interpolated
+ * from the daily series. Points that land exactly on a daily bucket are
+ * skipped so the daily rows keep their identity. Hours after the last daily
+ * bucket (the partial current day) continue the last day's increment, so a
+ * counter keeps growing through the morning like a snapshot loop would.
+ */
+function hourlyTail(
+  values: readonly number[],
+  anchorHour: Date,
+  anchorDay: Date,
+): { capturedAt: Date; value: number }[] {
+  const firstDayMs = anchorDay.getTime() - (DAYS - 1) * DAY_MS;
+  const lastValue = valueAt(values, DAYS - 1);
+  // The current day is projected forward, not flat, so 24 h windows see a
+  // full day of movement at any scoring hour.
+  const projectedNext = lastValue + (lastValue - valueAt(values, DAYS - 2));
+  const points: { capturedAt: Date; value: number }[] = [];
+
+  for (let hoursBack = HOURLY_TAIL_HOURS; hoursBack >= 1; hoursBack -= 1) {
+    const capturedAtMs = anchorHour.getTime() - hoursBack * HOUR_MS;
+    if ((capturedAtMs - firstDayMs) % DAY_MS === 0) continue;
+
+    const dayFraction = (capturedAtMs - firstDayMs) / DAY_MS;
+    const lo = Math.floor(dayFraction);
+    const fraction = dayFraction - lo;
+    const upper = lo + 1 <= DAYS - 1 ? valueAt(values, lo + 1) : projectedNext;
+    const value = Math.round(valueAt(values, lo) * (1 - fraction) + upper * fraction);
+    points.push({ capturedAt: new Date(capturedAtMs), value });
+  }
+
+  return points;
 }
 
 function stableToken(input: string, length: number): string {
@@ -738,7 +787,10 @@ function metricBase(metric: Metric, starsBase: number | null, rand: () => number
     case 'likes':
       return 15 + 5_000 * rand() ** 4;
     case 'upvotes':
-      return 5 + 600 * rand() ** 3;
+      // Trending papers accumulate double-digit upvotes a day; the base range
+      // must clear `minDelta(arxiv:upvotes, 24h) = 3` for a healthy fraction of
+      // the fixture (task 2.4 acceptance: scores for every source × window).
+      return 10 + 2_500 * rand() ** 3;
     case 'trending_score':
       return 5 + 85 * rand();
     default:
@@ -804,7 +856,7 @@ function cumulativeFromDaily(daily: number[], offset: number): number[] {
   return values;
 }
 
-function valueAt(values: number[], index: number): number {
+function valueAt(values: readonly number[], index: number): number {
   const clamped = Math.max(0, Math.min(values.length - 1, index));
   return values[clamped] ?? 0;
 }
@@ -919,6 +971,7 @@ function buildSeedApiKey(pepper: string): { raw: string; prefix: string; hash: B
 export async function seed(db: Db, options: SeedOptions): Promise<SeedReport> {
   const now = options.now ?? new Date();
   const anchorDay = utcMidnight(now);
+  const anchorHour = utcHour(now);
   const adminEmail = options.adminEmail.trim().toLowerCase();
   const fixtures = buildFixtures(anchorDay);
   const seriesData = buildSeries(fixtures, anchorDay);
@@ -948,9 +1001,10 @@ export async function seed(db: Db, options: SeedOptions): Promise<SeedReport> {
       return id;
     };
 
-    // 2. Series rows: daily bucket snapshots for cumulative/gauge metrics,
-    //    daily_metrics for daily counts (npm/PyPI downloads; HF downloads are
-    //    latest-only and never persisted as a series).
+    // 2. Series rows: daily bucket snapshots for cumulative/gauge metrics
+    //    (plus the trailing hourly tail, see `hourlyTail`), daily_metrics for
+    //    daily counts (npm/PyPI downloads; HF downloads are latest-only and
+    //    never persisted as a series).
     const snapshotRows: SnapshotUpsert[] = [];
     const dailyRows: DailyMetricUpsert[] = [];
     const pairRows: ItemMetricPair[] = [];
@@ -986,6 +1040,17 @@ export async function seed(db: Db, options: SeedOptions): Promise<SeedReport> {
           }
         } else {
           pairRows.push({ itemId, metric });
+          for (const point of hourlyTail(values, anchorHour, anchorDay)) {
+            snapshotRows.push({
+              itemId,
+              metric,
+              capturedAt: point.capturedAt,
+              observedAt: new Date(
+                point.capturedAt.getTime() + 60_000 * (1 + (Number(itemId) % 5)),
+              ),
+              value: point.value,
+            });
+          }
         }
       }
     }
