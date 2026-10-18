@@ -7,22 +7,31 @@
     "build": "tsup src/main.ts --format esm --sourcemap --clean",
     "dev": "tsx watch src/main.ts",
     "start": "node dist/main.js",
+    "openapi:export": "tsx src/openapi-export.ts",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@fastify/cors": "^11",
     "@fastify/helmet": "^13",
+    "@fastify/rate-limit": "^11.2.1",
+    "@fastify/swagger": "^9.9.2",
+    "@fastify/swagger-ui": "^6.1.2",
     "@trendr/config": "workspace:*",
     "@trendr/core": "workspace:*",
     "@trendr/db": "workspace:*",
     "@trendr/logger": "workspace:*",
     "fastify": "^5",
-    "prom-client": "^15"
+    "fastify-plugin": "^6.0.1",
+    "fastify-type-provider-zod": "^7.0.0",
+    "ioredis": "^5.11.1",
+    "prom-client": "^15",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@types/node": "^22",
     "eslint": "^9",
+    "prettier": "^3.9.10",
     "tsup": "^8",
     "tsx": "^4",
     "typescript": "^5"

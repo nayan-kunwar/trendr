@@ -249,6 +249,64 @@ be re-checked later. Decisions with alternatives get an ADR in [`docs/adr/`](./a
   is set to `false` in `pnpm-workspace.yaml` `allowBuilds` (pnpm 11 otherwise blocks on the
   undecided build script) — the pure-JS fallback is used.
 
+### Phase 2 exit notes
+
+- CI run `39152880300` is green at `936a6a9`; the `phase-2` tag was force-moved twice from the
+  original push (`29af3f7` → `5d6e514` → `936a6a9`): first for a missing `@trendr/db/seed`
+  tsconfig path that only failed on a clean checkout (CI lints/builds without `dist`), then for a
+  gitleaks false positive (the fabricated `int-test-*` CLI env values in the scoring int test are
+  now allowlisted by value prefix, not by file). The tag message records both moves.
+
+## Phase 3 notes
+
+### Task 3.1 notes
+
+- **`buildApp` is async now.** Fastify captures a route's hook chain when the route is
+  registered, so hook-adding plugins (`@fastify/rate-limit`, `@fastify/swagger`, helmet/CORS)
+  only cover routes registered *after* them. A synchronous `register(rateLimit)` followed by a
+  route silently served unlimited traffic (verified with a scratch test); `buildApp` therefore
+  awaits those registrations and returns `Promise<FastifyInstance>` — tests and `main.ts` await
+  it.
+- **Plugins decorate caller-owned clients** (spec §4): `plugins/db.ts` decorates
+  `app.db`/`app.pool` from a `@trendr/db` `Connection`; `plugins/redis.ts` decorates
+  `app.redis`/`app.redisSub` and only duplicates the subscriber when none is passed (with
+  subscriber-friendly ioredis options — `enableOfflineQueue: true`,
+  `maxRetriesPerRequest: null`, error events logged — and teardown on `onClose`). `main.ts`
+  builds the pool/Redis with §9.3 fail-fast options (`enableOfflineQueue: false`,
+  `maxRetriesPerRequest: 1`) so a down Redis degrades instead of hanging, logs redis errors, and
+  closes both after `app.close()`. `/metrics` is registered after the OpenAPI plugin so it is
+  collected into the document (§10.1).
+- `plugins/cache.ts` keeps the read-through/breaker logic in a pure `createCache({ store, now })`
+  factory (unit-tested with a stub store and injected clock). Semantics: `readThrough(key, ttlSec,
+  load)` returns cached JSON or the loader result (best-effort `SET … EX ttl`); every Redis error
+  counts, five consecutive open the breaker for 30 s (§9.3), any successful command resets it,
+  and `invalidate(...keys)` is best-effort/silent while open. `breakerState()` is exposed for
+  tests and a future `/readyz` `degraded` report.
+- `plugins/etag.ts`: weak body-hash ETags `W/"{sha1(body)}"` + 304 on `If-None-Match` (weak
+  comparison, `*` supported) for GET/HEAD 200 responses; a route-set ETag (the trending board's
+  `lb-…` tag) wins. The §9.4 `Cache-Control` values are declarative — routes pass
+  `config: { cacheControl: CACHE_CONTROL.publicLong }` — and are applied to the 304 too.
+- `plugins/rate-limit.ts`: `@fastify/rate-limit` with the Redis store when a client is passed
+  (in-memory otherwise), `enableDraftSpec: true` (`RateLimit-*` + `Retry-After`), `skipOnError:
+  true` (fail-open, matching §9.3), namespace `ratelimit:` (the spec does not fix limiter key
+  names). Anonymous tier: 60/min; the key is `CF-Connecting-IP` (only behind `TRUST_PROXY=true`,
+  else the socket peer) until task 3.5 adds the API-key/JWT tiers of §10.5. `rateLimit: false`
+  disables the plugin for tooling.
+- `plugins/openapi.ts`: the Zod type provider (`fastify-type-provider-zod` ^7 + zod 4.6) serves
+  as validator compiler, serializer compiler and swagger transform; `@fastify/swagger` 9 + UI 6
+  at `/docs`; the document is served at `/openapi.json` (hidden from itself, `/docs*` skipped)
+  and exported to `apps/api/openapi.json` by `pnpm --filter @trendr/api openapi:export` (tsx,
+  no env needed, no `servers` entry — `main.ts` passes `API_PUBLIC_URL` at runtime). CI re-runs
+  the export and fails on a dirty file (§17.4). `X-API-Key`/bearer schemes are declared up front.
+- `apps/api/tsconfig.json` now includes `test` so int tests are type-checked (matches the
+  worker). New `@trendr/api` dependencies: `fastify-plugin`, `@fastify/swagger`,
+  `@fastify/swagger-ui`, `fastify-type-provider-zod`, `@fastify/rate-limit`, `ioredis`, `zod`.
+- Tests: unit `cache.test.ts` (10), `etag.test.ts` (9), `rate-limit.test.ts` (5),
+  `openapi.test.ts` (4); int `plugins.int.test.ts` (5) over Testcontainers Postgres + Redis —
+  decorators, read-through/invalidate against real Redis, breaker opening on repeated failures,
+  the 429 counted through the shared Redis store, `/docs` render and `/openapi.json` (3.1
+  acceptance).
+
 ## Environment quirks worth knowing
 
 - `docker compose port <svc> <port>` exits **0** printing `invalid IP:0` when the port is only

@@ -20,7 +20,7 @@ const TEST_DEPS = {
 };
 
 async function withApp(run: (app: FastifyInstance) => Promise<void>): Promise<void> {
-  const app = buildApp(TEST_DEPS);
+  const app = await buildApp(TEST_DEPS);
   try {
     await run(app);
   } finally {

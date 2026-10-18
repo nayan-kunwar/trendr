@@ -1,0 +1,26 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Trendr API",
+    "version": "0.0.0",
+    "description": "Trending scores for GitHub, npm, PyPI, Hugging Face, arXiv and the MCP registry."
+  },
+  "components": {
+    "securitySchemes": {
+      "apiKey": { "type": "apiKey", "in": "header", "name": "X-API-Key" },
+      "bearerAuth": { "type": "http", "scheme": "bearer" }
+    },
+    "schemas": {}
+  },
+  "paths": {
+    "/metrics": {
+      "get": { "responses": { "200": { "description": "Default Response" } } }
+    },
+    "/healthz": {
+      "get": { "responses": { "200": { "description": "Default Response" } } }
+    },
+    "/readyz": {
+      "get": { "responses": { "200": { "description": "Default Response" } } }
+    }
+  }
+}
