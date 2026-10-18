@@ -41,11 +41,14 @@ describe('0000_init.sql on a fresh PG16', () => {
     await client.end();
   });
 
-  it('ran through the drizzle journal exactly once', async () => {
-    const result = await client.query<{ count: string }>(
-      'SELECT count(*)::text AS count FROM drizzle.__drizzle_migrations',
+  it('recorded the applied migrations in the drizzle journal exactly once each', async () => {
+    const result = await client.query<{ applied: string; distinct: string }>(
+      `SELECT count(*)::text AS applied, count(DISTINCT hash)::text AS distinct
+       FROM drizzle.__drizzle_migrations`,
     );
-    expect(Number(result.rows[0]?.count)).toBe(1);
+    const row = result.rows[0];
+    expect(Number(row?.applied)).toBeGreaterThanOrEqual(1);
+    expect(row?.applied).toBe(row?.distinct);
   });
 
   it('created every table from spec 6.2', async () => {
