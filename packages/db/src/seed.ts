@@ -535,7 +535,9 @@ function huggingfaceFixture(
     language: null,
     license: at(LICENSES, seq),
     owner,
-    primaryMetric: kind === 'dataset' ? 'downloads' : 'likes',
+    // Spec §7.3.4/§8.3: HF `likes` is the primary (cumulative) metric for all
+    // kinds; there is deliberately no `huggingface:downloads` scoring params.
+    primaryMetric: 'likes',
     upstreamCreatedAt: daysAgo(anchor, 30 + ((seq * 97) % 900)),
     isArchived: false,
     flags: [],
@@ -697,6 +699,16 @@ const PLANS: Record<Source, MetricPlan> = {
   arxiv: { cumulative: ['upvotes'], gauge: [], daily: [] },
   mcp: { cumulative: ['stars'], gauge: [], daily: [] },
 };
+
+/**
+ * Metrics that are generated only to feed `latest_metrics` and never persisted
+ * as a series. Spec §7.3.4: HF `downloads` is a rolling ~30-day count that is
+ * stored only in `latest_metrics`, not as a snapshot/daily series (it has no
+ * scoring params entry and must never reach the scoring input).
+ */
+function isLatestOnly(source: Source, metric: Metric): boolean {
+  return source === 'huggingface' && metric === 'downloads';
+}
 
 interface BurstDays {
   days: number;
@@ -937,7 +949,8 @@ export async function seed(db: Db, options: SeedOptions): Promise<SeedReport> {
     };
 
     // 2. Series rows: daily bucket snapshots for cumulative/gauge metrics,
-    //    daily_metrics for daily counts (npm/PyPI/HF downloads).
+    //    daily_metrics for daily counts (npm/PyPI downloads; HF downloads are
+    //    latest-only and never persisted as a series).
     const snapshotRows: SnapshotUpsert[] = [];
     const dailyRows: DailyMetricUpsert[] = [];
     const pairRows: ItemMetricPair[] = [];
@@ -950,7 +963,9 @@ export async function seed(db: Db, options: SeedOptions): Promise<SeedReport> {
         values.forEach((value, day) => {
           const dayStart = new Date(anchorDay.getTime() - (DAYS - 1 - day) * DAY_MS);
           if (kind === 'daily_count') {
-            dailyRows.push({ itemId, metric, day: isoDay(dayStart), value });
+            if (!isLatestOnly(item.fixture.source, metric)) {
+              dailyRows.push({ itemId, metric, day: isoDay(dayStart), value });
+            }
           } else {
             snapshotRows.push({
               itemId,

@@ -40,6 +40,12 @@ be re-checked later. Decisions with alternatives get an ADR in [`docs/adr/`](./a
   starts `postgres:16-alpine` + `redis:7-alpine` via Testcontainers, exports `DATABASE_URL` /
   `REDIS_URL` (inherited by the workers) and applies migrations with the real migrator before any
   test runs. Verified on Docker Desktop (Windows) and on the GitHub runner.
+- Test files run **sequentially** (`fileParallelism: false` at the root of `vitest.config.ts` —
+  vitest lists it as a non-project option, so setting it inside a project is silently ignored):
+  all int files share one Testcontainers database, and partition DDL
+  (`CREATE/DROP ... PARTITION OF` locks the parent) deadlocked against the seed's multi-second
+  insert transaction when files ran in parallel (observed `40P01` in `partitions.int.test.ts`).
+  The unit suite is small enough that serializing it costs ~1s.
 - Task 1.3 verified against the compose stack: the rebuilt `migrate` one-shot applied `0000` +
   `0001` on the dev database (journal = 2 rows, 26 relations, 6 monthly partitions + default,
   database TimeZone = UTC). A second run — through both `docker compose run --rm migrate` and
@@ -66,6 +72,11 @@ be re-checked later. Decisions with alternatives get an ADR in [`docs/adr/`](./a
   key a developer already saved. Items are marked `metadata.seed = true`; integration tests scope
   their assertions to that marker. CLI loading of `.env` uses `process.loadEnvFile` (existing
   env vars win — compose supplies them), same symlink-safe direct-run detection as the migrator.
+- Seed HF fixtures follow §7.3.4/§8.3 exactly: `primary_metric = likes` for **all** HF kinds (the
+  params table has no `huggingface:downloads`, so a dataset scored on `downloads` would throw in
+  `paramsFor`), and the generated `downloads` values feed `latest_metrics` only — never persisted
+  as a snapshot/daily series. Row counts after the change: 18,960 snapshots, 4,440 daily rows
+  (npm 2,400 + PyPI 2,040).
 
 ## Environment quirks worth knowing
 

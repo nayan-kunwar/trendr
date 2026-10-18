@@ -17,6 +17,13 @@ const workspaceAliases: Record<string, string> = {
 
 export default defineConfig({
   test: {
+    // Root-only option (vitest `NonProjectOptions`): all files run sequentially.
+    // The int project shares one Testcontainers database, and partition DDL
+    // (`CREATE/DROP ... PARTITION OF` locks the parent) deadlocked against the
+    // seed's multi-second insert transaction when files ran in parallel
+    // (observed `40P01` in `partitions.int.test.ts`). The unit suite is small
+    // enough that serializing it costs ~1s.
+    fileParallelism: false,
     projects: [
       {
         resolve: { alias: workspaceAliases },

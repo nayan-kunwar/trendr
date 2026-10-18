@@ -85,7 +85,8 @@ describe('seed.ts (spec §7.3 bootstrap, task 1.6)', () => {
     expect(report.apiKey).toMatch(/^dt_live_[0-9A-Za-z]{8}_[0-9A-Za-z]{32}$/);
     expect(report.apiKey.startsWith(`${report.apiKeyPrefix}_`)).toBe(true);
     expect(report.snapshots).toBeGreaterThan(15_000);
-    expect(report.dailyMetrics).toBeGreaterThan(5_000);
+    // npm 40×60 + PyPI 34×60; HF `downloads` is latest-only (spec §7.3.4).
+    expect(report.dailyMetrics).toBe(4_440);
     expect(report.itemTopics).toBeGreaterThan(300);
 
     // Database truth, scoped to the seed marker.
@@ -141,6 +142,27 @@ describe('seed.ts (spec §7.3 bootstrap, task 1.6)', () => {
         .where(sql`${topics.itemCount} > 0`),
     );
     expect(countedTopics.n).toBeGreaterThan(0);
+
+    // Spec §7.3.4: HF `downloads` lives in `latest_metrics` only — there must
+    // be no persisted daily series for it.
+    const hfDailyRows = single(
+      await db
+        .select({ n: count() })
+        .from(dailyMetrics)
+        .innerJoin(items, eq(items.id, dailyMetrics.itemId))
+        .where(sql`${items.source} = 'huggingface' AND ${SEED_MARKER}`),
+    );
+    expect(hfDailyRows.n).toBe(0);
+
+    const hfWithDownloads = single(
+      await db
+        .select({ n: count() })
+        .from(items)
+        .where(
+          sql`${items.source} = 'huggingface' AND ${SEED_MARKER} AND ${items.latestMetrics} ? 'downloads'`,
+        ),
+    );
+    expect(hfWithDownloads.n).toBe(36);
   }, 180_000);
 
   it('re-running is idempotent: identical report and identical rows', async () => {
