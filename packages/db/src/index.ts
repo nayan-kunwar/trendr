@@ -1,6 +1,7 @@
 // @trendr/db — Drizzle schema, migrations, repositories (spec §6; Phase 1).
 export * from './client.js';
 export * from './partitions.js';
+export * from './repositories/cards.repo.js';
 export * from './repositories/items.repo.js';
 export * from './repositories/runs.repo.js';
 export * from './repositories/scores.repo.js';

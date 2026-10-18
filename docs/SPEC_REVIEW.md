@@ -307,6 +307,57 @@ be re-checked later. Decisions with alternatives get an ADR in [`docs/adr/`](./a
   the 429 counted through the shared Redis store, `/docs` render and `/openapi.json` (3.1
   acceptance).
 
+### Task 3.2 notes
+
+- **Card loaders moved to `@trendr/db`** (`repositories/cards.repo.ts`: `loadCardItems`,
+  `loadCardSeries`, `SPARKLINE_POINTS`). The worker mint and the API's deep-page hydration now
+  share one implementation, so a card and a hydrated entry cannot drift; the worker's local
+  copies were deleted (the task 2.5 int test still passes unchanged).
+- **Read-path selection (spec §9.3).** The board path is taken only when: `lbmeta:{scope}:{window}`
+  exists, no `topic`/`kind`/`minCurrent` filter, `newOnly` is false, `lang` is absent or `_all`,
+  and the cache breaker is closed; anything else — and any Redis failure or missing meta — goes
+  to SQL (with one `warn` log on degrade). The board read is
+  `ZREVRANGEBYSCORE key (score +inf -inf WITHSCORES LIMIT 0 limit+1` — descending, exclusive
+  `(`-bound continuation — then pipelined `ZREVRANK` for absolute ranks and `MGET card:*`;
+  cards that are missing or fail `LeaderboardCardSchema` hydrate from Postgres in one
+  items+series+scores pass, exactly as the worker would have minted them. The first Redis
+  implementation used ascending `ZRANGEBYSCORE` (the int test caught the reversed board).
+- **ETag before any board read (spec §9.3, §9.4):** `W/"lb-{scope}-{window}-{version}-{sha1(
+  canonicalQuery).slice(0,8)}"` from `lbmeta` (`canonicalQuery` = the §10.3 parameter set
+  including the cursor); a matching `If-None-Match` returns 304 *before* the ZSET/cards are
+  touched. Without `lbmeta` the route sets no ETag and the §9.4 plugin mints the body hash, so a
+  filtered or fallback response still gets conditional-GET support. The 304 keeps the route's
+  `Cache-Control`.
+- **Run-pinned cursors (§16).** `LeaderboardCursor {r,s,i}`/`KeysetCursor {k,i}` are base64url
+  JSON (§10.2). A board cursor whose `r` differs from the current `lbmeta.runId` → **410
+  `https://trendr.dev/problems/cursor-expired`** (new `CursorExpiredError` in core; 410 `Gone`
+  title in `plugins/errors.ts`) so a rebuilt/thinned board never mixes runs into one page list;
+  undecodable or malformed cursors are 400 `validation-error`. The int test also pins the §16
+  stability promise: an npm scoring run (new current run + scores swapped) leaves github pages
+  readable through their cursors.
+- **`entry.score`.** Source-scope and `all`-scope card/hydrated entries carry the card's source
+  `finalScore` (the §2.5 card design); the SQL `all` path serves `z_score` per §9.1 — a
+  documented divergence of the card-based read, matching the 2.5 note. `minCurrent` filters on
+  the same hydrated `current` the response serves (up to 30 daily points; rows without a series
+  are skipped).
+- **SQL path.** `scores` ⋈ `score_runs_current` ⋈ `items`, ordered `(score DESC, item_id DESC)`
+  with the §10.3 keyset cursor (`k` = board score), `topic` via
+  `items.id IN (SELECT item_id FROM item_topics JOIN topics …)`, `lang` via
+  `lower(language) = $1`, `newOnly` via `upstream_created_at >= now() - 30 d`, and a
+  limit+1 top-up loop so `minCurrent` never returns a short page while deeper rows exist. Pages
+  are cached under `q:{sha1(canonicalQuery)}` for 60 s via `app.cache` (§9.1). `newOnly` parses
+  the `'true'|'false'|'1'|'0'` enum explicitly (ISS-2: `Boolean('false')` is `true`; `'yes'` →
+  400, absent → false). A missing current run yields an empty page with `runId "0"` and the
+  epoch `computedAt`.
+- `@trendr/api` gained a direct `drizzle-orm` dependency (the route builds its own queries).
+- Tests: unit 16 new — the `newOnly` matrix, defaults/coercions, cursor round-trip/garbage,
+  `canonicalQuery`/`trendingEtag`/`hasSqlFilters`; int `trending.int.test.ts` (10) over
+  Testcontainers: board read with cards + hydrated entries, ETag/304, absolute-rank pagination,
+  malformed-cursor 400, no-`lbmeta` npm fallback, topic/kind/lang filters + `q:` cache key,
+  `minCurrent` top-up across pages, `newOnly` matrix, combined board (z_score SQL), stability
+  across an npm rescore, 410 after a rebuild and fresh restart. `apps/api/openapi.json`
+  re-exported (4 paths).
+
 ## Environment quirks worth knowing
 
 - `docker compose port <svc> <port>` exits **0** printing `invalid IP:0` when the port is only

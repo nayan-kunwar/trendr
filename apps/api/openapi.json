@@ -21,6 +21,244 @@
     },
     "/readyz": {
       "get": { "responses": { "200": { "description": "Default Response" } } }
+    },
+    "/v1/trending": {
+      "get": {
+        "parameters": [
+          {
+            "schema": {
+              "default": "all",
+              "type": "string",
+              "enum": ["all", "github", "npm", "pypi", "huggingface", "arxiv", "mcp"]
+            },
+            "in": "query",
+            "name": "scope",
+            "required": false
+          },
+          {
+            "schema": {
+              "default": "24h",
+              "type": "string",
+              "enum": ["24h", "7d", "30d"]
+            },
+            "in": "query",
+            "name": "window",
+            "required": false
+          },
+          {
+            "schema": { "type": "string", "maxLength": 40 },
+            "in": "query",
+            "name": "lang",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9-]{0,49}$"
+            },
+            "in": "query",
+            "name": "topic",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": ["repo", "package", "model", "dataset", "space", "paper", "mcp_server"]
+            },
+            "in": "query",
+            "name": "kind",
+            "required": false
+          },
+          {
+            "schema": { "type": "string", "enum": ["0", "1", "true", "false"] },
+            "in": "query",
+            "name": "newOnly",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "in": "query",
+            "name": "minCurrent",
+            "required": false
+          },
+          {
+            "schema": {
+              "default": 50,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            },
+            "in": "query",
+            "name": "limit",
+            "required": false
+          },
+          {
+            "schema": { "type": "string", "maxLength": 512 },
+            "in": "query",
+            "name": "cursor",
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "scope": {
+                      "type": "string",
+                      "enum": ["all", "github", "npm", "pypi", "huggingface", "arxiv", "mcp"]
+                    },
+                    "window": {
+                      "type": "string",
+                      "enum": ["24h", "7d", "30d"]
+                    },
+                    "runId": { "type": "string" },
+                    "computedAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "rank": {
+                            "type": "integer",
+                            "exclusiveMinimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "item": {
+                            "type": "object",
+                            "properties": {
+                              "id": { "type": "string" },
+                              "source": {
+                                "type": "string",
+                                "enum": ["github", "npm", "pypi", "huggingface", "arxiv", "mcp"]
+                              },
+                              "kind": {
+                                "type": "string",
+                                "enum": [
+                                  "repo",
+                                  "package",
+                                  "model",
+                                  "dataset",
+                                  "space",
+                                  "paper",
+                                  "mcp_server"
+                                ]
+                              },
+                              "externalId": { "type": "string" },
+                              "displayName": { "type": "string" },
+                              "description": { "type": ["string", "null"] },
+                              "url": { "type": "string", "format": "uri" },
+                              "language": { "type": ["string", "null"] },
+                              "topics": {
+                                "type": "array",
+                                "items": { "type": "string" }
+                              },
+                              "primaryMetric": {
+                                "type": "string",
+                                "enum": [
+                                  "stars",
+                                  "forks",
+                                  "watchers",
+                                  "open_issues",
+                                  "downloads",
+                                  "downloads_total",
+                                  "likes",
+                                  "upvotes",
+                                  "trending_score",
+                                  "comments"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "source",
+                              "kind",
+                              "externalId",
+                              "displayName",
+                              "description",
+                              "url",
+                              "language",
+                              "topics",
+                              "primaryMetric"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "window": {
+                            "type": "string",
+                            "enum": ["24h", "7d", "30d"]
+                          },
+                          "delta": { "type": "number" },
+                          "relGrowth": { "type": "number" },
+                          "score": { "type": "number" },
+                          "percentile": { "type": "number" },
+                          "current": { "type": "number" },
+                          "sparkline": {
+                            "maxItems": 30,
+                            "type": "array",
+                            "items": { "type": "number" }
+                          },
+                          "flags": {
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "enum": [
+                                "below_threshold",
+                                "insufficient_data",
+                                "burst_suspected",
+                                "new_item",
+                                "negative_growth"
+                              ]
+                            }
+                          }
+                        },
+                        "required": [
+                          "rank",
+                          "item",
+                          "window",
+                          "delta",
+                          "relGrowth",
+                          "score",
+                          "percentile",
+                          "current",
+                          "sparkline",
+                          "flags"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "page": {
+                      "type": "object",
+                      "properties": {
+                        "nextCursor": { "type": ["string", "null"] },
+                        "limit": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "required": ["nextCursor", "limit"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["scope", "window", "runId", "computedAt", "data", "page"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
     }
   }
 }

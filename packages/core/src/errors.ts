@@ -39,6 +39,15 @@ export class ConflictError extends AppError {
   override readonly type = 'conflict';
 }
 
+/**
+ * Spec §9.3/§16 — a leaderboard cursor whose run was rebuilt (thinned) while
+ * the client was paginating; the client restarts without the cursor.
+ */
+export class CursorExpiredError extends AppError {
+  override readonly status = 410;
+  override readonly type = 'cursor-expired';
+}
+
 export class RateLimitedError extends AppError {
   override readonly status = 429;
   override readonly type = 'rate-limited';

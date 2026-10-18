@@ -14,6 +14,7 @@ import { registerRateLimit } from './plugins/rate-limit.js';
 import { registerRedis } from './plugins/redis.js';
 import { registerSecurity } from './plugins/security.js';
 import { registerHealthRoutes } from './routes/health.js';
+import { registerTrendingRoutes } from './routes/trending.js';
 
 export interface BuildAppDeps {
   /** Pre-built pino logger from main.ts; tests omit it for a silent app. */
@@ -73,6 +74,7 @@ export async function buildApp(deps: BuildAppDeps = {}): Promise<FastifyInstance
   // After the OpenAPI plugin so `/metrics` is collected into the document.
   registerMetrics(app, deps);
   registerHealthRoutes(app);
+  registerTrendingRoutes(app);
 
   return app;
 }

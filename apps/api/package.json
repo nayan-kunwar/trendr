@@ -21,6 +21,7 @@
     "@trendr/core": "workspace:*",
     "@trendr/db": "workspace:*",
     "@trendr/logger": "workspace:*",
+    "drizzle-orm": "^0.45.4",
     "fastify": "^5",
     "fastify-plugin": "^6.0.1",
     "fastify-type-provider-zod": "^7.0.0",
