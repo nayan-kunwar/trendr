@@ -12,3 +12,13 @@ useDefault = true
 description = 'placeholders: empty HF_TOKEN= directly before another KEY= line'
 regexTarget = "match"
 regexes = ["HF_TOKEN=\n"]
+
+# Verified false positives (Fingerprint ac3ce4b:apps/worker/test/int/scoring-queue.int.test.ts:
+# generic-api-key:61-63): the scoring int test spawns the `worker:score` CLI with a
+# fabricated env — `JWT_SECRET`, `API_KEY_PEPPER` and `UNSUBSCRIBE_SECRET` are literal
+# `int-test-*` strings that exist only for that child process. No credential material;
+# allowlist the fixture prefix rather than the file, so real secrets are still caught.
+[[allowlists]]
+description = 'fixtures: fabricated int-test-* CLI env values in the scoring int test'
+regexTarget = "match"
+regexes = ['''int-test-[a-z0-9-]+''']
