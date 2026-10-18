@@ -18,6 +18,7 @@ be re-checked later. Decisions with alternatives get an ADR in [`docs/adr/`](./a
 | R-8  | §17.4                | OpenAPI-export step needs Phase 3.1; nightly contract job needs Phase 5.6 (`test:contract` script)                   | deferred with comments in `ci.yml`                            |
 | R-9  | §17.2                | `next build` warns "The Next.js plugin was not detected in your ESLint configuration" (repo lints with its own flat config) | decide at Phase 6.1: add `eslint-config-next` or `eslint.ignoreDuringBuilds` |
 | R-10 | §18 task 0.9         | no `docs/SPEC_REVIEW.md` existed despite the baseline commit message (this file)                                      | created with task 0.9                                         |
+| R-11 | §17.4 security job   | `gitleaks-action@v2` fails on a repo whose first commit is a root commit (it scans `<first>^..HEAD`); its redacted SARIF also showed a `generic-api-key` false positive: an empty `HF_TOKEN=` followed by `HF_RATE_PER_5MIN=1000` captures the next line as the secret | pinned `ghcr.io/gitleaks/gitleaks:v8.24.3` over full history + `.gitleaks.toml` allowlist for that exact placeholder pattern |
 
 ## Verified "open decision" gaps resolved so far
 

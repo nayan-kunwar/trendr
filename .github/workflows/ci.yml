@@ -51,8 +51,22 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }
-      - uses: gitleaks/gitleaks-action@v2
-        env: { GITHUB_TOKEN: '${{ secrets.GITHUB_TOKEN }}' }
+      # gitleaks-action@v2 derives its range as `<first-pushed-commit>^..HEAD`, which cannot
+      # resolve on a repository whose first commit is a root commit (R-11). Run the pinned
+      # CLI over the full history instead; `.gitleaks.toml` supplies the verified allowlist.
+      - name: gitleaks
+        run: |
+          docker run --rm \
+            -e GIT_CONFIG_COUNT=1 \
+            -e GIT_CONFIG_KEY_0=safe.directory \
+            -e GIT_CONFIG_VALUE_0='*' \
+            -v "$PWD:/repo" -w /repo \
+            ghcr.io/gitleaks/gitleaks:v8.30.1 \
+            detect --redact -v --exit-code=1 \
+            --report-format=sarif --report-path=results.sarif
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with: { name: gitleaks-sarif, path: results.sarif }
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: pnpm }

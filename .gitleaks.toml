@@ -1,0 +1,14 @@
+# gitleaks configuration (spec §15: CI runs gitleaks on every PR and push).
+# Extends the default rules; allowlists exist only for verified false positives.
+
+[extend]
+useDefault = true
+
+# Verified false positive (Fingerprint c3d9b52:…:generic-api-key): in `.env.example`
+# and the spec's verbatim env template an empty `HF_TOKEN=` is followed by
+# `HF_RATE_PER_5MIN=1000`; the generic-api-key rule's multi-line match then captures
+# that next line as the "secret". No token value is present in either file.
+[[allowlists]]
+description = 'placeholders: empty HF_TOKEN= directly before another KEY= line'
+regexTarget = "match"
+regexes = ["HF_TOKEN=\n"]
