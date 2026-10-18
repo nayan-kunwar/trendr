@@ -36,6 +36,7 @@ import {
 import type { Logger } from '@trendr/logger';
 
 import { scoringAnomalies, scoringDuration, scoringItems } from '../metrics.js';
+import { publishLeaderboards } from './publish-leaderboards.js';
 
 /**
  * Spec §8.4 — the scoring run: one Redis lock per source, series → scores for
@@ -120,9 +121,9 @@ export async function runScoring(
 
   try {
     runId = await startRun(deps.db, { source, jobType: 'score', jobId: deps.jobId });
+    const t = floorToHour(deps.now());
 
     for (const window of windows) {
-      const t = floorToHour(deps.now());
       const result = await scoreWindow(deps, source, window, runId, t);
       itemsSeen += result.seen;
       itemsUpserted += result.inserted;
@@ -137,6 +138,10 @@ export async function runScoring(
         deps.maxShare === undefined ? {} : { maxShare: deps.maxShare },
       );
     }
+
+    // Spec §8.4/§9.2: the source and combined boards are published only after
+    // every rank_all placement is persisted; diff events follow the last swap.
+    await publishLeaderboards(deps, source, windows, runId, { computedAt: t });
 
     if (deps.notifyQueue !== undefined) {
       await deps.notifyQueue.add(

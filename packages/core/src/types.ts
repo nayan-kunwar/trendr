@@ -140,8 +140,14 @@ export interface Score extends ScoreComponents {
   rankAll: number | null; // 1-based rank in combined board (null if not eligible)
   flags: ScoreFlag[];
 }
-export type ScoreFlag =
-  'below_threshold' | 'insufficient_data' | 'burst_suspected' | 'new_item' | 'negative_growth';
+export const ScoreFlagSchema = z.enum([
+  'below_threshold',
+  'insufficient_data',
+  'burst_suspected',
+  'new_item',
+  'negative_growth',
+]);
+export type ScoreFlag = z.infer<typeof ScoreFlagSchema>;
 
 /** What a leaderboard row looks like on the wire. */
 export interface LeaderboardEntry {

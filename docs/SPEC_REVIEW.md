@@ -162,6 +162,48 @@ be re-checked later. Decisions with alternatives get an ADR in [`docs/adr/`](./a
 - Scoring instants are floored to the last complete hour (`floorToHour(now)`, §8.1) so intra-hour
   run jitter cannot change `t`; `computedAt` uses the same instant for every row of a run.
 
+### Task 2.5 notes
+
+- `publishBoard` (spec §9.2) lives in `apps/worker/src/scoring/publish-leaderboards.ts`. The spec
+  signature is kept, plus two additions: an options object (`{ cards, computedAt }`) and a return
+  value (the diff event) so `publishLeaderboards` can publish every event only after *all* boards of
+  the run are swapped, as the §9.2 tail requires. The empty-board branch deletes the live key,
+  still writes `lbmeta` (`count = 0`) and bumps `version` (readers see the empty board, not a
+  stale one).
+- `publishLeaderboards(deps, source, windows, runId)` publishes, per window, the run's source board
+  (rows from the run's own `scores`, `final_score` desc) and the combined board (every source's
+  *current* run, `rank_all` order, score = `z_score`), then PUBLISHes one diff per board on
+  `events:leaderboard`. §8.4's pseudocode ties the `lb:all` publish to the `rebuildAllBoard` step;
+  doing it here instead keeps every ZSET swap in one module — `rank_all` is already persisted when
+  the publisher runs.
+- **Language boards are deferred.** Only the `_all` board of each scope is written in Phase 2
+  (`lb:{scope}:{window}:_all`); the per-language boards (`lb:*:*:{lang}` for the top-30 GitHub
+  languages) land with the Phase 6 UI, which is where the language list becomes user-visible.
+- **Cards are minted for the top 100 rows** of the source board and of the combined board (union,
+  deduped) and are written by the source-board swap only. `card:{itemId}:{window}` is a single key,
+  so it cannot carry two scope-specific scores: it holds the source `final_score` (§5's "score =
+  zScore for all" applies at the API response boundary), and a deep page or a miss hydrates from
+  Postgres per §9.3. An item that sits in the combined top 100 but beyond its own source's top 100
+  gets its card from its own source's run.
+- Card `current`/`sparkline`: last value per UTC day of the primary metric, up to 30 daily points,
+  oldest first. Cumulative metrics read `snapshots` (the newest day may be partial via the hourly
+  tail, so `current` == the last sparkline point); daily-count metrics (`downloads`) read
+  `daily_metrics` and stop at the last complete day, matching the §8.4 scoring population. An item
+  with no metric rows yet is skipped (no card).
+- Diff semantics: `entered`/`exited` are top-100 membership changes in board order; `movers` are up
+  to 20 members of *both* top-100 sets, sorted by |rank change| desc (tie: new rank asc),
+  `prevRank` from `ZREVRANK` on the old board. The payload's `delta` is the window growth
+  (`scores.delta`) — the §9.2 example's 412 cannot be a rank change.
+- Contracts live in `packages/core/src/leaderboard.ts`: `LB_MAX_SIZE` (1000), the
+  `LeaderboardEntry` / `LeaderboardCard` schemas (§5, card = entry minus rank) and
+  `LeaderboardUpdatedEventSchema`. The worker parses every event with the schema before PUBLISH
+  (task 2.5 acceptance) and the int test re-validates what subscribers receive.
+- Task 2.5 integration test (`apps/worker/test/int/publish-leaderboards.int.test.ts`): fixture
+  boards assert ZSET members/scores, `lbmeta` (`runId`/`computedAt`/`count`/`version`), card JSON
+  (sparkline shapes, `current`, downloads path) and exact diff payloads across two runs; a reader
+  loop hammers the live key during a 1,200-row swap and only ever observes the complete old board
+  or the complete new one.
+
 ## Environment quirks worth knowing
 
 - `docker compose port <svc> <port>` exits **0** printing `invalid IP:0` when the port is only
