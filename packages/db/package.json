@@ -13,13 +13,18 @@
     "./migrate": {
       "types": "./dist/migrate.d.ts",
       "default": "./dist/migrate.js"
+    },
+    "./seed": {
+      "types": "./dist/seed.d.ts",
+      "default": "./dist/seed.js"
     }
   },
   "scripts": {
-    "build": "tsup src/index.ts src/migrate.ts --format esm --dts --sourcemap --clean",
-    "dev": "tsup src/index.ts src/migrate.ts --format esm --dts --watch",
+    "build": "tsup src/index.ts src/migrate.ts src/seed.ts --format esm --dts --sourcemap --clean",
+    "dev": "tsup src/index.ts src/migrate.ts src/seed.ts --format esm --dts --watch",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "node dist/migrate.js",
+    "db:seed": "node dist/seed.js",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit"
   },

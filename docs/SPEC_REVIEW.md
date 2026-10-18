@@ -56,7 +56,16 @@ be re-checked later. Decisions with alternatives get an ADR in [`docs/adr/`](./a
   transcribed literally. The repositories instead use the typed insert builder (multi-row
   `INSERT … ON CONFLICT`, with `setWhere` for the `observed_at` last-writer-wins clause) and a
   `VALUES` list built with `sql.join` for the touched-pairs CTE — behaviour identical, parameters
-  chunked at 500 rows/statement.
+  chunked at 500 rows/statement. Likewise, raw `sql` selects **bypass Drizzle's column mappers**:
+  `min(captured_at)` / `max(captured_at)` come back as pg text, not `Date`. Use the typed
+  `min()` / `max()` helpers (or cast in SQL) when the JS value matters.
+- Seed (task 1.6): 200 fixtures across the six sources, 60 days of series from a fixed-seed
+  PRNG, anchored to the run's UTC day (so scoring staleness stays satisfied and re-runs inside a
+  day are byte-identical). The dev API key is deterministic (`dt_live_seedkey1_…`, printed every
+  run; only `HMAC-SHA256(API_KEY_PEPPER, raw)` is stored) so re-seeding can never invalidate a
+  key a developer already saved. Items are marked `metadata.seed = true`; integration tests scope
+  their assertions to that marker. CLI loading of `.env` uses `process.loadEnvFile` (existing
+  env vars win — compose supplies them), same symlink-safe direct-run detection as the migrator.
 
 ## Environment quirks worth knowing
 
@@ -64,6 +73,11 @@ be re-checked later. Decisions with alternatives get an ADR in [`docs/adr/`](./a
   `expose`d — use `docker inspect … NetworkSettings.Ports` (all `null` = unpublished) or a host
   `curl` (connection refused) to verify.
 - `postgres:16-alpine` logs a harmless `no usable system locales were found` warning during init.
+- On this Windows machine a **native `postgres.exe` service also listens on 5432** and shadows the
+  compose port-forward whenever the compose container is down (symptom: `password authentication
+  failed for user "trendr"` from host-side scripts, while in-network clients are fine). Check with
+  `netstat -ano | grep :5432` and re-`docker compose start postgres redis` after Docker restarts;
+  host tools should treat in-network access (`docker compose exec …`) as the source of truth.
 - The worker metrics port (`9464`) is `expose`d for Prometheus and must never be published; the
   acceptance check does an in-network GET (`docker compose exec api …`) plus a host-side refusal
   check.
