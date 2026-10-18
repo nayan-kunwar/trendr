@@ -8,6 +8,7 @@
       "@trendr/core": ["./packages/core/src/index.ts"],
       "@trendr/db": ["./packages/db/src/index.ts"],
       "@trendr/db/migrate": ["./packages/db/src/migrate.ts"],
+      "@trendr/db/seed": ["./packages/db/src/seed.ts"],
       "@trendr/logger": ["./packages/logger/src/index.ts"],
       "@trendr/sources": ["./packages/sources/src/index.ts"]
     },
