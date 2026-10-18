@@ -3,10 +3,12 @@ import { resolve } from 'node:path';
 import { defineConfig } from 'vitest/config';
 
 // Unit tests import workspace packages by name; resolve them straight to
-// sources so `pnpm test` never needs a prior build.
+// sources so `pnpm test` never needs a prior build. Subpath aliases must come
+// before their parent prefix (`@trendr/db` also prefix-matches `/migrate`).
 const workspaceAliases: Record<string, string> = {
   '@trendr/config': resolve(import.meta.dirname, 'packages/config/src/index.ts'),
   '@trendr/core': resolve(import.meta.dirname, 'packages/core/src/index.ts'),
+  '@trendr/db/migrate': resolve(import.meta.dirname, 'packages/db/src/migrate.ts'),
   '@trendr/db': resolve(import.meta.dirname, 'packages/db/src/index.ts'),
   '@trendr/logger': resolve(import.meta.dirname, 'packages/logger/src/index.ts'),
   '@trendr/sources': resolve(import.meta.dirname, 'packages/sources/src/index.ts'),
@@ -27,6 +29,8 @@ export default defineConfig({
         test: {
           name: 'int',
           include: ['{apps,packages}/*/test/int/**/*.int.test.ts'],
+          // Spec §16: Testcontainers Postgres 16 + Redis 7, migrations applied once.
+          globalSetup: ['./test/global-setup.ts'],
           testTimeout: 30_000,
           hookTimeout: 30_000,
         },

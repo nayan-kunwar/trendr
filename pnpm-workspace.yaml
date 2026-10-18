@@ -3,8 +3,13 @@ packages:
   - 'packages/*'
 
 # pnpm 11 blocks dependency build scripts by default; esbuild (used by tsup/tsx/vitest) needs its postinstall.
+# cpu-features/protobufjs/ssh2 (dockerode deps) ship pure-JS fallbacks — their native
+# build scripts stay off.
 allowBuilds:
+  cpu-features: false
   esbuild: true
+  protobufjs: false
+  ssh2: false
 
 # Security: next pins postcss 8.4.31, which carries open advisories
 # (GHSA-6g55-p6wh-862q, GHSA-r28c-9q8g-f849); force the patched 8.5 line everywhere.

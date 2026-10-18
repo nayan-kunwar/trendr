@@ -9,19 +9,28 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./migrate": {
+      "types": "./dist/migrate.d.ts",
+      "default": "./dist/migrate.js"
     }
   },
   "scripts": {
     "build": "tsup src/index.ts src/migrate.ts --format esm --dts --sourcemap --clean",
     "dev": "tsup src/index.ts src/migrate.ts --format esm --dts --watch",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "node dist/migrate.js",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@trendr/core": "workspace:*",
+    "drizzle-orm": "^0.45.4",
     "pg": "^8"
   },
   "devDependencies": {
     "@types/pg": "^8",
+    "drizzle-kit": "^0.31.11",
     "eslint": "^9",
     "tsup": "^8",
     "typescript": "^5"
