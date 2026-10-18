@@ -51,6 +51,12 @@ be re-checked later. Decisions with alternatives get an ADR in [`docs/adr/`](./a
   through the vitest test files (which `@trendr/core`'s tsconfig includes); tsup's dts build of
   the production graph (zod only) failed with `TS2307: Cannot find module 'node:crypto'` until the
   types were declared at the workspace root, where every package's resolution walk finds them.
+- Drizzle's `sql` template **expands JS arrays** into comma-separated parameters (it does not pass
+  them as one array parameter), so the spec §6.3 `unnest($1::bigint[], …)` formulations cannot be
+  transcribed literally. The repositories instead use the typed insert builder (multi-row
+  `INSERT … ON CONFLICT`, with `setWhere` for the `observed_at` last-writer-wins clause) and a
+  `VALUES` list built with `sql.join` for the touched-pairs CTE — behaviour identical, parameters
+  chunked at 500 rows/statement.
 
 ## Environment quirks worth knowing
 

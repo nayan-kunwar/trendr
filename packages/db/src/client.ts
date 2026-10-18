@@ -1,10 +1,17 @@
-import { drizzle, type NodePgDatabase } from 'drizzle-orm/node-postgres';
+import { drizzle, type NodePgDatabase, type NodePgQueryResultHKT } from 'drizzle-orm/node-postgres';
+import type { PgDatabase } from 'drizzle-orm/pg-core';
 import { Pool, type PoolConfig } from 'pg';
 
 import * as schema from './schema/index.js';
 
 /** Schema-bound Drizzle client used by repositories and wrappers (tasks 1.2+). */
 export type Db = NodePgDatabase<typeof schema>;
+
+/**
+ * Anything a repository can run statements on: the pooled `Db` or an in-flight
+ * transaction (callers compose multiple repository calls in one transaction).
+ */
+export type DbExecutor = PgDatabase<NodePgQueryResultHKT, typeof schema>;
 
 export interface Connection {
   db: Db;
