@@ -52,6 +52,10 @@ describe('redisKeys (spec §9.1)', () => {
     expect(redisKeys.mcpRegistryCursor()).toBe('mcp:registry:cursor_ts');
   });
 
+  it('builds the api-key last-used debounce key', () => {
+    expect(redisKeys.apiKeyLastUsed('key-1')).toBe('apikey:last-used:key-1');
+  });
+
   it('exports the inbound rate-limit prefix and the events channel', () => {
     expect(API_RATE_LIMIT_KEY_PREFIX).toBe('apirl:');
     expect(LEADERBOARD_EVENTS_CHANNEL).toBe('events:leaderboard');

@@ -2,10 +2,15 @@ import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { describe, expect, it } from 'vitest';
 
 import { buildApp } from '../app.js';
-import { clientIp } from './rate-limit.js';
+import type { AuthenticatedApiKey } from './api-key.js';
+import { clientIp, rateLimitKey, resolveRateLimitMax } from './rate-limit.js';
 
-function fakeRequest(headers: Record<string, string>, ip: string): FastifyRequest {
-  return { headers, ip } as unknown as FastifyRequest;
+function fakeRequest(
+  headers: Record<string, string>,
+  ip: string,
+  apiKey?: AuthenticatedApiKey,
+): FastifyRequest {
+  return { headers, ip, apiKey } as unknown as FastifyRequest;
 }
 
 const DEPS = { corsOrigins: ['http://localhost:3000'], metricsToken: 'test-metrics-token' };
@@ -31,6 +36,28 @@ describe('clientIp (spec §10.5)', () => {
 
   it('falls back to the socket peer without the header', () => {
     expect(clientIp(fakeRequest({}, '10.0.0.2'), true)).toBe('10.0.0.2');
+  });
+});
+
+describe('per-tier limits and keys (spec §10.5)', () => {
+  const apiKey: AuthenticatedApiKey = {
+    id: 'a7f0c0de-0000-0000-0000-000000000000',
+    userId: '0b9c1f76-0000-0000-0000-000000000000',
+    scopes: ['read'],
+    rateLimitPerMin: 77,
+  };
+
+  it('keys authenticated requests by API key id, anonymous ones by IP', () => {
+    expect(rateLimitKey(fakeRequest({}, '10.0.0.1', apiKey), false)).toBe(`key:${apiKey.id}`);
+    expect(rateLimitKey(fakeRequest({}, '10.0.0.1'), false)).toBe('ip:10.0.0.1');
+    expect(rateLimitKey(fakeRequest({ 'cf-connecting-ip': '203.0.113.9' }, '10.0.0.1'), true)).toBe(
+      'ip:203.0.113.9',
+    );
+  });
+
+  it('uses the per-key budget for authenticated requests only', () => {
+    expect(resolveRateLimitMax(fakeRequest({}, '10.0.0.1', apiKey), 60)).toBe(77);
+    expect(resolveRateLimitMax(fakeRequest({}, '10.0.0.1'), 60)).toBe(60);
   });
 });
 

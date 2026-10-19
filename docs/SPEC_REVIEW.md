@@ -487,6 +487,44 @@ be re-checked later. Decisions with alternatives get an ADR in [`docs/adr/`](./a
   because `packages/db/test/int/seed.int.test.ts` deliberately leaves ~200 items in the shared
   database; `apps/api/openapi.json` re-exported (16 paths).
 
+### Task 3.5 notes
+
+- **Tiers wired now.** `anonymous` (60 req/min per IP) and `apiKey`
+  (`api_keys.rate_limit_per_min`, default 120) are live. `user` (300) needs JWT
+  verification, `auth` (5/min + 3/h per email) and `admin` (600) need their routes,
+  and `sse` (5 concurrent) is task 3.6 — each lands with its surface. `@fastify/rate-limit`
+  now takes `max` as a per-request function so an authenticated key gets its own budget;
+  the JWT tier key part (`user:{id}`) slots into the same `rateLimitKey` switch.
+- **Counter namespacing.** Spec §9.1 says `apirl:{keyId|ip}`; the keys are
+  `apirl:key:{id}` and `apirl:ip:{ip}` so keyed and anonymous traffic can never share a
+  counter (an int test proves a keyed request never consumes the IP budget).
+- **`X-API-Key` auth** (`apps/api/src/plugins/api-key.ts`): strict shape check
+  (`dt_live_<8 base62>_<32 base62>`, helpers in `@trendr/core` `api-keys.ts`), unique-prefix
+  lookup (`api-keys.repo.ts`, new), revoked/expired rejection and a constant-time
+  `HMAC-SHA256(API_KEY_PEPPER, key)` compare. Every failure is 401 `unauthorized`
+  problem+json. The hook runs before the limiter, so malformed/unknown keys are rejected
+  *without* consuming a rate-limit budget — brute-force attempts are not themselves
+  rate-limited; flagged here because the spec doesn't state a rule for that case.
+- **Debounced `last_used_at`.** A Redis `SET NX EX 60` marker
+  (`redisKeys.apiKeyLastUsed` → `apikey:last-used:{id}`, a new key not in §9.1) gates the
+  write to the first authenticated request per minute per key; without Redis (unit tooling)
+  the same window is kept in-process. The touch never fails a request (warn + continue).
+- **Plugin registration.** `buildApp` registers the api-key plugin only when both
+  `apiKeyPepper` and a db connection are present, and always before the rate limiter
+  (hook order matters). `main.ts` passes `API_KEY_PEPPER` (already in the §15 env schema
+  and `.env.example`); compose passes it through `env_file: [.env]`.
+- **CORS.** `@fastify/cors` reflects `Access-Control-Request-Headers` by default, so
+  browser preflights carrying `X-API-Key` keep working without adding `allowedHeaders`.
+- Tests: unit — core `api-keys.test.ts` (format matrix incl. length/character edge cases,
+  HMAC determinism + pepper sensitivity, timing-safe compare with length guard),
+  `redis-keys.test.ts` (new key) and `rate-limit.test.ts` (key-vs-IP selection, per-key max);
+  int `api-key.int.test.ts` (4) — the 61st anonymous request → 429 + `Retry-After` +
+  `rate-limited` problem; a valid key with budget 61 serves 61 requests then 429s on its own
+  counter while the anonymous counter is untouched; seven invalid-key shapes (empty,
+  malformed, wrong length, unknown prefix, wrong secret, revoked, expired) → 401; debounce
+  behavior (marker TTL ≤ 60 s, second request leaves `last_used_at` unchanged, re-write
+  after the window lapses). `openapi.json` re-exported (still 16 paths — no wire changes).
+
 ## Environment quirks worth knowing
 
 - `docker compose port <svc> <port>` exits **0** printing `invalid IP:0` when the port is only

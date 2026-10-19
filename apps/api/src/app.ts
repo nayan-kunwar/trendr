@@ -4,6 +4,7 @@ import type { Redis } from 'ioredis';
 
 import type { Connection } from '@trendr/db';
 
+import { registerApiKey } from './plugins/api-key.js';
 import { registerCache } from './plugins/cache.js';
 import { registerDb } from './plugins/db.js';
 import { registerErrors } from './plugins/errors.js';
@@ -36,6 +37,11 @@ export interface BuildAppDeps {
   redis?: Redis;
   /** Dedicated subscriber (SSE, task 3.6); defaults to a duplicate of `redis`. */
   redisSub?: Redis;
+  /**
+   * API_KEY_PEPPER (spec §15). Present + a db connection → `X-API-Key`
+   * authentication; absent → keyed requests fall back to the anonymous tier.
+   */
+  apiKeyPepper?: string;
   /** Anonymous rate-limit tier (spec §10.5); `false` disables limiting for tooling. */
   rateLimit?: { max?: number; timeWindowMs?: number } | false;
   /** Scores-retention bounds for `/v1/items/:id/scores` (env: SCORES_*; §10.4). */
@@ -68,6 +74,12 @@ export async function buildApp(deps: BuildAppDeps = {}): Promise<FastifyInstance
       ...(deps.redisSub ? { redisSub: deps.redisSub } : {}),
     });
     await app.register(registerCache);
+  }
+  if (deps.apiKeyPepper !== undefined && deps.db !== undefined) {
+    await app.register(registerApiKey, {
+      pepper: deps.apiKeyPepper,
+      ...(deps.redis ? { redis: deps.redis } : {}),
+    });
   }
   if (deps.rateLimit !== false) {
     await registerRateLimit(app, {

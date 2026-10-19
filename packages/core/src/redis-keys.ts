@@ -52,6 +52,9 @@ export const redisKeys = {
 
   /** `mcp:registry:cursor_ts` — last registry `updatedAt` seen (no TTL). */
   mcpRegistryCursor: (): string => 'mcp:registry:cursor_ts',
+
+  /** `apikey:last-used:{id}` — NX marker so `api_keys.last_used_at` writes at most once a minute (spec §10.5). */
+  apiKeyLastUsed: (id: string): string => `apikey:last-used:${id}`,
 } as const;
 
 /** Key prefix for inbound API rate limiting, owned by `@fastify/rate-limit` (spec §9.1). */

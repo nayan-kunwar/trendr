@@ -4,14 +4,18 @@ import type { Redis } from 'ioredis';
 
 import { API_RATE_LIMIT_KEY_PREFIX } from '@trendr/core';
 
+import type { AuthenticatedApiKey } from './api-key.js';
+
 /** Anonymous tier (spec §10.5): 60 requests per minute per client IP. */
 export const ANONYMOUS_MAX = 60;
 export const ANONYMOUS_WINDOW_MS = 60_000;
+/** JWT tier (spec §10.5); wired when token verification lands with the auth routes. */
+export const USER_MAX = 300;
 
 export interface RateLimitPluginOptions {
   /** Redis-backed counters for multi-replica correctness; omitted → in-memory (tests). */
   redis?: Redis;
-  /** Defaults to the anonymous tier; task 3.5 swaps in per-tier values. */
+  /** Anonymous-tier budget (spec §10.5); authenticated keys use their own DB budget. */
   max?: number;
   timeWindowMs?: number;
   /** Env TRUST_PROXY: only then is `CF-Connecting-IP` trusted (spec §10.5). */
@@ -29,9 +33,22 @@ export function clientIp(request: FastifyRequest, trustProxy: boolean): string {
   return request.ip;
 }
 
-/** Spec §10.5: key = API key id ‖ user id ‖ client IP; only the IP tier exists until 3.5. */
+/**
+ * Spec §10.5: key = API key id ‖ user id ‖ client IP (`apirl:{keyId|ip}`).
+ * Keyed and anonymous traffic therefore never share a counter. The JWT `user`
+ * part arrives with token verification.
+ */
 export function rateLimitKey(request: FastifyRequest, trustProxy: boolean): string {
+  if (request.apiKey) {
+    return `key:${request.apiKey.id}`;
+  }
   return `ip:${clientIp(request, trustProxy)}`;
+}
+
+/** Spec §10.5: the apiKey tier uses `api_keys.rate_limit_per_min` (default 120). */
+export function resolveRateLimitMax(request: FastifyRequest, anonymousMax: number): number {
+  const apiKey: AuthenticatedApiKey | undefined = request.apiKey;
+  return apiKey?.rateLimitPerMin ?? anonymousMax;
 }
 
 /**
@@ -40,16 +57,18 @@ export function rateLimitKey(request: FastifyRequest, trustProxy: boolean): stri
  * Redis is unavailable, because the API can still serve from Postgres (§9.3).
  *
  * Awaited by `buildApp`: the limiter works through an onRequest hook, and
- * Fastify applies hooks only to routes registered after them.
+ * Fastify applies hooks only to routes registered after them. Register it
+ * after the api-key plugin so per-key budgets are visible here.
  */
 export async function registerRateLimit(
   app: FastifyInstance,
   options: RateLimitPluginOptions = {},
 ): Promise<void> {
   const trustProxy = options.trustProxy ?? false;
+  const anonymousMax = options.max ?? ANONYMOUS_MAX;
   await app.register(rateLimit, {
     global: true,
-    max: options.max ?? ANONYMOUS_MAX,
+    max: (request) => resolveRateLimitMax(request, anonymousMax),
     timeWindow: options.timeWindowMs ?? ANONYMOUS_WINDOW_MS,
     keyGenerator: (request) => rateLimitKey(request, trustProxy),
     enableDraftSpec: true,
