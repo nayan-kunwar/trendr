@@ -12,13 +12,14 @@
     }
   },
   "scripts": {
-    "build": "tsup src/index.ts --format esm --dts --sourcemap --clean",
+    "build": "tsup src/index.ts --format esm --dts --sourcemap --clean && node scripts/copy-assets.mjs",
     "dev": "tsup src/index.ts --format esm --dts --watch",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
     "eslint": "^9",
+    "ioredis": "^5.11.1",
     "tsup": "^8",
     "typescript": "^5"
   },

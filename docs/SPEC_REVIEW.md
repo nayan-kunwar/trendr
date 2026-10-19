@@ -596,6 +596,51 @@ be re-checked later. Decisions with alternatives get an ADR in [`docs/adr/`](./a
   an unrelated project, so the job's `localhost:3000` check effectively runs on CI only
   (see quirks).
 
+## Phase 4 notes
+
+### Task 4.1 notes
+
+- **`token-bucket.lua` shipping.** `token-bucket.ts` loads the script with
+  `readFileSync(new URL('./token-bucket.lua', import.meta.url))` (the spec snippet) instead of
+  inlining it. Tests and tsx read it next to the source, but the tsup bundle is a single
+  `dist/index.js`, so in prod the URL resolves to `dist/token-bucket.lua`; the core build now
+  runs `scripts/copy-assets.mjs` after tsup to place it there (`docker` images consume the built
+  output through `pnpm deploy`). Verified by building core and importing the bundle from `dist`.
+- **Typed ioredis augmentation.** The custom command is declared with
+  `declare module 'ioredis' { interface Redis { takeToken(...) } }` rather than
+  `@ts-expect-error` (the no-`any` rule still applies), so `ioredis` joins `@trendr/core`'s
+  devDependencies (type-only import; the emitted d.ts needs it resolvable from consumers too).
+- **`take(cost, signal)`, not `take(key, n)`.** The spec tree comment sketches
+  `RedisTokenBucket.take(key, n)`; the §7.4 snippet below it is the contract, and it derives both
+  Redis keys from the bucket's own `name` (`rl:{name}`, `rl:{name}:pause`, §7.3 bucket table) —
+  one instance per bucket shared by all jobs is what the worker needs.
+- **`fetch-json` options are the spec shape plus five additions** (`source`, `endpoint`,
+  `userAgent`, `metrics`, `backoffBaseMs`/`backoffCapMs`): the §7.5 sketch has no source label,
+  but §12 metrics need `source`/`endpoint`; core must not read `env` (zod-only rule), so the
+  caller passes `env.HTTP_USER_AGENT`; the retry window is injectable so unit tests do not wait
+  (defaults are the spec's 500 ms → 10 s).
+- **Metrics sink instead of prom-client.** `FetchJsonMetricsSink` (request/error/duration)
+  keeps core dependency-free; task 4.2 adapts the worker's prom-client registry to it. The
+  `status` label is the HTTP status code (or `network` when no response arrived); error kinds
+  are the §12 set plus `schema` for zod/JSON failures.
+- **Status mapping.** `304 → not_modified`; `404/410 → not_found`; `429` and 403-with-quota
+  signals (`retry-after` or `x-ratelimit-remaining: 0`) call `pauseUntil` and throw a retryable
+  `UpstreamError` (`retry-after` seconds or HTTP-date → `x-ratelimit-reset` epoch → 60 s
+  fallback); `5xx`/network/timeout retry in-process (max 3 attempts) with full jitter, then a
+  retryable `UpstreamError`; other `4xx` are non-retryable. `2xx` bodies are zod-parsed and
+  failures carry the first five issues plus a 12-char sha256 of the payload — the payload
+  itself is never logged (spec §7.5).
+- **SSRF hardening.** https-only plus the eight §15 hosts, checked before any fetch.
+  Redirects are never followed (`redirect: 'manual'`, 3xx → non-retryable error) so a
+  compromised allowlisted host cannot bounce a request to the internal network.
+- Acceptance coverage: unit tests exercise every status branch, retry exhaustion/success,
+  timeout, caller-abort propagation and SSRF rejection; the int test drives 20 concurrent
+  takers against capacity 10 + refill 1/s on real Redis (~10 s) and asserts the
+  `grants(t) <= capacity + refill·t` bound per grant, plus a `pauseUntil` block.
+- Task 4.2 will wire this into the worker: replace `apps/worker/src/queues.ts`'s local
+  `backoffDelay` with the core export (adding the spec's full jitter) and map
+  `UpstreamError.retryable`/`retryAfterMs` onto BullMQ attempts and job backoff.
+
 ## Environment quirks worth knowing
 
 - `docker compose port <svc> <port>` exits **0** printing `invalid IP:0` when the port is only
