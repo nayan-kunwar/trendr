@@ -26,6 +26,10 @@ const app = await buildApp({
   metricsToken: env.METRICS_TOKEN,
   db: connection,
   redis,
+  scoresRetention: {
+    hourlyHours: env.SCORES_HOURLY_RETENTION_HOURS,
+    dailyDays: env.SCORES_DAILY_RETENTION_DAYS,
+  },
   openapi: { serverUrl: env.API_PUBLIC_URL },
 });
 

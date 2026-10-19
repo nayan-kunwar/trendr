@@ -1,9 +1,11 @@
-import { sql } from 'drizzle-orm';
+import { and, asc, eq, sql } from 'drizzle-orm';
 
-import type { ItemFlag, ItemKind, Metric, Source } from '@trendr/core';
+import type { ItemFlag, ItemKind, Metric, Source, Window } from '@trendr/core';
 
 import type { DbExecutor } from '../client.js';
-import { items } from '../schema/items.js';
+import { aliasRelEnum } from '../schema/enums.js';
+import { itemAliases, itemTopics, items, topics } from '../schema/items.js';
+import { scoreRunsCurrent, scores } from '../schema/metrics.js';
 
 /**
  * Upsert input for one item — exactly `NormalizedItem['item']` (spec §5.1):
@@ -73,4 +75,145 @@ export async function upsertItems(db: DbExecutor, rows: ItemUpsert[]): Promise<U
       },
     })
     .returning({ id: items.id, source: items.source, externalId: items.externalId });
+}
+
+export type ItemRow = typeof items.$inferSelect;
+
+/** Spec §10.1 `/v1/items/:id`: soft-deleted items are 404s. */
+export async function getItemById(db: DbExecutor, id: bigint): Promise<ItemRow | null> {
+  const [row] = await db
+    .select()
+    .from(items)
+    .where(and(eq(items.id, id), eq(items.isDeleted, false)));
+  return row ?? null;
+}
+
+/** Spec §10.1 `/v1/items/lookup`: resolve `(source, externalId)` to a live item. */
+export async function findItemByNaturalKey(
+  db: DbExecutor,
+  source: Source,
+  externalId: string,
+): Promise<{ id: bigint } | null> {
+  const [row] = await db
+    .select({ id: items.id })
+    .from(items)
+    .where(
+      and(eq(items.source, source), eq(items.externalId, externalId), eq(items.isDeleted, false)),
+    );
+  return row ?? null;
+}
+
+/** Normalized topic slugs of one item (spec §10.4 `topics`), stable order. */
+export async function loadItemTopics(db: DbExecutor, itemId: bigint): Promise<string[]> {
+  const rows = await db
+    .select({ slug: topics.slug })
+    .from(itemTopics)
+    .innerJoin(topics, eq(topics.id, itemTopics.topicId))
+    .where(eq(itemTopics.itemId, itemId))
+    .orderBy(asc(topics.slug));
+  return rows.map((row) => row.slug);
+}
+
+export interface ItemScoreRow {
+  window: Window;
+  rankSource: number | null;
+  rankAll: number | null;
+  delta: number;
+  relGrowth: number;
+  finalScore: number;
+  zScore: number;
+  percentile: number;
+  flags: string[];
+}
+
+/** Current-run scores for one item, one row per window that scored it (spec §10.4 `scores`). */
+export async function loadItemCurrentScores(
+  db: DbExecutor,
+  itemId: bigint,
+): Promise<ItemScoreRow[]> {
+  return db
+    .select({
+      window: scores.window,
+      rankSource: scores.rankSource,
+      rankAll: scores.rankAll,
+      delta: scores.delta,
+      relGrowth: scores.relGrowth,
+      finalScore: scores.finalScore,
+      zScore: scores.zScore,
+      percentile: scores.percentile,
+      flags: scores.flags,
+    })
+    .from(scores)
+    .innerJoin(
+      scoreRunsCurrent,
+      and(
+        eq(scoreRunsCurrent.source, scores.source),
+        eq(scoreRunsCurrent.window, scores.window),
+        eq(scoreRunsCurrent.runId, scores.runId),
+      ),
+    )
+    .where(eq(scores.itemId, itemId));
+}
+
+export type AliasRelation = (typeof aliasRelEnum.enumValues)[number];
+
+export interface ItemAliasLink {
+  /** The linked item on the other side of the relation. */
+  id: bigint;
+  source: Source;
+  kind: ItemKind;
+  externalId: string;
+  displayName: string;
+  url: string;
+  relation: AliasRelation;
+  confidence: number;
+  evidence: string;
+  /** `outgoing`: this item's row; `incoming`: the other item's row points here. */
+  direction: 'outgoing' | 'incoming';
+}
+
+/**
+ * Spec §10.1 `/v1/items/:id/aliases`: every `item_aliases` row touching the
+ * item, in both directions, with live (non-deleted) link targets. `relation`
+ * is always read from the row's own `item_id` perspective.
+ */
+export async function loadItemAliasLinks(db: DbExecutor, itemId: bigint): Promise<ItemAliasLink[]> {
+  const outgoing = await db
+    .select({
+      id: items.id,
+      source: items.source,
+      kind: items.kind,
+      externalId: items.externalId,
+      displayName: items.displayName,
+      url: items.url,
+      relation: itemAliases.relation,
+      confidence: itemAliases.confidence,
+      evidence: itemAliases.evidence,
+    })
+    .from(itemAliases)
+    .innerJoin(items, eq(items.id, itemAliases.aliasItemId))
+    .where(and(eq(itemAliases.itemId, itemId), eq(items.isDeleted, false)))
+    .orderBy(asc(itemAliases.aliasItemId));
+
+  const incoming = await db
+    .select({
+      id: items.id,
+      source: items.source,
+      kind: items.kind,
+      externalId: items.externalId,
+      displayName: items.displayName,
+      url: items.url,
+      relation: itemAliases.relation,
+      confidence: itemAliases.confidence,
+      evidence: itemAliases.evidence,
+    })
+    .from(itemAliases)
+    .innerJoin(items, eq(items.id, itemAliases.itemId))
+    .where(and(eq(itemAliases.aliasItemId, itemId), eq(items.isDeleted, false)))
+    .orderBy(asc(itemAliases.itemId));
+
+  return [
+    ...outgoing.map((row) => ({ ...row, direction: 'outgoing' as const })),
+    ...incoming.map((row) => ({ ...row, direction: 'incoming' as const })),
+  ];
 }

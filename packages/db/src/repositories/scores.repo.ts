@@ -1,9 +1,10 @@
-import { sql } from 'drizzle-orm';
+import { and, asc, eq, gte, sql } from 'drizzle-orm';
 
 import type { ScoreFlag, Source, Window } from '@trendr/core';
 
 import type { DbExecutor } from '../client.js';
 import { scoreRunsCurrent, scores } from '../schema/metrics.js';
+import { ingestionRuns } from '../schema/ops.js';
 
 export interface ScoreUpsert {
   itemId: bigint;
@@ -114,4 +115,123 @@ export async function pruneScores(
   }
 
   return deleted;
+}
+
+/** The current scoring run pointer for one (source, window), if any. */
+export async function getCurrentScoreRun(
+  db: DbExecutor,
+  source: Source,
+  window: Window,
+): Promise<{ runId: bigint; computedAt: Date } | null> {
+  const [row] = await db
+    .select({ runId: scoreRunsCurrent.runId, computedAt: scoreRunsCurrent.computedAt })
+    .from(scoreRunsCurrent)
+    .where(and(eq(scoreRunsCurrent.source, source), eq(scoreRunsCurrent.window, window)));
+  return row ?? null;
+}
+
+export interface ScoreRunRow {
+  delta: number;
+  base: number;
+  relGrowth: number;
+  rawScore: number;
+  ageFactor: number;
+  confidence: number;
+  anomalyPenalty: number;
+  finalScore: number;
+  zScore: number;
+  percentile: number;
+  rankSource: number | null;
+  rankAll: number | null;
+  flags: string[];
+}
+
+/** One item's score row for a specific run (spec §10.1 score-explain). */
+export async function loadItemScoreForRun(
+  db: DbExecutor,
+  itemId: bigint,
+  window: Window,
+  runId: bigint,
+): Promise<ScoreRunRow | null> {
+  const [row] = await db
+    .select({
+      delta: scores.delta,
+      base: scores.base,
+      relGrowth: scores.relGrowth,
+      rawScore: scores.rawScore,
+      ageFactor: scores.ageFactor,
+      confidence: scores.confidence,
+      anomalyPenalty: scores.anomalyPenalty,
+      finalScore: scores.finalScore,
+      zScore: scores.zScore,
+      percentile: scores.percentile,
+      rankSource: scores.rankSource,
+      rankAll: scores.rankAll,
+      flags: scores.flags,
+    })
+    .from(scores)
+    .where(and(eq(scores.itemId, itemId), eq(scores.window, window), eq(scores.runId, runId)));
+  return row ?? null;
+}
+
+export interface ScoreHistoryRow {
+  runId: bigint;
+  startedAt: Date;
+  computedAt: Date;
+  finalScore: number;
+  zScore: number;
+  percentile: number;
+  rankSource: number | null;
+  delta: number;
+}
+
+/**
+ * Spec §10.1 `/v1/items/:id/scores`: runs that scored the item since `since`,
+ * oldest first. `granularity = 'day'` then keeps the last run of each UTC day —
+ * exactly the rows retention preserves beyond the hourly horizon (§6.5), so
+ * the same query serves both granularities.
+ */
+export async function loadItemScoreHistory(
+  db: DbExecutor,
+  itemId: bigint,
+  window: Window,
+  granularity: 'hour' | 'day',
+  since: Date,
+): Promise<ScoreHistoryRow[]> {
+  const rows = await db
+    .select({
+      runId: scores.runId,
+      startedAt: ingestionRuns.startedAt,
+      computedAt: scores.computedAt,
+      finalScore: scores.finalScore,
+      zScore: scores.zScore,
+      percentile: scores.percentile,
+      rankSource: scores.rankSource,
+      delta: scores.delta,
+    })
+    .from(scores)
+    .innerJoin(ingestionRuns, eq(ingestionRuns.id, scores.runId))
+    .where(
+      and(
+        eq(scores.itemId, itemId),
+        eq(scores.window, window),
+        gte(ingestionRuns.startedAt, since),
+      ),
+    )
+    .orderBy(asc(ingestionRuns.startedAt), asc(scores.runId));
+
+  return granularity === 'hour' ? rows : lastRunPerUtcDay(rows);
+}
+
+/**
+ * The last run of each UTC day (rows must be ordered by `startedAt`, `runId`;
+ * later rows overwrite earlier ones), oldest day first. Runs in which the item
+ * was ineligible have no row, so their day is simply absent (a gap).
+ */
+export function lastRunPerUtcDay(rows: readonly ScoreHistoryRow[]): ScoreHistoryRow[] {
+  const byDay = new Map<string, ScoreHistoryRow>();
+  for (const row of rows) {
+    byDay.set(row.startedAt.toISOString().slice(0, 10), row);
+  }
+  return [...byDay.entries()].sort(([a], [b]) => (a < b ? -1 : 1)).map(([, row]) => row);
 }

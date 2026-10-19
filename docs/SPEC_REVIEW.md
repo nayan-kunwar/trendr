@@ -358,6 +358,70 @@ be re-checked later. Decisions with alternatives get an ADR in [`docs/adr/`](./a
   across an npm rescore, 410 after a rebuild and fresh restart. `apps/api/openapi.json`
   re-exported (4 paths).
 
+### Task 3.3 notes
+
+- **Routes.** `apps/api/src/routes/items.ts` + `apps/api/src/schemas/items.ts` implement §10.1's
+  six item endpoints: detail, lookup (302), history, scores, score-explain, aliases. All item
+  routes carry `Cache-Control: public, max-age=60, s-maxage=300, stale-while-revalidate=600`
+  (§9.4) and get the plugin-minted `W/"{sha1(body)}"` ETag with 304 handling; 404s are
+  problem+json (`not-found`) via the typed `NotFoundError`. `:id` is validated by `IdParam`
+  (`^\d{1,19}$`); values beyond bigint range 404 instead of erroring in Postgres. Lookup is a
+  static route (find-my-way priority over `/v1/items/:id`) and soft-deleted items 404
+  everywhere.
+- **Detail (GET /v1/items/:id).** Read-through cached under `item:{id}` for 300 s (§9.1); a
+  missing item throws before anything is cached. The loader joins `items`, topic slugs, the
+  current-run score row per window (`scores ⋈ score_runs_current`), and outgoing alias rows.
+  The `scores` map always carries all three §5 windows (`null` when unscored) — Zod v4's
+  exhaustive `z.record(enum, …)` is satisfied by construction. `latestMetrics` is a *partial*
+  record in the v3 spec; translated to `z.partialRecord(MetricSchema, …)` for v4 semantics,
+  and the loader filters to the known §5 metrics so a stray key can never fail serialization.
+- **History (GET /v1/items/:id/history).** `HistoryQuery` is exactly §10.4 (day default; the
+  hour ≤ 14 d refine uses `Date.now()` from the explicit `from` only — the spec's own quirk:
+  `granularity=hour` without `from` passes and then defaults to a 30 d range). Cumulative/gauge
+  metrics read `snapshots` — hour = raw buckets oldest-first, day = the last capture per UTC
+  day (`DISTINCT ON` over `(captured_at AT TIME ZONE 'UTC')::date`, explicit UTC bounds).
+  `daily_count` metrics read `daily_metrics` and have **no hourly resolution**: hour granularity
+  serves an empty `points` list for them (documented divergence, §10.1 "from
+  `snapshots`/`daily_metrics`"). Point shape: day points carry `t: 'YYYY-MM-DD'`, hour points
+  an ISO bucket start. Read-through cached under `hist:{id}:{metric}:{granularity}:{rangeKey}`
+  for 900 s; both the query range and the key are floored to the granularity grid
+  (`fromT/toT`) and `rangeKey` is that span (`720h`, `30d`), so equal spans share one cached
+  series without dropping bucket points.
+- **Scores (GET /v1/items/:id/scores).** `ScoresQuery` is exactly §10.4 (window `7d`, day
+  default, `days` 1..365, hour ⇒ `days ≤ 2`). The route clamps the horizon to the env bounds
+  passed through `BuildAppDeps.scoresRetention` (from `SCORES_HOURLY_RETENTION_HOURS` /
+  `SCORES_DAILY_RETENTION_DAYS`, main.ts): hour = `min(days*24, hourlyHours)` h, day =
+  `min(days, dailyDays)` d. One query over `scores ⋈ ingestion_runs` ordered by
+  `started_at, run_id`; day granularity then keeps the last run per UTC day in TypeScript —
+  the exact rows §6.5 retention preserves beyond the hourly horizon. Ineligible runs have no
+  row, so they are gaps by construction. No Redis cache (§9.1 lists none); ETag/304 via plugin.
+- **score-explain.** §10.1's response shape is not pinned, so: `window` query (default `24h`,
+  matching the trending default), returning `components` (the eight §5 `ScoreComponents`),
+  `params` (`paramsFor(source, primaryMetric, window)`, `null` if the combo has no §8.3 entry)
+  and `inputs` = the persisted inputs the run row holds (`delta`, `base`, `anomalyPenalty`,
+  `zScore`, `percentile`, `rankSource`, `rankAll`, `flags`). When the item has no row in the
+  current run the response is `components: null`, `inputs: null`, `reason: 'not_eligible'` with
+  the current run id still reported (and `runId: null` when no run exists at all).
+  `coverage`/`stale`/`ageDays`/`isPaper` are not persisted, so they cannot be echoed; the
+  stored factors explain the formula (`final = raw × ageFactor × confidence × anomalyPenalty`).
+- **Aliases.** The item detail embeds the item's **outgoing** rows only (the §10.4 alias shape
+  has no direction and the relation reads from `item_id`'s perspective). The aliases endpoint
+  returns **both** directions with a `direction: 'outgoing' | 'incoming'` field plus
+  `kind`/`externalId`/`url`/`evidence`, so a repo page can surface its paper. Deleted link
+  targets are filtered out; ordering is stable (`upstream`/`downstream` by item id).
+- **DB layer.** New repository functions: `getItemById`, `findItemByNaturalKey`,
+  `loadItemTopics`, `loadItemCurrentScores`, `loadItemAliasLinks` (items.repo.ts);
+  `getCurrentScoreRun`, `loadItemScoreForRun`, `loadItemScoreHistory` + pure `lastRunPerUtcDay`
+  (scores.repo.ts); `loadSnapshotHourlyHistory`, `loadSnapshotDailyHistory`,
+  `loadDailyMetricHistory` (snapshots.repo.ts).
+- Tests: unit 20 new — history/scores/lookup/explain query validations, detail + not_eligible
+  DTO parses, `truncateToGranularity`/`historyRangeKey`/`parseItemId`, `lastRunPerUtcDay`
+  (UTC-day grouping, gaps, tie-break); int `items.int.test.ts` (9) over Testcontainers:
+  detail + ETag/304 + `item:` cache key, 404/400 for missing/deleted/malformed ids, lookup 302
+  + 404s, hour/day history (14 d hour limit 400), hourly score history and last-run-per-day,
+  `days` clamped by an injected `dailyDays: 3`, 48 h hour limit 400, eligible/not_eligible
+  explain, aliases in both directions. `apps/api/openapi.json` re-exported (10 paths).
+
 ## Environment quirks worth knowing
 
 - `docker compose port <svc> <port>` exits **0** printing `invalid IP:0` when the port is only

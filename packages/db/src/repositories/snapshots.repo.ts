@@ -1,4 +1,4 @@
-import { sql } from 'drizzle-orm';
+import { and, asc, eq, gte, lte, sql } from 'drizzle-orm';
 
 import type { Metric } from '@trendr/core';
 
@@ -147,4 +147,92 @@ export async function rollupDailyMetrics(db: DbExecutor, day: string): Promise<n
     ON CONFLICT (item_id, metric, day) DO UPDATE SET value = EXCLUDED.value`);
 
   return result.rowCount ?? 0;
+}
+
+export interface SnapshotHistoryPoint {
+  /** Snapshot bucket start (hour for hot/warm items, day for cold ones). */
+  t: Date;
+  v: number;
+}
+
+export interface DailyHistoryPoint {
+  /** 'YYYY-MM-DD' UTC. */
+  day: string;
+  v: number;
+}
+
+/**
+ * Spec §10.1 `/v1/items/:id/history`, hour granularity: the raw snapshot
+ * buckets of one (item, metric) in `[from, to]`, oldest first. Cold items
+ * only have day-bucketed snapshots, so their hour series is sparse by design.
+ */
+export async function loadSnapshotHourlyHistory(
+  db: DbExecutor,
+  itemId: bigint,
+  metric: Metric,
+  from: Date,
+  to: Date,
+): Promise<SnapshotHistoryPoint[]> {
+  return db
+    .select({ t: snapshots.capturedAt, v: snapshots.value })
+    .from(snapshots)
+    .where(
+      and(
+        eq(snapshots.itemId, itemId),
+        eq(snapshots.metric, metric),
+        gte(snapshots.capturedAt, from),
+        lte(snapshots.capturedAt, to),
+      ),
+    )
+    .orderBy(asc(snapshots.capturedAt));
+}
+
+/**
+ * Spec §10.1 history, day granularity for cumulative/gauge metrics: the
+ * end-of-day value (last capture) per UTC day in `[fromDay, toDay]`.
+ */
+export async function loadSnapshotDailyHistory(
+  db: DbExecutor,
+  itemId: bigint,
+  metric: Metric,
+  fromDay: string,
+  toDay: string,
+): Promise<DailyHistoryPoint[]> {
+  const result = await db.execute<{ day: string; v: string }>(sql`
+    SELECT DISTINCT ON (day) day::text AS day, value::text AS v FROM (
+      SELECT (s.captured_at AT TIME ZONE 'UTC')::date AS day, s.value, s.captured_at
+      FROM snapshots s
+      WHERE s.item_id = ${itemId} AND s.metric = ${metric}
+        AND s.captured_at >= (${fromDay}::date::timestamp AT TIME ZONE 'UTC')
+        AND s.captured_at < ((${toDay}::date + 1)::timestamp AT TIME ZONE 'UTC')
+    ) days
+    ORDER BY day, captured_at DESC`);
+
+  return result.rows.map((row) => ({ day: row.day, v: Number(row.v) }));
+}
+
+/**
+ * Spec §10.1 history, day granularity for daily-count metrics: the per-day
+ * aggregates in `[fromDay, toDay]`. These have no hourly resolution, so the
+ * hour-granularity endpoint serves an empty series for them.
+ */
+export async function loadDailyMetricHistory(
+  db: DbExecutor,
+  itemId: bigint,
+  metric: Metric,
+  fromDay: string,
+  toDay: string,
+): Promise<DailyHistoryPoint[]> {
+  return db
+    .select({ day: dailyMetrics.day, v: dailyMetrics.value })
+    .from(dailyMetrics)
+    .where(
+      and(
+        eq(dailyMetrics.itemId, itemId),
+        eq(dailyMetrics.metric, metric),
+        gte(dailyMetrics.day, fromDay),
+        lte(dailyMetrics.day, toDay),
+      ),
+    )
+    .orderBy(asc(dailyMetrics.day));
 }

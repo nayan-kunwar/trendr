@@ -259,6 +259,716 @@
           }
         }
       }
+    },
+    "/v1/items/lookup": {
+      "get": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "enum": ["github", "npm", "pypi", "huggingface", "arxiv", "mcp"]
+            },
+            "in": "query",
+            "name": "source",
+            "required": true
+          },
+          {
+            "schema": { "type": "string", "minLength": 1, "maxLength": 255 },
+            "in": "query",
+            "name": "externalId",
+            "required": true
+          }
+        ],
+        "responses": { "200": { "description": "Default Response" } }
+      }
+    },
+    "/v1/items/{id}": {
+      "get": {
+        "parameters": [
+          {
+            "schema": { "type": "string", "pattern": "^\\d{1,19}$" },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": { "type": "string" },
+                    "source": {
+                      "type": "string",
+                      "enum": ["github", "npm", "pypi", "huggingface", "arxiv", "mcp"]
+                    },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "repo",
+                        "package",
+                        "model",
+                        "dataset",
+                        "space",
+                        "paper",
+                        "mcp_server"
+                      ]
+                    },
+                    "externalId": { "type": "string" },
+                    "name": { "type": "string" },
+                    "displayName": { "type": "string" },
+                    "description": { "type": ["string", "null"] },
+                    "url": { "type": "string", "format": "uri" },
+                    "homepage": { "type": ["string", "null"] },
+                    "language": { "type": ["string", "null"] },
+                    "license": { "type": ["string", "null"] },
+                    "owner": { "type": ["string", "null"] },
+                    "topics": {
+                      "type": "array",
+                      "items": { "type": "string" }
+                    },
+                    "primaryMetric": {
+                      "type": "string",
+                      "enum": [
+                        "stars",
+                        "forks",
+                        "watchers",
+                        "open_issues",
+                        "downloads",
+                        "downloads_total",
+                        "likes",
+                        "upvotes",
+                        "trending_score",
+                        "comments"
+                      ]
+                    },
+                    "latestMetrics": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string",
+                        "enum": [
+                          "stars",
+                          "forks",
+                          "watchers",
+                          "open_issues",
+                          "downloads",
+                          "downloads_total",
+                          "likes",
+                          "upvotes",
+                          "trending_score",
+                          "comments"
+                        ]
+                      },
+                      "additionalProperties": { "type": "number" }
+                    },
+                    "tier": {
+                      "type": "string",
+                      "enum": ["hot", "warm", "cold", "archived"]
+                    },
+                    "flags": { "type": "array", "items": { "type": "string" } },
+                    "upstreamCreatedAt": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                        },
+                        { "type": "null" }
+                      ]
+                    },
+                    "firstSeenAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                    },
+                    "lastSnapshotAt": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                        },
+                        { "type": "null" }
+                      ]
+                    },
+                    "scores": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string",
+                        "enum": ["24h", "7d", "30d"]
+                      },
+                      "additionalProperties": {
+                        "anyOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "rankSource": {
+                                "anyOf": [
+                                  {
+                                    "type": "integer",
+                                    "minimum": -9007199254740991,
+                                    "maximum": 9007199254740991
+                                  },
+                                  { "type": "null" }
+                                ]
+                              },
+                              "rankAll": {
+                                "anyOf": [
+                                  {
+                                    "type": "integer",
+                                    "minimum": -9007199254740991,
+                                    "maximum": 9007199254740991
+                                  },
+                                  { "type": "null" }
+                                ]
+                              },
+                              "delta": { "type": "number" },
+                              "relGrowth": { "type": "number" },
+                              "finalScore": { "type": "number" },
+                              "zScore": { "type": "number" },
+                              "percentile": { "type": "number" },
+                              "flags": {
+                                "type": "array",
+                                "items": { "type": "string" }
+                              }
+                            },
+                            "required": [
+                              "rankSource",
+                              "rankAll",
+                              "delta",
+                              "relGrowth",
+                              "finalScore",
+                              "zScore",
+                              "percentile",
+                              "flags"
+                            ],
+                            "additionalProperties": false
+                          },
+                          { "type": "null" }
+                        ]
+                      },
+                      "required": ["24h", "7d", "30d"]
+                    },
+                    "aliases": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": { "type": "string" },
+                          "source": {
+                            "type": "string",
+                            "enum": ["github", "npm", "pypi", "huggingface", "arxiv", "mcp"]
+                          },
+                          "displayName": { "type": "string" },
+                          "relation": { "type": "string" },
+                          "confidence": { "type": "number" }
+                        },
+                        "required": ["id", "source", "displayName", "relation", "confidence"],
+                        "additionalProperties": false
+                      }
+                    },
+                    "metadata": {
+                      "type": "object",
+                      "propertyNames": { "type": "string" },
+                      "additionalProperties": {}
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "source",
+                    "kind",
+                    "externalId",
+                    "name",
+                    "displayName",
+                    "description",
+                    "url",
+                    "homepage",
+                    "language",
+                    "license",
+                    "owner",
+                    "topics",
+                    "primaryMetric",
+                    "latestMetrics",
+                    "tier",
+                    "flags",
+                    "upstreamCreatedAt",
+                    "firstSeenAt",
+                    "lastSnapshotAt",
+                    "scores",
+                    "aliases",
+                    "metadata"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/items/{id}/history": {
+      "get": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "stars",
+                "forks",
+                "watchers",
+                "open_issues",
+                "downloads",
+                "downloads_total",
+                "likes",
+                "upvotes",
+                "trending_score",
+                "comments"
+              ]
+            },
+            "in": "query",
+            "name": "metric",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+            },
+            "in": "query",
+            "name": "from",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+            },
+            "in": "query",
+            "name": "to",
+            "required": false
+          },
+          {
+            "schema": {
+              "default": "day",
+              "type": "string",
+              "enum": ["hour", "day"]
+            },
+            "in": "query",
+            "name": "granularity",
+            "required": false
+          },
+          {
+            "schema": { "type": "string", "pattern": "^\\d{1,19}$" },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "itemId": { "type": "string" },
+                    "metric": {
+                      "type": "string",
+                      "enum": [
+                        "stars",
+                        "forks",
+                        "watchers",
+                        "open_issues",
+                        "downloads",
+                        "downloads_total",
+                        "likes",
+                        "upvotes",
+                        "trending_score",
+                        "comments"
+                      ]
+                    },
+                    "kind": {
+                      "type": "string",
+                      "enum": ["cumulative", "daily_count", "gauge"]
+                    },
+                    "granularity": {
+                      "type": "string",
+                      "enum": ["hour", "day"]
+                    },
+                    "points": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "t": { "type": "string" },
+                          "v": { "type": "number" }
+                        },
+                        "required": ["t", "v"],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": ["itemId", "metric", "kind", "granularity", "points"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/items/{id}/scores": {
+      "get": {
+        "parameters": [
+          {
+            "schema": {
+              "default": "7d",
+              "type": "string",
+              "enum": ["24h", "7d", "30d"]
+            },
+            "in": "query",
+            "name": "window",
+            "required": false
+          },
+          {
+            "schema": {
+              "default": "day",
+              "type": "string",
+              "enum": ["hour", "day"]
+            },
+            "in": "query",
+            "name": "granularity",
+            "required": false
+          },
+          {
+            "schema": {
+              "default": 30,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 365
+            },
+            "in": "query",
+            "name": "days",
+            "required": false
+          },
+          {
+            "schema": { "type": "string", "pattern": "^\\d{1,19}$" },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "itemId": { "type": "string" },
+                    "window": {
+                      "type": "string",
+                      "enum": ["24h", "7d", "30d"]
+                    },
+                    "granularity": {
+                      "type": "string",
+                      "enum": ["hour", "day"]
+                    },
+                    "points": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "t": {
+                            "type": "string",
+                            "format": "date-time",
+                            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                          },
+                          "runId": { "type": "string" },
+                          "finalScore": { "type": "number" },
+                          "zScore": { "type": "number" },
+                          "percentile": { "type": "number" },
+                          "rankSource": {
+                            "anyOf": [
+                              {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              { "type": "null" }
+                            ]
+                          },
+                          "delta": { "type": "number" }
+                        },
+                        "required": [
+                          "t",
+                          "runId",
+                          "finalScore",
+                          "zScore",
+                          "percentile",
+                          "rankSource",
+                          "delta"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": ["itemId", "window", "granularity", "points"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/items/{id}/score-explain": {
+      "get": {
+        "parameters": [
+          {
+            "schema": {
+              "default": "24h",
+              "type": "string",
+              "enum": ["24h", "7d", "30d"]
+            },
+            "in": "query",
+            "name": "window",
+            "required": false
+          },
+          {
+            "schema": { "type": "string", "pattern": "^\\d{1,19}$" },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "itemId": { "type": "string" },
+                    "source": {
+                      "type": "string",
+                      "enum": ["github", "npm", "pypi", "huggingface", "arxiv", "mcp"]
+                    },
+                    "window": {
+                      "type": "string",
+                      "enum": ["24h", "7d", "30d"]
+                    },
+                    "runId": { "type": ["string", "null"] },
+                    "computedAt": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                        },
+                        { "type": "null" }
+                      ]
+                    },
+                    "components": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "delta": { "type": "number" },
+                            "base": { "type": "number" },
+                            "relGrowth": { "type": "number" },
+                            "rawScore": { "type": "number" },
+                            "ageFactor": { "type": "number" },
+                            "confidence": { "type": "number" },
+                            "anomalyPenalty": { "type": "number" },
+                            "finalScore": { "type": "number" }
+                          },
+                          "required": [
+                            "delta",
+                            "base",
+                            "relGrowth",
+                            "rawScore",
+                            "ageFactor",
+                            "confidence",
+                            "anomalyPenalty",
+                            "finalScore"
+                          ],
+                          "additionalProperties": false
+                        },
+                        { "type": "null" }
+                      ]
+                    },
+                    "params": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "k": { "type": "number" },
+                            "minDelta": { "type": "number" },
+                            "beta": { "type": "number" },
+                            "rMax": { "type": "number" },
+                            "burstMinAbs": { "type": "number" }
+                          },
+                          "required": ["k", "minDelta", "beta", "rMax", "burstMinAbs"],
+                          "additionalProperties": false
+                        },
+                        { "type": "null" }
+                      ]
+                    },
+                    "inputs": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "delta": { "type": "number" },
+                            "base": { "type": "number" },
+                            "anomalyPenalty": { "type": "number" },
+                            "zScore": { "type": "number" },
+                            "percentile": { "type": "number" },
+                            "rankSource": {
+                              "anyOf": [
+                                {
+                                  "type": "integer",
+                                  "minimum": -9007199254740991,
+                                  "maximum": 9007199254740991
+                                },
+                                { "type": "null" }
+                              ]
+                            },
+                            "rankAll": {
+                              "anyOf": [
+                                {
+                                  "type": "integer",
+                                  "minimum": -9007199254740991,
+                                  "maximum": 9007199254740991
+                                },
+                                { "type": "null" }
+                              ]
+                            },
+                            "flags": {
+                              "type": "array",
+                              "items": { "type": "string" }
+                            }
+                          },
+                          "required": [
+                            "delta",
+                            "base",
+                            "anomalyPenalty",
+                            "zScore",
+                            "percentile",
+                            "rankSource",
+                            "rankAll",
+                            "flags"
+                          ],
+                          "additionalProperties": false
+                        },
+                        { "type": "null" }
+                      ]
+                    },
+                    "reason": { "type": "string", "enum": ["not_eligible"] }
+                  },
+                  "required": [
+                    "itemId",
+                    "source",
+                    "window",
+                    "runId",
+                    "computedAt",
+                    "components",
+                    "params",
+                    "inputs"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/items/{id}/aliases": {
+      "get": {
+        "parameters": [
+          {
+            "schema": { "type": "string", "pattern": "^\\d{1,19}$" },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "itemId": { "type": "string" },
+                    "aliases": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": { "type": "string" },
+                          "source": {
+                            "type": "string",
+                            "enum": ["github", "npm", "pypi", "huggingface", "arxiv", "mcp"]
+                          },
+                          "displayName": { "type": "string" },
+                          "relation": { "type": "string" },
+                          "confidence": { "type": "number" },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "repo",
+                              "package",
+                              "model",
+                              "dataset",
+                              "space",
+                              "paper",
+                              "mcp_server"
+                            ]
+                          },
+                          "externalId": { "type": "string" },
+                          "url": { "type": "string", "format": "uri" },
+                          "evidence": { "type": "string" },
+                          "direction": {
+                            "type": "string",
+                            "enum": ["outgoing", "incoming"]
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "source",
+                          "displayName",
+                          "relation",
+                          "confidence",
+                          "kind",
+                          "externalId",
+                          "url",
+                          "evidence",
+                          "direction"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": ["itemId", "aliases"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
     }
   }
 }

@@ -14,6 +14,7 @@ import { registerRateLimit } from './plugins/rate-limit.js';
 import { registerRedis } from './plugins/redis.js';
 import { registerSecurity } from './plugins/security.js';
 import { registerHealthRoutes } from './routes/health.js';
+import { registerItemRoutes } from './routes/items.js';
 import { registerTrendingRoutes } from './routes/trending.js';
 
 export interface BuildAppDeps {
@@ -32,6 +33,8 @@ export interface BuildAppDeps {
   redisSub?: Redis;
   /** Anonymous rate-limit tier (spec §10.5); `false` disables limiting for tooling. */
   rateLimit?: { max?: number; timeWindowMs?: number } | false;
+  /** Scores-retention bounds for `/v1/items/:id/scores` (env: SCORES_*; §10.4). */
+  scoresRetention?: { hourlyHours: number; dailyDays: number };
   /** OpenAPI document metadata (spec §10.1). */
   openapi?: { title?: string; version?: string; serverUrl?: string };
 }
@@ -75,6 +78,7 @@ export async function buildApp(deps: BuildAppDeps = {}): Promise<FastifyInstance
   registerMetrics(app, deps);
   registerHealthRoutes(app);
   registerTrendingRoutes(app);
+  registerItemRoutes(app, deps.scoresRetention ? { scoresRetention: deps.scoresRetention } : {});
 
   return app;
 }
