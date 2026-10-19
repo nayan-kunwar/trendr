@@ -101,12 +101,55 @@ export const MaintenanceJobSchema = z.object({
 });
 export type MaintenanceJob = z.infer<typeof MaintenanceJobSchema>;
 
+/**
+ * Spec §5.2 — 'YYYY-MM-DDTHH-mm' (UTC), floored to ten minutes. Scoring runs
+ * requested inside one slot dedupe into a single BullMQ job; the admin ingest
+ * endpoint reuses the same slot for its manual triggers.
+ */
+export function scoringSlot(at: Date): string {
+  const minutes = Math.floor(at.getUTCMinutes() / 10) * 10;
+  const date = at.toISOString().slice(0, 10);
+  const hours = String(at.getUTCHours()).padStart(2, '0');
+  return `${date}T${hours}-${String(minutes).padStart(2, '0')}`;
+}
+
+/**
+ * Spec §7.7 — the `dead-letter` payload parked by the worker and replayed by
+ * the admin API (spec §10.1 `POST /v1/admin/dlq/:jobId/retry`).
+ */
+export const DeadLetterJobSchema = z.object({
+  originalQueue: z.string(),
+  name: z.string(),
+  data: z.unknown(),
+  jobId: z.string().optional(),
+  failedReason: z.string(),
+  stack: z.string().optional(),
+  attemptsMade: z.number().int(),
+  failedAt: z.string(),
+});
+export type DeadLetterJob = z.infer<typeof DeadLetterJobSchema>;
+
+/**
+ * Spec §7.5 — default BullMQ job options shared by every producer (worker and
+ * the admin API): 5 attempts with the custom backoff registered per worker,
+ * bounded completed retention and failed jobs kept for §7.7 triage.
+ */
+export const DEFAULT_JOB_OPTS = {
+  attempts: 5,
+  backoff: { type: 'custom' },
+  removeOnComplete: { age: 24 * 3600, count: 2000 },
+  removeOnFail: { age: 7 * 24 * 3600 },
+};
+
 /** Deterministic jobIds → BullMQ dedupes identical jobs (idempotency key). */
 export const jobId = {
   snapshot: (s: string, tier: string, hourIso: string, batch: number) =>
     `${s}.snapshot.${tier}.${hourIso}.${batch}`,
+  /** Admin `/v1/admin/ingest {type:'snapshot'}` (§10.1): the §7.2 fan-out row for a tier. */
+  snapshotFanout: (s: string, tier: string, slot: string) => `${s}.snapshot-fanout.${tier}.${slot}`,
   daily: (s: string, day: string) => `${s}.daily.${day}`,
   discover: (s: string, strategy: string, slot: string) => `${s}.discover.${strategy}.${slot}`,
+  backfill: (s: string, itemId: string, day: string) => `backfill.${s}.${itemId}.${day}`,
   /** Watchlist instant promotion (§7.8): one refresh per item per UTC day. */
   refreshItem: (s: string, itemId: string, day: string) => `refresh.${s}.${itemId}.${day}`,
   scoring: (s: string, slot: string) => `score.${s}.${slot}`, // slot = 10-min bucket

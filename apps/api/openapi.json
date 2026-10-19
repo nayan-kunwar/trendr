@@ -1409,7 +1409,8 @@
                               "refresh-item",
                               "score",
                               "digest",
-                              "maintenance"
+                              "maintenance",
+                              "snapshot-fanout"
                             ]
                           },
                           "runId": { "type": "string" },
@@ -1454,6 +1455,874 @@
           }
         ],
         "responses": { "200": { "description": "Default Response" } }
+      }
+    },
+    "/v1/admin/ingest": {
+      "post": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "type": { "type": "string", "enum": ["discover"] },
+                      "source": {
+                        "type": "string",
+                        "enum": ["github", "npm", "pypi", "huggingface", "arxiv", "mcp"]
+                      },
+                      "strategy": {
+                        "default": "new-hot",
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 80
+                      },
+                      "maxItems": {
+                        "default": 500,
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 5000
+                      }
+                    },
+                    "required": ["type", "source"]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "type": { "type": "string", "enum": ["snapshot"] },
+                      "source": {
+                        "type": "string",
+                        "enum": ["github", "npm", "pypi", "huggingface", "arxiv", "mcp"]
+                      },
+                      "tier": { "type": "string", "enum": ["hot", "warm", "cold", "archived"] }
+                    },
+                    "required": ["type", "source", "tier"]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "type": { "type": "string", "enum": ["daily"] },
+                      "source": {
+                        "type": "string",
+                        "enum": ["github", "npm", "pypi", "huggingface", "arxiv", "mcp"]
+                      }
+                    },
+                    "required": ["type", "source"]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "type": { "type": "string", "enum": ["backfill"] },
+                      "source": {
+                        "type": "string",
+                        "enum": ["github", "npm", "pypi", "huggingface", "arxiv", "mcp"]
+                      },
+                      "itemId": { "type": "string", "pattern": "^\\d{1,19}$" },
+                      "days": { "default": 60, "type": "integer", "minimum": 1, "maximum": 365 }
+                    },
+                    "required": ["type", "source", "itemId"]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "type": { "type": "string", "enum": ["refresh-item"] },
+                      "source": {
+                        "type": "string",
+                        "enum": ["github", "npm", "pypi", "huggingface", "arxiv", "mcp"]
+                      },
+                      "itemId": { "type": "string", "pattern": "^\\d{1,19}$" }
+                    },
+                    "required": ["type", "source", "itemId"]
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": { "jobId": { "type": "string" }, "queue": { "type": "string" } },
+                  "required": ["jobId", "queue"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/score": {
+      "post": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "source": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": ["github", "npm", "pypi", "huggingface", "arxiv", "mcp"]
+                      },
+                      { "type": "string", "enum": ["all"] }
+                    ]
+                  }
+                },
+                "required": ["source"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "jobs": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "source": {
+                            "type": "string",
+                            "enum": ["github", "npm", "pypi", "huggingface", "arxiv", "mcp"]
+                          },
+                          "jobId": { "type": "string" },
+                          "queue": { "type": "string" }
+                        },
+                        "required": ["source", "jobId", "queue"],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": ["jobs"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/runs": {
+      "get": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "enum": ["github", "npm", "pypi", "huggingface", "arxiv", "mcp"]
+            },
+            "in": "query",
+            "name": "source",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "discover",
+                "snapshot",
+                "daily",
+                "backfill",
+                "refresh-item",
+                "score",
+                "digest",
+                "maintenance",
+                "snapshot-fanout"
+              ]
+            },
+            "in": "query",
+            "name": "jobType",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": ["queued", "running", "succeeded", "partial", "failed", "skipped"]
+            },
+            "in": "query",
+            "name": "status",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+            },
+            "in": "query",
+            "name": "from",
+            "required": false
+          },
+          { "schema": { "type": "string" }, "in": "query", "name": "cursor", "required": false }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "runs": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": { "type": "string" },
+                          "source": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "enum": ["github", "npm", "pypi", "huggingface", "arxiv", "mcp"]
+                              },
+                              { "type": "null" }
+                            ]
+                          },
+                          "jobType": {
+                            "type": "string",
+                            "enum": [
+                              "discover",
+                              "snapshot",
+                              "daily",
+                              "backfill",
+                              "refresh-item",
+                              "score",
+                              "digest",
+                              "maintenance",
+                              "snapshot-fanout"
+                            ]
+                          },
+                          "jobId": { "type": "string" },
+                          "attempt": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "queued",
+                              "running",
+                              "succeeded",
+                              "partial",
+                              "failed",
+                              "skipped"
+                            ]
+                          },
+                          "startedAt": {
+                            "type": "string",
+                            "format": "date-time",
+                            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                          },
+                          "finishedAt": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "format": "date-time",
+                                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                              },
+                              { "type": "null" }
+                            ]
+                          },
+                          "itemsSeen": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "itemsUpserted": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "itemsFailed": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "apiCalls": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "notModified": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "rateLimitRemaining": {
+                            "anyOf": [
+                              {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              { "type": "null" }
+                            ]
+                          },
+                          "error": { "type": ["string", "null"] }
+                        },
+                        "required": [
+                          "id",
+                          "source",
+                          "jobType",
+                          "jobId",
+                          "attempt",
+                          "status",
+                          "startedAt",
+                          "finishedAt",
+                          "itemsSeen",
+                          "itemsUpserted",
+                          "itemsFailed",
+                          "apiCalls",
+                          "notModified",
+                          "rateLimitRemaining",
+                          "error"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "page": {
+                      "type": "object",
+                      "properties": {
+                        "nextCursor": { "type": ["string", "null"] },
+                        "limit": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "required": ["nextCursor", "limit"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["runs", "page"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/runs/{runId}": {
+      "get": {
+        "parameters": [
+          {
+            "schema": { "type": "string", "pattern": "^\\d{1,19}$" },
+            "in": "path",
+            "name": "runId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": { "type": "string" },
+                    "source": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": ["github", "npm", "pypi", "huggingface", "arxiv", "mcp"]
+                        },
+                        { "type": "null" }
+                      ]
+                    },
+                    "jobType": {
+                      "type": "string",
+                      "enum": [
+                        "discover",
+                        "snapshot",
+                        "daily",
+                        "backfill",
+                        "refresh-item",
+                        "score",
+                        "digest",
+                        "maintenance",
+                        "snapshot-fanout"
+                      ]
+                    },
+                    "jobId": { "type": "string" },
+                    "attempt": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": ["queued", "running", "succeeded", "partial", "failed", "skipped"]
+                    },
+                    "startedAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                    },
+                    "finishedAt": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                        },
+                        { "type": "null" }
+                      ]
+                    },
+                    "itemsSeen": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "itemsUpserted": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "itemsFailed": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "apiCalls": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "notModified": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "rateLimitRemaining": {
+                      "anyOf": [
+                        {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        { "type": "null" }
+                      ]
+                    },
+                    "error": { "type": ["string", "null"] },
+                    "params": {
+                      "type": "object",
+                      "propertyNames": { "type": "string" },
+                      "additionalProperties": {}
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "source",
+                    "jobType",
+                    "jobId",
+                    "attempt",
+                    "status",
+                    "startedAt",
+                    "finishedAt",
+                    "itemsSeen",
+                    "itemsUpserted",
+                    "itemsFailed",
+                    "apiCalls",
+                    "notModified",
+                    "rateLimitRemaining",
+                    "error",
+                    "params"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/queues": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "queues": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "name": { "type": "string" },
+                          "counts": {
+                            "type": "object",
+                            "properties": {
+                              "waiting": {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              "active": {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              "delayed": {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              "failed": {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              "completed": {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              }
+                            },
+                            "required": ["waiting", "active", "delayed", "failed", "completed"],
+                            "additionalProperties": false
+                          }
+                        },
+                        "required": ["name", "counts"],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": ["queues"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/dlq": {
+      "get": {
+        "parameters": [
+          { "schema": { "type": "string" }, "in": "query", "name": "cursor", "required": false }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "jobs": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": { "type": "string" },
+                          "originalQueue": { "type": "string" },
+                          "name": { "type": "string" },
+                          "jobId": { "type": ["string", "null"] },
+                          "failedReason": { "type": "string" },
+                          "attemptsMade": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "failedAt": { "type": "string" },
+                          "data": {}
+                        },
+                        "required": [
+                          "id",
+                          "originalQueue",
+                          "name",
+                          "jobId",
+                          "failedReason",
+                          "attemptsMade",
+                          "failedAt",
+                          "data"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "page": {
+                      "type": "object",
+                      "properties": {
+                        "nextCursor": { "type": ["string", "null"] },
+                        "limit": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "required": ["nextCursor", "limit"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["jobs", "page"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/dlq/{jobId}/retry": {
+      "post": {
+        "parameters": [
+          {
+            "schema": { "type": "string", "minLength": 1, "maxLength": 200 },
+            "in": "path",
+            "name": "jobId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": { "queue": { "type": "string" }, "jobId": { "type": "string" } },
+                  "required": ["queue", "jobId"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/dlq/{jobId}": {
+      "delete": {
+        "parameters": [
+          {
+            "schema": { "type": "string", "minLength": 1, "maxLength": 200 },
+            "in": "path",
+            "name": "jobId",
+            "required": true
+          }
+        ],
+        "responses": { "200": { "description": "Default Response" } }
+      }
+    },
+    "/v1/admin/rate-limits": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "api": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "key": { "type": "string" },
+                          "count": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "ttlMs": {
+                            "anyOf": [
+                              {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              { "type": "null" }
+                            ]
+                          }
+                        },
+                        "required": ["key", "count", "ttlMs"],
+                        "additionalProperties": false
+                      }
+                    },
+                    "buckets": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "name": { "type": "string" },
+                          "capacity": { "type": ["number", "null"] },
+                          "refillPerSec": { "type": ["number", "null"] },
+                          "tokens": { "type": "number" },
+                          "observedAt": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "format": "date-time",
+                                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                              },
+                              { "type": "null" }
+                            ]
+                          },
+                          "pausedUntil": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "format": "date-time",
+                                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                              },
+                              { "type": "null" }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "name",
+                          "capacity",
+                          "refillPerSec",
+                          "tokens",
+                          "observedAt",
+                          "pausedUntil"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "upstream": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "source": {
+                            "type": "string",
+                            "enum": ["github", "npm", "pypi", "huggingface", "arxiv", "mcp"]
+                          },
+                          "resource": { "type": "string" },
+                          "remaining": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "resetAt": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "format": "date-time",
+                                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                              },
+                              { "type": "null" }
+                            ]
+                          },
+                          "observedAt": {
+                            "type": "string",
+                            "format": "date-time",
+                            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                          }
+                        },
+                        "required": ["source", "resource", "remaining", "resetAt", "observedAt"],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": ["api", "buckets", "upstream"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/items/{id}": {
+      "patch": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "tier": { "type": "string", "enum": ["hot", "warm", "cold", "archived"] },
+                  "addFlags": {
+                    "maxItems": 20,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "burst_suspected",
+                        "fork",
+                        "deprecated",
+                        "gated",
+                        "yanked",
+                        "manual_hidden",
+                        "stub"
+                      ]
+                    }
+                  },
+                  "removeFlags": {
+                    "maxItems": 20,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "burst_suspected",
+                        "fork",
+                        "deprecated",
+                        "gated",
+                        "yanked",
+                        "manual_hidden",
+                        "stub"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": { "type": "string", "pattern": "^\\d{1,19}$" },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": { "type": "string" },
+                    "tier": { "type": "string", "enum": ["hot", "warm", "cold", "archived"] },
+                    "flags": { "type": "array", "items": { "type": "string" } },
+                    "updatedAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                    }
+                  },
+                  "required": ["id", "tier", "flags", "updatedAt"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
       }
     }
   }

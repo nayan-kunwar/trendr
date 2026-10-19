@@ -58,6 +58,12 @@ export const redisKeys = {
 
   /** `apirl:sse:{keyId|ip}` — concurrent SSE stream counter with INCR/DECR (spec §9.1, §10.5). */
   sseConnections: (identity: string): string => `apirl:sse:${identity}`,
+
+  /** `rl:last:{source}:{resource}` — last upstream rate-limit headers a worker saw (§10.1 admin). */
+  rateLimitLast: (source: Source, resource: string): string => `rl:last:${source}:${resource}`,
+
+  /** `dlq:retry:{jobId}` — per-DLQ-entry retry counter for the `.retry{n}` suffix (§10.1). */
+  dlqRetry: (jobId: string): string => `dlq:retry:${jobId}`,
 } as const;
 
 /** Key prefix for inbound API rate limiting, owned by `@fastify/rate-limit` (spec §9.1). */

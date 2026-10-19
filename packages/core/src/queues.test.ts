@@ -47,6 +47,10 @@ describe('jobId builders (spec §5.2)', () => {
     expect(jobId.refreshItem('github', '4711', '2026-10-18')).toBe(
       'refresh.github.4711.2026-10-18',
     );
+    expect(jobId.snapshotFanout('github', 'cold', '2026-10-18T14')).toBe(
+      'github.snapshot-fanout.cold.2026-10-18T14',
+    );
+    expect(jobId.backfill('npm', '4711', '2026-10-18')).toBe('backfill.npm.4711.2026-10-18');
     expect(jobId.sendDigest('42', '2026-10-13')).toBe('digest.42.2026-10-13');
     expect(jobId.alertEmail('9')).toBe('alert.9');
     expect(jobId.evaluateAlerts('81234')).toBe('alerts.81234');
@@ -59,6 +63,8 @@ describe('jobId builders (spec §5.2)', () => {
       jobId.discover('pypi', 'updated', '2026-10-18T14'),
       jobId.scoring('npm', '2026-10-18T14-40'),
       jobId.refreshItem('github', '4711', '2026-10-18'),
+      jobId.snapshotFanout('github', 'cold', '2026-10-18T14'),
+      jobId.backfill('npm', '4711', '2026-10-18'),
       jobId.sendDigest('42', '2026-10-13'),
       jobId.alertEmail('9'),
       jobId.evaluateAlerts('81234'),

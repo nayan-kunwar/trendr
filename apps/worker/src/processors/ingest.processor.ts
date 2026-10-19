@@ -38,6 +38,7 @@ import {
   snapshotHourSlot,
 } from '../ingestion/fanout.js';
 import { RunRecorder } from '../ingestion/run-recorder.js';
+import { persistRateLimitState } from '../ingestion/rate-limit-state.js';
 import {
   persistContinuitySnapshots,
   persistDailySeries,
@@ -150,6 +151,8 @@ export async function processIngestJob(
       onRateLimit: (info) => {
         recorder.rateLimitRemaining = info.remaining;
         sourceApiMetrics.rateLimit(data.source, info.resource, info.remaining);
+        // §10.1: keep the last upstream headers for the admin rate-limits view.
+        void persistRateLimitState(deps.redis, data.source, info, deps.logger);
       },
       onTokenExpiry: (info) => {
         sourceApiMetrics.tokenExpiry(data.source, info.tokenIndex, info.expiresAt);

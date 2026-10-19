@@ -8,15 +8,19 @@ export const itemKindEnum = pgEnum('item_kind_t', ITEM_KINDS);
 export const tierEnum = pgEnum('tier_t', TIERS);
 export const metricEnum = pgEnum('metric_t', METRICS);
 export const windowEnum = pgEnum('window_t', WINDOWS);
-export const runStatusEnum = pgEnum('run_status_t', [
+/** Spec §6.2 `run_status_t` labels; the API's query enums derive from the same list. */
+export const RUN_STATUSES = [
   'queued',
   'running',
   'succeeded',
   'partial',
   'failed',
   'skipped',
-]);
-export const jobTypeEnum = pgEnum('job_type_t', [
+] as const;
+export const runStatusEnum = pgEnum('run_status_t', RUN_STATUSES);
+
+/** Spec §6.2 `job_type_t` labels (admin runs filter, §10.1). */
+export const JOB_TYPES = [
   'discover',
   'snapshot',
   'daily',
@@ -26,7 +30,8 @@ export const jobTypeEnum = pgEnum('job_type_t', [
   'digest',
   'maintenance',
   'snapshot-fanout',
-]);
+] as const;
+export const jobTypeEnum = pgEnum('job_type_t', JOB_TYPES);
 export const aliasRelEnum = pgEnum('alias_rel_t', [
   'same_project',
   'package_of',

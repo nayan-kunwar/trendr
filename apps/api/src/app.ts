@@ -5,6 +5,7 @@ import type { Redis } from 'ioredis';
 import type { Connection } from '@trendr/db';
 
 import { registerApiKey } from './plugins/api-key.js';
+import { registerAuth } from './plugins/auth.js';
 import { registerCache } from './plugins/cache.js';
 import { registerDb } from './plugins/db.js';
 import { registerErrors } from './plugins/errors.js';
@@ -14,6 +15,8 @@ import { registerOpenApi } from './plugins/openapi.js';
 import { registerRateLimit } from './plugins/rate-limit.js';
 import { registerRedis } from './plugins/redis.js';
 import { registerSecurity } from './plugins/security.js';
+import { createApiQueues, type ApiQueues } from './queues.js';
+import { registerAdminRoutes } from './routes/admin.js';
 import { registerCompareRoutes } from './routes/compare.js';
 import { registerHealthRoutes } from './routes/health.js';
 import { registerItemRoutes } from './routes/items.js';
@@ -43,6 +46,13 @@ export interface BuildAppDeps {
    * authentication; absent → keyed requests fall back to the anonymous tier.
    */
   apiKeyPepper?: string;
+  /** JWT_SECRET (spec §15). Present → bearer tokens are verified and admin routes enforce §10.5. */
+  jwtSecret?: string;
+  /**
+   * Dedicated BullMQ producer connection (spec §10.1 admin triggers, §7.7 DLQ
+   * replay). Caller-owned; the app closes the queues but not the client.
+   */
+  queueConnection?: Redis;
   /** Anonymous rate-limit tier (spec §10.5); `false` disables limiting for tooling. */
   rateLimit?: { max?: number; timeWindowMs?: number } | false;
   /** Scores-retention bounds for `/v1/items/:id/scores` (env: SCORES_*; §10.4). */
@@ -63,6 +73,15 @@ export async function buildApp(deps: BuildAppDeps = {}): Promise<FastifyInstance
     ...(deps.loggerInstance ? { loggerInstance: deps.loggerInstance } : {}),
   });
 
+  let queues: ApiQueues | undefined;
+  if (deps.queueConnection !== undefined) {
+    queues = createApiQueues(deps.queueConnection);
+    const apiQueues = queues;
+    app.addHook('onClose', async () => {
+      await apiQueues.close();
+    });
+  }
+
   await registerSecurity(app, deps);
   registerErrors(app);
 
@@ -81,6 +100,9 @@ export async function buildApp(deps: BuildAppDeps = {}): Promise<FastifyInstance
       pepper: deps.apiKeyPepper,
       ...(deps.redis ? { redis: deps.redis } : {}),
     });
+  }
+  if (deps.jwtSecret !== undefined) {
+    await app.register(registerAuth, { secret: deps.jwtSecret });
   }
   if (deps.rateLimit !== false) {
     await registerRateLimit(app, {
@@ -103,6 +125,7 @@ export async function buildApp(deps: BuildAppDeps = {}): Promise<FastifyInstance
   registerCompareRoutes(app);
   registerStatsRoutes(app);
   registerStreamRoutes(app, { trustProxy: deps.trustProxy ?? false });
+  registerAdminRoutes(app, queues === undefined ? {} : { queues });
 
   return app;
 }

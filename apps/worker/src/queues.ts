@@ -5,9 +5,12 @@ import {
   QUEUE,
   SOURCES,
   WINDOWS,
+  DEFAULT_JOB_OPTS,
   backoffDelay,
   jobId,
+  scoringSlot,
   UpstreamError,
+  type DeadLetterJob,
   type IngestJob,
   type MaintenanceJob,
   type NotifyJob,
@@ -23,12 +26,7 @@ import {
  * dead-letter payload of §7.7.
  */
 
-export const defaultJobOpts: JobsOptions = {
-  attempts: 5,
-  backoff: { type: 'custom' },
-  removeOnComplete: { age: 24 * 3600, count: 2000 },
-  removeOnFail: { age: 7 * 24 * 3600 },
-};
+export const defaultJobOpts: JobsOptions = DEFAULT_JOB_OPTS;
 
 /**
  * Spec §7.5 — custom backoff: when upstream asked us to wait (`429` /
@@ -49,17 +47,7 @@ export function createWorkerConnection(url: string): Redis {
   return new Redis(url, { maxRetriesPerRequest: null });
 }
 
-/** Spec §7.7 — payload parked in the `dead-letter` queue after the last failed attempt. */
-export interface DeadLetterJob {
-  originalQueue: string;
-  name: string;
-  data: unknown;
-  jobId: string | undefined;
-  failedReason: string;
-  stack: string | undefined;
-  attemptsMade: number;
-  failedAt: string;
-}
+export type { DeadLetterJob };
 
 export interface Queues {
   ingest: Record<Source, Queue<IngestJob>>;
@@ -104,12 +92,7 @@ export async function closeQueues(queues: Queues): Promise<void> {
  * 'YYYY-MM-DDTHH-mm' (UTC), floored to ten minutes — the scoring job-id slot of
  * §5.2: runs requested inside one slot dedupe into a single BullMQ job.
  */
-export function scoringSlot(at: Date): string {
-  const minutes = Math.floor(at.getUTCMinutes() / 10) * 10;
-  const date = at.toISOString().slice(0, 10);
-  const hours = String(at.getUTCHours()).padStart(2, '0');
-  return `${date}T${hours}-${String(minutes).padStart(2, '0')}`;
-}
+export { scoringSlot };
 
 export interface EnqueueScoringInput {
   source: Source;

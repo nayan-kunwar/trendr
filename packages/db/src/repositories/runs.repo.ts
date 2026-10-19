@@ -1,4 +1,4 @@
-import { eq, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, lt, sql, type SQL } from 'drizzle-orm';
 
 import type { Source } from '@trendr/core';
 
@@ -72,4 +72,38 @@ export type RunRow = typeof ingestionRuns.$inferSelect;
 export async function getRun(db: DbExecutor, runId: bigint): Promise<RunRow | null> {
   const [row] = await db.select().from(ingestionRuns).where(eq(ingestionRuns.id, runId));
   return row ?? null;
+}
+
+/** Spec §10.1 `GET /v1/admin/runs` filters (newest first, keyset by run id). */
+export interface ListRunsFilter {
+  source?: Source;
+  jobType?: JobType;
+  status?: RunStatus;
+  /** Only runs that started at/after this instant (`from`). */
+  from?: Date;
+  /** Keyset: return runs with `id < beforeId`. */
+  beforeId?: bigint;
+  /** Page size; callers pass `limit + 1` to detect a next page. */
+  limit: number;
+}
+
+/**
+ * Spec §10.1 — the admin runs table: newest first, filtered by source,
+ * job type, status and start time. The cursor is the last run id (stable
+ * across inserts, unlike OFFSET).
+ */
+export async function listRuns(db: DbExecutor, filter: ListRunsFilter): Promise<RunRow[]> {
+  const conditions: SQL[] = [];
+  if (filter.source !== undefined) conditions.push(eq(ingestionRuns.source, filter.source));
+  if (filter.jobType !== undefined) conditions.push(eq(ingestionRuns.jobType, filter.jobType));
+  if (filter.status !== undefined) conditions.push(eq(ingestionRuns.status, filter.status));
+  if (filter.from !== undefined) conditions.push(gte(ingestionRuns.startedAt, filter.from));
+  if (filter.beforeId !== undefined) conditions.push(lt(ingestionRuns.id, filter.beforeId));
+
+  return db
+    .select()
+    .from(ingestionRuns)
+    .where(conditions.length === 0 ? undefined : and(...conditions))
+    .orderBy(desc(ingestionRuns.id))
+    .limit(filter.limit);
 }

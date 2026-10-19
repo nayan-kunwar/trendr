@@ -19,6 +19,16 @@ redis.on('error', (error: Error) => {
   logger.warn({ err: error }, 'redis connection error');
 });
 
+/**
+ * BullMQ producers need a connection that never gives up on reconnects (the
+ * cache client above fails fast for §9.3); the app closes the queues, this
+ * module closes the client.
+ */
+const queueRedis = new Redis(env.REDIS_URL, { maxRetriesPerRequest: null });
+queueRedis.on('error', (error: Error) => {
+  logger.warn({ err: error }, 'queue redis connection error');
+});
+
 const app = await buildApp({
   loggerInstance: logger,
   trustProxy: env.TRUST_PROXY,
@@ -27,6 +37,8 @@ const app = await buildApp({
   db: connection,
   redis,
   apiKeyPepper: env.API_KEY_PEPPER,
+  jwtSecret: env.JWT_SECRET,
+  queueConnection: queueRedis,
   scoresRetention: {
     hourlyHours: env.SCORES_HOURLY_RETENTION_HOURS,
     dailyDays: env.SCORES_DAILY_RETENTION_DAYS,
@@ -48,6 +60,11 @@ async function shutdown(signal: NodeJS.Signals): Promise<void> {
       await redis.quit();
     } catch {
       redis.disconnect();
+    }
+    try {
+      await queueRedis.quit();
+    } catch {
+      queueRedis.disconnect();
     }
     logger.info({ signal }, 'api stopped');
     process.exit(0);

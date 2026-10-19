@@ -819,6 +819,71 @@ be re-checked later. Decisions with alternatives get an ADR in [`docs/adr/`](./a
   alias→warm, fresh→hot, live→cold while the watched item stays hot (the shared DB's tiers and
   `score_runs_current` pointer are saved and restored around the run).
 
+### Task 4.6 notes
+
+- **Admin auth.** `apps/api/src/plugins/auth.ts` registers `@fastify/jwt` (the §15 library) with
+  `iss=trendr`, `aud=trendr-api` and a 15-minute sign default (`JWT_ACCESS_TTL`, matching
+  `JWT_ACCESS_TTL_SEC=900`; task 7.1's magic-link flow signs through the same instance). An
+  `onRequest` hook verifies every `Authorization: Bearer` token and decorates
+  `request.authUser = {id, role}`; invalid/expired/malformed tokens are 401 before any route logic.
+  `requireAdmin` accepts an `admin`-scope API key or a JWT whose role claim is `admin`; anonymous
+  callers get 401 and authenticated non-admins 403 (the task acceptance). Two Fastify-v5 details
+  this relies on: the guard is a **route-level `onRequest` hook that must stay `async`** — the hook
+  runner only advances when a hook returns a promise or calls `done`, so a synchronous
+  `(request) => void` guard silently *stalls every authorised request* (found while testing: 401/403
+  throws worked, passes hung until the 30 s test timeout); and `@fastify/rate-limit` injects its
+  handler via `onRoute` by **appending** it to the route's own hooks, so admin calls are rate-limited
+  **after** the guard. Rejected admin calls (401/403) therefore do not consume quota — the same
+  ordering already applied to invalid API keys and tokens on every route; authorised traffic is
+  always counted under the §10.5 key/user/admin tiers.
+- **§10.5 tiers completed.** The rate limiter now keys JWT traffic `apirl:user:{userId}` and applies
+  the spec's `user` (300/min) and `admin` (600/min) budgets; API-key precedence (`key:` first) is
+  unchanged, so a keyed request keeps its own DB budget even if it also carries a token.
+- **Queue producers in the API.** `apps/api/src/queues.ts` builds one BullMQ `Queue` per §5.2 name
+  over a dedicated connection (`maxRetriesPerRequest: null`; owned by `main.ts`, queues closed by an
+  `onClose` hook). The §7.5 default job options moved to core (`DEFAULT_JOB_OPTS`) so worker and API
+  cannot drift; the worker's `defaultJobOpts` now aliases it.
+- **`POST /v1/admin/ingest`.** The spec's loose `{source, type, strategy?, tier?, itemId?, days?}`
+  shape is a discriminated union with per-type required fields (`maxItems` default 500, `days`
+  default 60). `snapshot` maps to the §7.2 `snapshot-fanout` payload — a single batch job would only
+  cover the first 500 items — under the new `jobId.snapshotFanout`
+  (`{source}.snapshot-fanout.{tier}.{slot}`); `backfill` gained `jobId.backfill`
+  (`backfill.{source}.{itemId}.{day}`). Manual triggers carry `trigger:'manual'`, so the §7.5
+  unrecoverable→DLQ path applies instead of the scheduled skip.
+- **Runs.** `listRuns` is newest-first with a run-id keyset cursor (`?cursor=`), filters
+  `source`/`jobType`/`status`/`from`, fixed 50/page and the §10.5 `Link` header; the detail endpoint
+  adds `params`. `RUN_STATUSES`/`JOB_TYPES` became named const arrays in `@trendr/db` (the pg enums
+  derive from them) so the wire enums cannot drift from `run_status_t`/`job_type_t`.
+- **DLQ.** Listing is a newest-first offset cursor over the `dead-letter` queue (entries stay
+  `waiting`; nothing consumes that queue). Retry re-adds the payload to its original queue with a
+  `.retry{n}` suffix where n is a Redis `dlq:retry:{jobId}` INCR (30 d TTL) and removes the parked
+  entry; DELETE discards. Malformed entries list with an “invalid dead-letter payload” marker but are
+  refused for replay (400).
+- **Rate-limits endpoint.** SCANs `apirl:*` (string counters + PTTL) and `rl:*` (bucket hashes
+  `tokens`/`ts`, `:pause` keys, plus the new `rl:last:{source}:{resource}` hashes). The worker now
+  persists each `onRateLimit` observation to `rl:last:…` (7 d TTL, best-effort: a Redis failure is
+  logged and never fails the run). Capacity/refill come from `@trendr/sources`' bucket specs
+  (`github:core:{tokenIdx}` included) — the API imports that workspace package for the spec
+  constants only, which respects the §4 dependency direction; unknown bucket names report stored
+  tokens with `capacity: null`.
+- **Item patch.** `patchItemAdmin` merges the flags in SQL (union of `addFlags` then difference of
+  `removeFlags`) and returns the new state; the route invalidates `item:{id}` through the cache
+  plugin (§9.3/§10.4). Flags are validated against the new core `ItemFlagSchema` (`ITEM_FLAGS`
+  const), tier against `TierSchema`. The flag lists bind through `sql.param(...)`: a bare drizzle
+  interpolation spreads a JS array into one placeholder per element (and an empty array into no
+  placeholder at all), which made the generated `text[]` expressions invalid until wrapped (probed
+  directly against Postgres).
+- Acceptance coverage: int (real Postgres + Redis + BullMQ) — 401/403 matrix (anonymous, invalid
+  token, `user` JWT, read-scope key) with an admin JWT and a `read,admin`-scope key accepted; runs
+  list/detail/404/400; manual discover and snapshot jobs on `ingest-github` plus a manual `score`
+  for every source with deterministic ids (a same-slot ingest/scheduled scoring job can win the
+  §5.2 dedupe and keeps its own payload — the API still answers 202 with that id); queue counts for
+  all 11 queues; rate-limit API counters, bucket hash+pause and upstream headers; item patch + cache
+  invalidation + 400/404; DLQ list/replay `.retry1`/discard/404. Unit — the pure ingest mapping for
+  all five types, the slot/day helpers, the JWT/admin rate-limit key/tier resolution and the auth
+  contract (sign defaults `iss=trendr`/`aud=trendr-api`/15 min, foreign issuer or audience rejected,
+  guard returns a promise and yields the 401/403/200 matrix).
+
 ## Environment quirks worth knowing
 
 - `docker compose port <svc> <port>` exits **0** printing `invalid IP:0` when the port is only

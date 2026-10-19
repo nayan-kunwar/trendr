@@ -1,4 +1,5 @@
 export * from './api-keys.js';
+export * from './auth.js';
 export * from './errors.js';
 export * from './http/backoff.js';
 export * from './http/fetch-json.js';

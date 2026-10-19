@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, sql, type SQL } from 'drizzle-orm';
 
 import type { ItemFlag, ItemKind, Metric, Source, Tier, Window } from '@trendr/core';
 
@@ -448,4 +448,54 @@ export async function loadItemAliasLinks(db: DbExecutor, itemId: bigint): Promis
     ...outgoing.map((row) => ({ ...row, direction: 'outgoing' as const })),
     ...incoming.map((row) => ({ ...row, direction: 'incoming' as const })),
   ];
+}
+
+/** Spec §10.1 `PATCH /v1/admin/items/:id` body. */
+export interface AdminItemPatch {
+  tier?: Tier;
+  addFlags?: ItemFlag[];
+  removeFlags?: ItemFlag[];
+}
+
+export interface AdminItemPatchResult {
+  id: bigint;
+  tier: Tier;
+  flags: string[];
+  updatedAt: Date;
+}
+
+/**
+ * Spec §10.1 — operator item patch: set the tier and/or merge flags
+ * (`addFlags` union, then `removeFlags`), returning the new state. A missing
+ * item returns null so the route can answer 404. System flags can be edited
+ * deliberately (e.g. clearing `manual_hidden`).
+ */
+export async function patchItemAdmin(
+  db: DbExecutor,
+  itemId: bigint,
+  patch: AdminItemPatch,
+): Promise<AdminItemPatchResult | null> {
+  const set: { updatedAt: SQL; tier?: Tier; flags?: SQL } = { updatedAt: sql`now()` };
+  if (patch.tier !== undefined) {
+    set.tier = patch.tier;
+  }
+  if (patch.addFlags !== undefined || patch.removeFlags !== undefined) {
+    // `sql.param` keeps each flag list a single `text[]` binding: a bare
+    // interpolation would spread the array into one placeholder per element.
+    const added = patch.addFlags ?? [];
+    const removed = patch.removeFlags ?? [];
+    set.flags = sql`(
+      SELECT COALESCE(array_agg(DISTINCT f ORDER BY f), '{}'::text[])
+      FROM unnest(${items.flags} || ${sql.param(added)}::text[]) AS t(f)
+      WHERE NOT (f = ANY(${sql.param(removed)}::text[]))
+    )`;
+  }
+
+  const [row] = await db.update(items).set(set).where(eq(items.id, itemId)).returning({
+    id: items.id,
+    tier: items.tier,
+    flags: items.flags,
+    updatedAt: items.updatedAt,
+  });
+  return row ?? null;
 }

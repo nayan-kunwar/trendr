@@ -3,14 +3,16 @@ import { describe, expect, it } from 'vitest';
 
 import { buildApp } from '../app.js';
 import type { AuthenticatedApiKey } from './api-key.js';
-import { clientIp, rateLimitKey, resolveRateLimitMax } from './rate-limit.js';
+import type { AuthenticatedUser } from './auth.js';
+import { ADMIN_MAX, USER_MAX, clientIp, rateLimitKey, resolveRateLimitMax } from './rate-limit.js';
 
 function fakeRequest(
   headers: Record<string, string>,
   ip: string,
   apiKey?: AuthenticatedApiKey,
+  authUser?: AuthenticatedUser,
 ): FastifyRequest {
-  return { headers, ip, apiKey } as unknown as FastifyRequest;
+  return { headers, ip, apiKey, authUser } as unknown as FastifyRequest;
 }
 
 const DEPS = { corsOrigins: ['http://localhost:3000'], metricsToken: 'test-metrics-token' };
@@ -58,6 +60,21 @@ describe('per-tier limits and keys (spec §10.5)', () => {
   it('uses the per-key budget for authenticated requests only', () => {
     expect(resolveRateLimitMax(fakeRequest({}, '10.0.0.1', apiKey), 60)).toBe(77);
     expect(resolveRateLimitMax(fakeRequest({}, '10.0.0.1'), 60)).toBe(60);
+  });
+
+  it('keys JWT requests by user id and applies the 300/600 tiers (§10.5)', () => {
+    const user: AuthenticatedUser = { id: '0b9c1f76-1111-1111-1111-111111111111', role: 'user' };
+    const admin: AuthenticatedUser = { id: '0b9c1f76-2222-2222-2222-222222222222', role: 'admin' };
+
+    expect(rateLimitKey(fakeRequest({}, '10.0.0.1', undefined, user), false)).toBe(
+      `user:${user.id}`,
+    );
+    expect(resolveRateLimitMax(fakeRequest({}, '10.0.0.1', undefined, user), 60)).toBe(USER_MAX);
+    expect(resolveRateLimitMax(fakeRequest({}, '10.0.0.1', undefined, admin), 60)).toBe(ADMIN_MAX);
+    // An API key identity wins over a bearer token (spec key order).
+    expect(rateLimitKey(fakeRequest({}, '10.0.0.1', apiKey, admin), false)).toBe(
+      `key:${apiKey.id}`,
+    );
   });
 });
 

@@ -9,8 +9,10 @@ import type { AuthenticatedApiKey } from './api-key.js';
 /** Anonymous tier (spec §10.5): 60 requests per minute per client IP. */
 export const ANONYMOUS_MAX = 60;
 export const ANONYMOUS_WINDOW_MS = 60_000;
-/** JWT tier (spec §10.5); wired when token verification lands with the auth routes. */
+/** JWT tier (spec §10.5): 300 requests per minute per user. */
 export const USER_MAX = 300;
+/** Admin tier (spec §10.5): 600 requests per minute. */
+export const ADMIN_MAX = 600;
 
 export interface RateLimitPluginOptions {
   /** Redis-backed counters for multi-replica correctness; omitted → in-memory (tests). */
@@ -34,21 +36,32 @@ export function clientIp(request: FastifyRequest, trustProxy: boolean): string {
 }
 
 /**
- * Spec §10.5: key = API key id ‖ user id ‖ client IP (`apirl:{keyId|ip}`).
- * Keyed and anonymous traffic therefore never share a counter. The JWT `user`
- * part arrives with token verification.
+ * Spec §10.5: key = API key id ‖ user id ‖ client IP (`apirl:{keyId|userId|ip}`).
+ * Keyed, JWT and anonymous traffic therefore never share a counter.
  */
 export function rateLimitKey(request: FastifyRequest, trustProxy: boolean): string {
   if (request.apiKey) {
     return `key:${request.apiKey.id}`;
   }
+  if (request.authUser) {
+    return `user:${request.authUser.id}`;
+  }
   return `ip:${clientIp(request, trustProxy)}`;
 }
 
-/** Spec §10.5: the apiKey tier uses `api_keys.rate_limit_per_min` (default 120). */
+/** Spec §10.5: apiKey → its DB budget, admin → 600, user → 300, else anonymous. */
 export function resolveRateLimitMax(request: FastifyRequest, anonymousMax: number): number {
   const apiKey: AuthenticatedApiKey | undefined = request.apiKey;
-  return apiKey?.rateLimitPerMin ?? anonymousMax;
+  if (apiKey !== undefined) {
+    return apiKey.rateLimitPerMin;
+  }
+  if (request.authUser?.role === 'admin') {
+    return ADMIN_MAX;
+  }
+  if (request.authUser !== undefined) {
+    return USER_MAX;
+  }
+  return anonymousMax;
 }
 
 /**
