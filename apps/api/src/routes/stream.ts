@@ -151,9 +151,11 @@ export function registerStreamRoutes(app: FastifyInstance, options: StreamRouteO
       });
 
       let finalized = false;
+      let ready = false;
+      const pending: string[] = [];
       let drainTimer: NodeJS.Timeout | undefined;
       let stopHeartbeat: () => void = () => {
-        /* set once the client is registered below */
+        /* set once the snapshot has been flushed */
       };
 
       const finalize = (): void => {
@@ -184,6 +186,18 @@ export function registerStreamRoutes(app: FastifyInstance, options: StreamRouteO
         }
       };
 
+      const writeFrame = (frame: string): void => {
+        if (finalized) {
+          return;
+        }
+        if (!raw.write(frame) && drainTimer === undefined) {
+          drainTimer = setTimeout(() => {
+            app.log.warn({ scope, window }, 'dropping stalled sse client');
+            raw.destroy();
+          }, SSE_DRAIN_TIMEOUT_MS);
+        }
+      };
+
       const client: LeaderboardSseClient = {
         scope,
         window,
@@ -191,12 +205,11 @@ export function registerStreamRoutes(app: FastifyInstance, options: StreamRouteO
           if (finalized) {
             return;
           }
-          if (!raw.write(frame) && drainTimer === undefined) {
-            drainTimer = setTimeout(() => {
-              app.log.warn({ scope, window }, 'dropping stalled sse client');
-              raw.destroy();
-            }, SSE_DRAIN_TIMEOUT_MS);
+          if (!ready) {
+            pending.push(frame);
+            return;
           }
+          writeFrame(frame);
         },
         end: () => {
           raw.end();
@@ -211,7 +224,21 @@ export function registerStreamRoutes(app: FastifyInstance, options: StreamRouteO
       });
       raw.on('close', finalize);
 
+      // Register before the snapshot read: an update published while the
+      // snapshot loads is buffered (below) instead of dropped. §10.6 ordering —
+      // retry + snapshot first, then every buffered update in publish order.
+      broadcaster.add(client);
+      if (app.hasDecorator('sseClients')) {
+        app.sseClients.set({ scope, window }, broadcaster.size(scope, window));
+      }
+
       client.send('retry: 5000\n\n');
+
+      // Started synchronously after registration so `finalize` (which can only run
+      // on a later tick) always has a live timer to stop.
+      stopHeartbeat = startHeartbeat(() => {
+        client.send(': ping\n\n');
+      });
 
       // Spec §10.6 — snapshot from `lbmeta` + the board ZSET; deltas via cards.
       let snapshot: string | null = null;
@@ -258,13 +285,11 @@ export function registerStreamRoutes(app: FastifyInstance, options: StreamRouteO
         client.send(snapshot);
       }
 
-      broadcaster.add(client);
-      if (app.hasDecorator('sseClients')) {
-        app.sseClients.set({ scope, window }, broadcaster.size(scope, window));
+      ready = true;
+      for (const frame of pending) {
+        writeFrame(frame);
       }
-      stopHeartbeat = startHeartbeat(() => {
-        client.send(': ping\n\n');
-      });
+      pending.length = 0;
     },
   );
 }

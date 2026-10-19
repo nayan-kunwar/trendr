@@ -192,21 +192,52 @@ async function waitForNoStreams(timeoutMs = 3_000): Promise<void> {
   }
 }
 
-/** The broadcaster subscribes asynchronously at startup; a PUBLISH before that gets lost. */
-async function waitForSubscriber(timeoutMs = 3_000): Promise<void> {
+/**
+ * Publish until the client receives a `leaderboard.update` frame. The
+ * subscription and the per-board registration happen asynchronously around
+ * connection setup, so a single publish can legitimately race them; repeating
+ * the publish keeps the assertion deterministic while still requiring the route
+ * to deliver published updates to an open stream.
+ */
+async function publishUntilUpdate(
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+  payload: LeaderboardUpdatedEvent,
+  timeoutMs = 15_000,
+): Promise<string> {
+  const decoder = new TextDecoder();
+  let text = '';
   const deadline = Date.now() + timeoutMs;
-  for (;;) {
-    const channels = await redis.pubsub('CHANNELS');
-    if (channels.includes(LEADERBOARD_EVENTS_CHANNEL)) {
-      return;
+  let nextPublishAt = 0;
+  while (!text.includes('event: leaderboard.update')) {
+    const now = Date.now();
+    if (now > deadline) {
+      throw new Error(`update not received within ${timeoutMs}ms; received: ${text}`);
     }
-    if (Date.now() > deadline) {
-      throw new Error('leaderboard subscriber did not subscribe in time');
+    if (now >= nextPublishAt) {
+      await redis.publish(LEADERBOARD_EVENTS_CHANNEL, JSON.stringify(payload));
+      nextPublishAt = now + 500;
     }
-    await new Promise((resolve) => {
-      setTimeout(resolve, 25);
+    let timer: NodeJS.Timeout | undefined;
+    const chunk = await Promise.race([
+      reader.read(),
+      new Promise<'timeout'>((resolve) => {
+        timer = setTimeout(() => {
+          resolve('timeout');
+        }, 250);
+      }),
+    ]).finally(() => {
+      if (timer !== undefined) {
+        clearTimeout(timer);
+      }
     });
+    if (chunk !== 'timeout') {
+      if (chunk.done) {
+        throw new Error(`sse stream ended before an update; received: ${text}`);
+      }
+      text += decoder.decode(chunk.value, { stream: true });
+    }
   }
+  return text;
 }
 
 /**
@@ -262,11 +293,7 @@ describe('SSE leaderboard stream (task 3.6)', () => {
       expect(afterConnect).toContain('"score":7.49');
       expect(afterConnect).toContain('"delta":900');
 
-      await waitForSubscriber();
-      await redis.publish(LEADERBOARD_EVENTS_CHANNEL, JSON.stringify(updatePayload('81240')));
-      const afterUpdate = await readUntil(stream.reader, (text) =>
-        text.includes('event: leaderboard.update'),
-      );
+      const afterUpdate = await publishUntilUpdate(stream.reader, updatePayload('81240'));
       expect(afterUpdate).toContain('id: 81240');
       expect(afterUpdate).toContain(
         '"movers":[{"itemId":"902","rank":1,"prevRank":3,"delta":412}]',
@@ -283,11 +310,7 @@ describe('SSE leaderboard stream (task 3.6)', () => {
     await withListeningApp(async (open) => {
       const first = await open({ 'last-event-id': RUN_ID });
       expect(first.response.status).toBe(200);
-      await waitForSubscriber();
-      await redis.publish(LEADERBOARD_EVENTS_CHANNEL, JSON.stringify(updatePayload('81241')));
-      const text = await readUntil(first.reader, (value) =>
-        value.includes('event: leaderboard.update'),
-      );
+      const text = await publishUntilUpdate(first.reader, updatePayload('81241'));
       expect(text).not.toContain('leaderboard.snapshot');
 
       const extra: OpenStream[] = [];

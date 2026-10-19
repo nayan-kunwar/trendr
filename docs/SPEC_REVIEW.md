@@ -564,9 +564,15 @@ be re-checked later. Decisions with alternatives get an ADR in [`docs/adr/`](./a
   `fetch` streaming) — snapshot then update after a real PUBLISH (retry, runId id, deltas,
   no `type` leak), Last-Event-ID skip, 5 concurrent + 6th → 429 problem, abort drains the
   counter and a fresh stream is accepted. `openapi.json` re-exported (17 paths).
+- **Connect-time ordering.** The stream registers with the broadcaster *before* reading the
+  snapshot and buffers frames until the snapshot is flushed, so an update published while the
+  snapshot loads is delivered right after it instead of being dropped (§10.6 order: retry,
+  snapshot, updates). A CI failure caught the original gap — the client was registered after
+  the snapshot read, and a publish landing in that window went nowhere.
 - **Startup pub/sub race (accepted).** The broadcaster subscribes asynchronously at boot;
   a PUBLISH in the first milliseconds can land before SUBSCRIBE. Reconnect/snapshot covers
-  state; int tests wait for `PUBSUB CHANNELS` to include the channel before publishing.
+  state; int tests republish until the update frame arrives rather than assuming a single
+  publish cannot race connection setup.
 
 ### Task 3.7 notes
 
