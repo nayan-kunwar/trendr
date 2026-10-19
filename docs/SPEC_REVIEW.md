@@ -792,6 +792,15 @@ be re-checked later. Decisions with alternatives get an ADR in [`docs/adr/`](./a
   run + completed job + no DLQ; warm-tier fan-out ⇒ `ceil` deterministic children (batch data,
   `trigger`, id-derived slot), every tracked item snapshotted, alias stub excluded, fan-out run
   `succeeded` with zero items seen, and children complete.
+- **Live acceptance with real tokens (2026-10-19).** The 17:30Z–18:20Z crons ran on the compose
+  stack against the live GitHub API with one PAT. `ingestion_runs`: four succeeded `discover` runs
+  (new-hot 500 + 500 items, rising 300, topics 150; 15 API calls total) — the 17:30Z job took all
+  five attempts after four container-egress `fetch failed` flakes (§7.5 retries; the final attempt
+  upserted 500/500); hot (18:05, 1 item) and warm (18:15, two children of 381 + 390 items)
+  `snapshot-fanout`/`snapshot` runs succeeded; hourly `score` runs succeeded for all six sources.
+  No `skipped` runs. `snapshots`: the 17:00Z bucket holds 1,500 rows (initial captures from the
+  successful discover) and the 18:00Z bucket grew to 3,535 rows as the hourly ticks landed; the
+  stored history shows the same hourly cadence from 2026-10-16T17:00Z through 2026-10-19T06:00Z.
 
 ### Task 4.5 notes
 
@@ -924,3 +933,8 @@ be re-checked later. Decisions with alternatives get an ADR in [`docs/adr/`](./a
   in-network instead (`docker run --network trendr_default` + an in-network `curl` to the
   container name); CI runners have 3000 free, and the workflow's `localhost:3000` check is
   unaffected.
+- Docker Desktop's container→`api.github.com` path occasionally fails with a bare `fetch failed`
+  while the same request from the host (or a later container request) succeeds. The 17:30Z
+  2026-10-19 discover job hit this on its first four attempts (in-process retries included) and
+  succeeded on the fifth; treat such flakes as environmental and let §7.5 retries absorb them
+  before suspecting the adapter.
