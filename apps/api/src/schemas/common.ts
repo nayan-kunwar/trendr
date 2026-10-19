@@ -17,6 +17,27 @@ export const encodeCursor = (c: unknown): string =>
 export const decodeCursor = <T>(raw: string, schema: z.ZodType<T>): T =>
   schema.parse(JSON.parse(Buffer.from(raw, 'base64url').toString('utf8')));
 
+/** Largest Postgres `bigint` (item id); ids beyond it are guaranteed misses. */
+export const MAX_ITEM_ID = 9_223_372_036_854_775_807n;
+
+/**
+ * Spec §10.5: paginated responses carry
+ * `Link: <...&cursor=...>; rel="next"`. Returns the URL path + query with the
+ * cursor replaced; the caller prepends its origin.
+ */
+export function buildNextLink(url: string, cursor: string): string {
+  const queryIndex = url.indexOf('?');
+  const path = queryIndex === -1 ? url : url.slice(0, queryIndex);
+  const params = new URLSearchParams(queryIndex === -1 ? '' : url.slice(queryIndex + 1));
+  params.set('cursor', cursor);
+  return `${path}?${params.toString()}`;
+}
+
+/** The full `Link` header value for a next page (spec §10.5). */
+export function nextLinkHeader(origin: string, url: string, cursor: string): string {
+  return `<${origin}${buildNextLink(url, cursor)}>; rel="next"`;
+}
+
 export const PageMeta = z.object({ nextCursor: z.string().nullable(), limit: z.number().int() });
 
 /** RFC 7807 problem details. */

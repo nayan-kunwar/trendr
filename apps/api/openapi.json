@@ -881,6 +881,557 @@
           }
         }
       }
+    },
+    "/v1/search": {
+      "get": {
+        "parameters": [
+          {
+            "schema": { "type": "string", "minLength": 2, "maxLength": 100 },
+            "in": "query",
+            "name": "q",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": ["github", "npm", "pypi", "huggingface", "arxiv", "mcp"]
+            },
+            "in": "query",
+            "name": "source",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": ["repo", "package", "model", "dataset", "space", "paper", "mcp_server"]
+            },
+            "in": "query",
+            "name": "kind",
+            "required": false
+          },
+          {
+            "schema": { "default": 50, "type": "integer", "minimum": 1, "maximum": 100 },
+            "in": "query",
+            "name": "limit",
+            "required": false
+          },
+          {
+            "schema": { "type": "string", "maxLength": 512 },
+            "in": "query",
+            "name": "cursor",
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": { "type": "string" },
+                          "source": {
+                            "type": "string",
+                            "enum": ["github", "npm", "pypi", "huggingface", "arxiv", "mcp"]
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "repo",
+                              "package",
+                              "model",
+                              "dataset",
+                              "space",
+                              "paper",
+                              "mcp_server"
+                            ]
+                          },
+                          "name": { "type": "string" },
+                          "url": { "type": "string", "format": "uri" },
+                          "description": { "type": ["string", "null"] },
+                          "current": { "type": ["number", "null"] },
+                          "score7d": { "type": ["number", "null"] },
+                          "upstreamCreatedAt": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "format": "date-time",
+                                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                              },
+                              { "type": "null" }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "source",
+                          "kind",
+                          "name",
+                          "url",
+                          "description",
+                          "current",
+                          "score7d",
+                          "upstreamCreatedAt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "page": {
+                      "type": "object",
+                      "properties": {
+                        "nextCursor": { "type": ["string", "null"] },
+                        "limit": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "required": ["nextCursor", "limit"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["items", "page"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/new": {
+      "get": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "enum": ["github", "npm", "pypi", "huggingface", "arxiv", "mcp"]
+            },
+            "in": "query",
+            "name": "source",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": ["repo", "package", "model", "dataset", "space", "paper", "mcp_server"]
+            },
+            "in": "query",
+            "name": "kind",
+            "required": false
+          },
+          {
+            "schema": { "default": 7, "type": "integer", "minimum": 1, "maximum": 30 },
+            "in": "query",
+            "name": "days",
+            "required": false
+          },
+          {
+            "schema": { "type": "string", "maxLength": 512 },
+            "in": "query",
+            "name": "cursor",
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": { "type": "string" },
+                          "source": {
+                            "type": "string",
+                            "enum": ["github", "npm", "pypi", "huggingface", "arxiv", "mcp"]
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "repo",
+                              "package",
+                              "model",
+                              "dataset",
+                              "space",
+                              "paper",
+                              "mcp_server"
+                            ]
+                          },
+                          "name": { "type": "string" },
+                          "url": { "type": "string", "format": "uri" },
+                          "description": { "type": ["string", "null"] },
+                          "current": { "type": ["number", "null"] },
+                          "score7d": { "type": ["number", "null"] },
+                          "upstreamCreatedAt": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "format": "date-time",
+                                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                              },
+                              { "type": "null" }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "source",
+                          "kind",
+                          "name",
+                          "url",
+                          "description",
+                          "current",
+                          "score7d",
+                          "upstreamCreatedAt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "page": {
+                      "type": "object",
+                      "properties": {
+                        "nextCursor": { "type": ["string", "null"] },
+                        "limit": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "required": ["nextCursor", "limit"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["items", "page"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/topics": {
+      "get": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "enum": ["github", "npm", "pypi", "huggingface", "arxiv", "mcp"]
+            },
+            "in": "query",
+            "name": "source",
+            "required": false
+          },
+          {
+            "schema": { "default": 100, "type": "integer", "minimum": 1, "maximum": 200 },
+            "in": "query",
+            "name": "limit",
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "topics": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "slug": { "type": "string" },
+                          "name": { "type": "string" },
+                          "itemCount": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          }
+                        },
+                        "required": ["slug", "name", "itemCount"],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": ["topics"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/languages": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "languages": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "language": { "type": "string" },
+                          "slug": { "type": "string" },
+                          "itemCount": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          }
+                        },
+                        "required": ["language", "slug", "itemCount"],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": ["languages"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/compare": {
+      "get": {
+        "parameters": [
+          {
+            "schema": { "type": "string", "minLength": 1, "maxLength": 128 },
+            "in": "query",
+            "name": "ids",
+            "required": true
+          },
+          {
+            "schema": { "default": "24h", "type": "string", "enum": ["24h", "7d", "30d"] },
+            "in": "query",
+            "name": "window",
+            "required": false
+          },
+          {
+            "schema": { "type": "string", "enum": ["hour", "day"] },
+            "in": "query",
+            "name": "granularity",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "stars",
+                "forks",
+                "watchers",
+                "open_issues",
+                "downloads",
+                "downloads_total",
+                "likes",
+                "upvotes",
+                "trending_score",
+                "comments"
+              ]
+            },
+            "in": "query",
+            "name": "metric",
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "window": { "type": "string", "enum": ["24h", "7d", "30d"] },
+                    "granularity": { "type": "string", "enum": ["hour", "day"] },
+                    "metric": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "stars",
+                            "forks",
+                            "watchers",
+                            "open_issues",
+                            "downloads",
+                            "downloads_total",
+                            "likes",
+                            "upvotes",
+                            "trending_score",
+                            "comments"
+                          ]
+                        },
+                        { "type": "null" }
+                      ]
+                    },
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": { "type": "string" },
+                          "source": {
+                            "type": "string",
+                            "enum": ["github", "npm", "pypi", "huggingface", "arxiv", "mcp"]
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "repo",
+                              "package",
+                              "model",
+                              "dataset",
+                              "space",
+                              "paper",
+                              "mcp_server"
+                            ]
+                          },
+                          "name": { "type": "string" },
+                          "displayName": { "type": "string" },
+                          "url": { "type": "string", "format": "uri" },
+                          "delta": { "type": ["number", "null"] },
+                          "relGrowth": { "type": ["number", "null"] },
+                          "percentile": { "type": ["number", "null"] },
+                          "rankSource": {
+                            "anyOf": [
+                              {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              { "type": "null" }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "source",
+                          "kind",
+                          "name",
+                          "displayName",
+                          "url",
+                          "delta",
+                          "relGrowth",
+                          "percentile",
+                          "rankSource"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "series": {
+                      "type": "object",
+                      "propertyNames": { "type": "string" },
+                      "additionalProperties": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": { "t": { "type": "string" }, "v": { "type": "number" } },
+                          "required": ["t", "v"],
+                          "additionalProperties": false
+                        }
+                      }
+                    }
+                  },
+                  "required": ["window", "granularity", "metric", "items", "series"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/stats": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string",
+                        "enum": ["github", "npm", "pypi", "huggingface", "arxiv", "mcp"]
+                      },
+                      "additionalProperties": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      },
+                      "required": ["github", "npm", "pypi", "huggingface", "arxiv", "mcp"]
+                    },
+                    "runs": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "source": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "enum": ["github", "npm", "pypi", "huggingface", "arxiv", "mcp"]
+                              },
+                              { "type": "null" }
+                            ]
+                          },
+                          "jobType": {
+                            "type": "string",
+                            "enum": [
+                              "discover",
+                              "snapshot",
+                              "daily",
+                              "backfill",
+                              "refresh-item",
+                              "score",
+                              "digest",
+                              "maintenance"
+                            ]
+                          },
+                          "runId": { "type": "string" },
+                          "lastSuccessAt": {
+                            "type": "string",
+                            "format": "date-time",
+                            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                          }
+                        },
+                        "required": ["source", "jobType", "runId", "lastSuccessAt"],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": ["items", "runs"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
     }
   }
 }

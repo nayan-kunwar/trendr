@@ -29,7 +29,13 @@ import {
 } from '@trendr/db';
 
 import { CACHE_CONTROL, ifNoneMatchMatches } from '../plugins/etag.js';
-import { KeysetCursor, LeaderboardCursor, decodeCursor, encodeCursor } from '../schemas/common.js';
+import {
+  KeysetCursor,
+  LeaderboardCursor,
+  decodeCursor,
+  encodeCursor,
+  nextLinkHeader,
+} from '../schemas/common.js';
 import {
   TrendingQuery,
   TrendingResponse,
@@ -650,6 +656,21 @@ export function registerTrendingRoutes(app: FastifyInstance): void {
     async (request, reply) => {
       const query = request.query;
 
+      // Spec §10.5: pages with a next cursor carry `Link: <...>; rel="next"`.
+      const withNextLink = (body: TrendingResponseBody): TrendingResponseBody => {
+        if (body.page.nextCursor !== null) {
+          reply.header(
+            'link',
+            nextLinkHeader(
+              `${request.protocol}://${request.host}`,
+              request.url,
+              body.page.nextCursor,
+            ),
+          );
+        }
+        return body;
+      };
+
       const meta = await safeBoardMeta(app, query.scope, query.window);
       if (meta !== null) {
         const etag = trendingEtag(query.scope, query.window, meta.version, query);
@@ -669,7 +690,7 @@ export function registerTrendingRoutes(app: FastifyInstance): void {
         !breakerOpen
       ) {
         try {
-          return await loadRedisPage(app, query, meta);
+          return withNextLink(await loadRedisPage(app, query, meta));
         } catch (error) {
           if (error instanceof AppError) {
             throw error;
@@ -677,7 +698,7 @@ export function registerTrendingRoutes(app: FastifyInstance): void {
           request.log.warn({ err: error }, 'redis trending read failed; degrading to SQL');
         }
       }
-      return loadSqlPage(app, query);
+      return withNextLink(await loadSqlPage(app, query));
     },
   );
 }

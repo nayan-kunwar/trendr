@@ -429,6 +429,64 @@ be re-checked later. Decisions with alternatives get an ADR in [`docs/adr/`](./a
   staleness check would have failed at the Phase 3 gate. The export is deterministic (stable
   sha1 across runs) and is a lint-staged fixed point.
 
+### Task 3.4 notes
+
+- **Endpoints.** §10.1 names `/v1/search`, `/v1/new`, `/v1/topics`, `/v1/languages`, `/v1/compare`
+  and `/v1/stats` but pins no shapes, so:
+  - `/v1/search` — `q` 2–100 (trimmed), optional `source`/`kind`, `limit` 1–100 default 50,
+    `cursor`. Items use the §11.1 `search_items` shape: `id, source, kind, name, url,
+    description, current, score7d, upstreamCreatedAt` (`current` = primary-metric value from
+    `latest_metrics`; `score7d` = the item's current 7 d run score; both `null` when absent).
+  - `/v1/new` — fixed page size 50 (no `limit` parameter; user-approved), `source`/`kind`
+    optional, `days` 1–30 default 7, `cursor` carrying `{createdAt, itemId}`. Items with a NULL
+    `upstream_created_at` or soft-deleted rows are excluded. §10.5 `Link: <…>; rel="next"` is
+    emitted on search/new and was backfilled into trending (both Redis and SQL paths).
+  - `/v1/topics` — `source`, `limit` 1–200 default 100; counts are computed live from
+    `item_topics ⋈ items` (the denormalized `topics.item_count` cannot answer the source filter
+    and ignores soft deletes); order count desc, name/slug asc; no cursor.
+  - `/v1/languages` — no parameters; top 30 by live item count, grouped by the exact
+    `language` string (it is free-form upstream data: seed npm rows say `javascript`), slug =
+    lowercased. §9.1 language boards stay Phase 6 (see task 2.5 notes).
+  - `/v1/compare` — `ids` 2–5 distinct comma-separated (400 on duplicates/malformed), `window`
+    default `24h`, `granularity` default `hour` for 24 h/7 d and `day` for 30 d, explicit
+    `hour` + 30 d ⇒ 400 (mirrors the history 14 d hour limit); `metric` defaults to **each
+    item's primary metric** (one query param can't express per-item overrides; response echoes
+    `metric: null`), unknown/deleted ids ⇒ 404, unscored items ⇒ null growth fields, hour
+    granularity ⇒ empty series for daily-count metrics (same rule as history, §10.4). Series
+    are keyed by item id with `{t, v}` points.
+  - `/v1/stats` — zero-filled per-source live counts + the latest **succeeded** run per
+    (source, job type) (`DISTINCT ON`, so a newer failed run never wins), `source: null` for
+    cross-source jobs; `Cache-Control: no-store`.
+- **Search implementation.** Rank = `greatest(ts_rank_cd(english), ts_rank_cd(simple))` over the
+  dual `websearch_to_tsquery` OR; when the FTS hit count is `< 5` the page appends a trigram tail
+  that excludes FTS matches: `word_similarity(lower($q), lower(display_name)) > 0`. The function
+  form is mandatory — pg_trgm's operators use thresholds (0.3/0.6) that drop the spec's own
+  `nxt` → `vercel/next.js` pair (0.286, measured on PG16). The `> 0` floor means a boundary
+  trigram matches any same-first-letter word (seed `nuxt/nuxt` scores 0.5 for `nxt` and
+  outranks `next.js`), which is accepted fuzzy-search behaviour, ordered by similarity then id
+  desc. The trigram scan is sequential by design (a GIN index would not shrink the `> 0`
+  candidate set); revisit if the item count grows.
+- **Search cursor.** `{m: 'fts'|'both', p: 'fts'|'trigram', k: score, i: itemId}` — the mode is
+  fixed on page 1 from the total FTS count (`count(*) OVER ()`) and carried in the cursor, so
+  deeper pages cannot switch modes when the FTS count crosses the threshold between requests;
+  each part uses its own keyset (`k/i`), with `i` regex-validated.
+- **Caching.** §9.1 lists no keys for these routes: search reads through `q:{sha1}` for 120 s
+  (canonical JSON of the parsed query, cursor included); new/topics/languages/compare get
+  `publicShort` + the plugin ETag only (no Redis); stats is `no-store`.
+- **Shared service.** The item history route now loads through `services/item.service.ts`
+  (`loadMetricSeries`, `truncateToGranularity`), which `/v1/compare` also uses; behaviour is
+  unchanged.
+- Tests: unit — search/topics/compare/stats DTO parses, `buildNextLink`/`nextLinkHeader`,
+  `SearchCursor` bounds, search-service page composition (FTS/trigram merge, limit < 5 boundary
+  crossing, cursor round-trip, canonical key) and compare id parsing/granularity defaults; int
+  `search.int.test.ts` (15, over Testcontainers) — the `nxt` → `vercel/next.js` fallback with
+  cursor-proven mode, ≥ 5-FTS suppression, two-part pagination walk, source/kind filters,
+  validation/404s, `q:` cache + TTL + ETag 304 + Link, `/new` windows/pagination/soft-delete
+  exclusion, topics/languages live counts, compare windows/granularity/null growth, stats
+  zero-fill + latest-succeeded + `no-store`. The int file computes seed-tolerant baselines
+  because `packages/db/test/int/seed.int.test.ts` deliberately leaves ~200 items in the shared
+  database; `apps/api/openapi.json` re-exported (16 paths).
+
 ## Environment quirks worth knowing
 
 - `docker compose port <svc> <port>` exits **0** printing `invalid IP:0` when the port is only

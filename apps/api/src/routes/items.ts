@@ -16,18 +16,15 @@ import {
   findItemByNaturalKey,
   getCurrentScoreRun,
   getItemById,
-  loadDailyMetricHistory,
   loadItemAliasLinks,
   loadItemCurrentScores,
   loadItemScoreForRun,
   loadItemScoreHistory,
   loadItemTopics,
-  loadSnapshotDailyHistory,
-  loadSnapshotHourlyHistory,
 } from '@trendr/db';
 
 import { CACHE_CONTROL } from '../plugins/etag.js';
-import { IdParam } from '../schemas/common.js';
+import { IdParam, MAX_ITEM_ID } from '../schemas/common.js';
 import {
   HistoryQuery,
   HistoryResponse,
@@ -47,6 +44,7 @@ import {
   type ScoresBody,
   type ScoresQueryInput,
 } from '../schemas/items.js';
+import { loadMetricSeries, truncateToGranularity } from '../services/item.service.js';
 
 /**
  * Spec §10.1/§10.4 — the item endpoints: detail, lookup (302), history
@@ -60,7 +58,6 @@ const HOUR_MS = 3_600_000;
 const DAY_MS = 86_400_000;
 const ITEM_DETAIL_TTL_SECONDS = 300;
 const HISTORY_TTL_SECONDS = 900;
-const MAX_BIGINT = 9_223_372_036_854_775_807n;
 
 export interface ItemRoutesOptions {
   /** Scores-retention bounds (env: SCORES_HOURLY_RETENTION_HOURS / SCORES_DAILY_RETENTION_DAYS). */
@@ -72,16 +69,10 @@ export const DEFAULT_SCORES_RETENTION = { hourlyHours: 48, dailyDays: 365 } as c
 /** `:id` is validated by `IdParam`; anything beyond bigint range cannot exist. */
 export function parseItemId(raw: string): bigint {
   const id = BigInt(raw);
-  if (id > MAX_BIGINT) {
+  if (id > MAX_ITEM_ID) {
     throw new NotFoundError(`Item ${raw} not found`);
   }
   return id;
-}
-
-/** Floor a timestamp to the granularity's bucket (the cache key and query grid). */
-export function truncateToGranularity(t: Date, granularity: 'hour' | 'day'): Date {
-  const unit = granularity === 'hour' ? HOUR_MS : DAY_MS;
-  return new Date(Math.floor(t.getTime() / unit) * unit);
 }
 
 /** `hist:…:{rangeKey}` (spec §9.1): the truncated span, e.g. `720h` or `30d`. */
@@ -89,10 +80,6 @@ export function historyRangeKey(from: Date, to: Date, granularity: 'hour' | 'day
   const unit = granularity === 'hour' ? HOUR_MS : DAY_MS;
   const units = Math.max(1, Math.ceil((to.getTime() - from.getTime()) / unit));
   return `${units}${granularity === 'hour' ? 'h' : 'd'}`;
-}
-
-function dayString(t: Date): string {
-  return t.toISOString().slice(0, 10);
 }
 
 /** Read-through when Redis/cache is wired (tests may build the app without it). */
@@ -203,26 +190,7 @@ async function readHistory(
   const key = redisKeys.history(id, metric, granularity, historyRangeKey(fromT, toT, granularity));
 
   return cached(app, key, HISTORY_TTL_SECONDS, async () => {
-    let points: { t: string; v: number }[];
-    if (kind === 'daily_count') {
-      // Daily aggregates have no hourly resolution; the hour endpoint serves
-      // an empty series for them (documented in docs/SPEC_REVIEW.md).
-      points =
-        granularity === 'hour'
-          ? []
-          : (await loadDailyMetricHistory(db, id, metric, dayString(fromT), dayString(toT))).map(
-              (point) => ({ t: point.day, v: point.v }),
-            );
-    } else if (granularity === 'hour') {
-      points = (await loadSnapshotHourlyHistory(db, id, metric, fromT, toT)).map((point) => ({
-        t: point.t.toISOString(),
-        v: point.v,
-      }));
-    } else {
-      points = (
-        await loadSnapshotDailyHistory(db, id, metric, dayString(fromT), dayString(toT))
-      ).map((point) => ({ t: point.day, v: point.v }));
-    }
+    const points = await loadMetricSeries(db, id, metric, granularity, fromT, toT);
     return { itemId: String(id), metric, kind, granularity, points };
   });
 }

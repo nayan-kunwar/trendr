@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 
 import { NotFoundError } from '@trendr/core';
 
-import { historyRangeKey, parseItemId, truncateToGranularity } from './items.js';
+import { truncateToGranularity } from '../services/item.service.js';
+import { historyRangeKey, parseItemId } from './items.js';
 
 /** Spec §9.1 (`hist:` cache key) and §10.1 (`:id` handling). */
 

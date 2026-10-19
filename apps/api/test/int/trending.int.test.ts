@@ -513,6 +513,10 @@ describe('GET /v1/trending over real Postgres + Redis (task 3.2)', () => {
       expect(page1.page.limit).toBe(2);
       const cursor = page1.page.nextCursor;
       expect(typeof cursor).toBe('string');
+      // Spec §10.5 (task 3.4 backfill): pages with a next cursor carry the Link header.
+      const link = String(page1Response.headers.link ?? '');
+      expect(link).toContain(`cursor=${cursor ?? ''}`);
+      expect(link).toContain('rel="next"');
 
       const page2Response = await trending(
         app,
@@ -524,6 +528,7 @@ describe('GET /v1/trending over real Postgres + Redis (task 3.2)', () => {
       // Ranks are absolute board ranks, not page offsets.
       expect(page2.data.map((entry) => entry.rank)).toEqual([3]);
       expect(page2.page.nextCursor).toBeNull();
+      expect(page2Response.headers.link).toBeUndefined();
       expect(page2.runId).toBe(page1.runId);
       // The cursor is part of the canonical query, so page 2 gets its own ETag.
       expect(page2Response.headers.etag).not.toBe(page1Response.headers.etag);

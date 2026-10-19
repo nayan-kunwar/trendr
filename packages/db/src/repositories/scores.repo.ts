@@ -1,4 +1,4 @@
-import { and, asc, eq, gte, sql } from 'drizzle-orm';
+import { and, asc, eq, gte, inArray, sql } from 'drizzle-orm';
 
 import type { ScoreFlag, Source, Window } from '@trendr/core';
 
@@ -172,6 +172,56 @@ export async function loadItemScoreForRun(
     .from(scores)
     .where(and(eq(scores.itemId, itemId), eq(scores.window, window), eq(scores.runId, runId)));
   return row ?? null;
+}
+
+export interface CurrentScoreFields {
+  delta: number;
+  relGrowth: number;
+  percentile: number;
+  rankSource: number | null;
+}
+
+/**
+ * Current-run growth fields for a set of items in one window, keyed by item id
+ * (task 3.4 `/v1/compare`). Items the current run did not score are absent.
+ */
+export async function loadCurrentScoresForItems(
+  db: DbExecutor,
+  itemIds: readonly bigint[],
+  window: Window,
+): Promise<Map<bigint, CurrentScoreFields>> {
+  if (itemIds.length === 0) return new Map();
+
+  const rows = await db
+    .select({
+      itemId: scores.itemId,
+      delta: scores.delta,
+      relGrowth: scores.relGrowth,
+      percentile: scores.percentile,
+      rankSource: scores.rankSource,
+    })
+    .from(scores)
+    .innerJoin(
+      scoreRunsCurrent,
+      and(
+        eq(scoreRunsCurrent.source, scores.source),
+        eq(scoreRunsCurrent.window, scores.window),
+        eq(scoreRunsCurrent.runId, scores.runId),
+      ),
+    )
+    .where(and(eq(scores.window, window), inArray(scores.itemId, [...itemIds])));
+
+  return new Map(
+    rows.map((row) => [
+      row.itemId,
+      {
+        delta: row.delta,
+        relGrowth: row.relGrowth,
+        percentile: row.percentile,
+        rankSource: row.rankSource,
+      },
+    ]),
+  );
 }
 
 export interface ScoreHistoryRow {

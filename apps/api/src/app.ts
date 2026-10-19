@@ -13,8 +13,13 @@ import { registerOpenApi } from './plugins/openapi.js';
 import { registerRateLimit } from './plugins/rate-limit.js';
 import { registerRedis } from './plugins/redis.js';
 import { registerSecurity } from './plugins/security.js';
+import { registerCompareRoutes } from './routes/compare.js';
 import { registerHealthRoutes } from './routes/health.js';
 import { registerItemRoutes } from './routes/items.js';
+import { registerNewRoutes } from './routes/new.js';
+import { registerSearchRoutes } from './routes/search.js';
+import { registerStatsRoutes } from './routes/stats.js';
+import { registerTopicRoutes } from './routes/topics.js';
 import { registerTrendingRoutes } from './routes/trending.js';
 
 export interface BuildAppDeps {
@@ -79,6 +84,11 @@ export async function buildApp(deps: BuildAppDeps = {}): Promise<FastifyInstance
   registerHealthRoutes(app);
   registerTrendingRoutes(app);
   registerItemRoutes(app, deps.scoresRetention ? { scoresRetention: deps.scoresRetention } : {});
+  registerSearchRoutes(app);
+  registerNewRoutes(app);
+  registerTopicRoutes(app);
+  registerCompareRoutes(app);
+  registerStatsRoutes(app);
 
   return app;
 }
