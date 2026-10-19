@@ -75,6 +75,7 @@ describe('IngestJobSchema (spec §5.2)', () => {
   it('parses every variant', () => {
     const jobs: IngestJob[] = [
       { type: 'discover', source: 'github', strategy: 'updated', maxItems: 500 },
+      { type: 'snapshot-fanout', source: 'github', tier: 'hot', trigger: 'schedule' },
       { type: 'snapshot', source: 'github', tier: 'hot', batch: 0, batchCount: 4 },
       { type: 'daily', source: 'npm', day: '2026-10-18' },
       { type: 'backfill', source: 'arxiv', itemId: '123', days: 30 },
@@ -83,6 +84,29 @@ describe('IngestJobSchema (spec §5.2)', () => {
     for (const job of jobs) {
       expect(IngestJobSchema.parse(job)).toEqual(job);
     }
+  });
+
+  it('accepts only known triggers', () => {
+    expect(
+      IngestJobSchema.parse({
+        type: 'snapshot',
+        source: 'github',
+        tier: 'cold',
+        batch: 0,
+        batchCount: 1,
+        trigger: 'schedule',
+      }),
+    ).toMatchObject({ trigger: 'schedule' });
+    expect(
+      IngestJobSchema.safeParse({
+        type: 'snapshot',
+        source: 'github',
+        tier: 'cold',
+        batch: 0,
+        batchCount: 1,
+        trigger: 'cron',
+      }).success,
+    ).toBe(false);
   });
 
   it('rejects malformed payloads', () => {

@@ -5,8 +5,9 @@ import { and, asc, eq, sql } from 'drizzle-orm';
 import { Redis } from 'ioredis';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { QUEUE, UpstreamError, type IngestJob } from '@trendr/core';
+import { QUEUE, UpstreamError, jobId, type IngestJob } from '@trendr/core';
 import {
+  countTrackedItems,
   createDb,
   ingestionRuns,
   itemAliases,
@@ -163,7 +164,15 @@ beforeAll(async () => {
   events = new QueueEvents(QUEUE.ingest.github, { connection: createWorkerConnection(redisUrl) });
   await events.waitUntilReady();
   githubWorker = createIngestWorker('github', {
-    deps: { db, redis, logger, scoringQueue: queues.scoring, hfRatePer5Min: 1_000 },
+    deps: {
+      db,
+      redis,
+      logger,
+      scoringQueue: queues.scoring,
+      hfRatePer5Min: 1_000,
+      fanoutBatchItems: 2,
+      ingestQueue: queues.ingest.github,
+    },
     connection: bullRedis,
     concurrency: 1,
     settings: { backoffStrategy: () => 10 },
@@ -307,6 +316,149 @@ describe('ingest processor (spec §7.1/§7.7)', () => {
     } finally {
       await npmWorker.close();
     }
+  });
+
+  it('skips a scheduled job without an adapter instead of parking it (§18-4.4)', async () => {
+    const npmWorker = createIngestWorker('npm', {
+      deps: { db, redis, logger },
+      connection: bullRedis,
+      settings: { backoffStrategy: () => 10 },
+      deadLetter: queues.deadLetter,
+    });
+    try {
+      await npmWorker.waitUntilReady();
+      const job = await queues.ingest.npm.add(
+        'snapshot',
+        {
+          type: 'snapshot',
+          source: 'npm',
+          tier: 'cold',
+          batch: 0,
+          batchCount: 1,
+          trigger: 'schedule',
+        },
+        { jobId: `int-ingest.skip.${Date.now()}` },
+      );
+      const id = requireJobId(job);
+
+      const runs = await poll(async () => {
+        const rows = await runsFor(id);
+        return rows[0]?.status === 'skipped' ? rows : undefined;
+      }, 'skipped run row');
+      expect(runs[0]?.error).toContain('no adapter registered for source "npm"');
+
+      await poll(async () => {
+        const stored = await queues.ingest.npm.getJob(id);
+        const state = await stored?.getState();
+        return state === 'completed' ? state : undefined;
+      }, 'skipped job to complete');
+
+      // no retries, no DLQ: the job is a clean no-op until credentials exist
+      expect(await queues.deadLetter.getJob(`dlq.${QUEUE.ingest.npm}.${id}`)).toBeUndefined();
+      const stored = await queues.ingest.npm.getJob(id);
+      await stored?.remove();
+    } finally {
+      await npmWorker.close();
+    }
+  });
+
+  it('fans a tier out into deterministic snapshot batches (§7.2)', async () => {
+    // warm is unused by the other cases, so the tier size is stable apart from
+    // leftovers of earlier test files (counted consistently either way).
+    const seeds = [`${PREFIX}fanout-a`, `${PREFIX}fanout-b`, `${PREFIX}fanout-c`];
+    const stubId = `${PREFIX}fanout-stub`;
+    await db.execute(
+      sql`DELETE FROM snapshots WHERE item_id IN (SELECT id FROM items WHERE external_id LIKE ${ITEM_PREFIX_PATTERN} AND tier = 'warm')`,
+    );
+    await db.execute(
+      sql`DELETE FROM items WHERE external_id IN (${seeds[0]}, ${seeds[1]}, ${seeds[2]}, ${stubId})`,
+    );
+    const created = await upsertItems(
+      db,
+      [
+        ...seeds.map((externalId) => itemUpsert(externalId, externalId)),
+        { ...itemUpsert(stubId, stubId), flags: ['stub'] },
+      ],
+      { newItemTier: 'warm' },
+    );
+    expect(created).toHaveLength(4);
+
+    const expectedCount = await countTrackedItems(db, { source: 'github', tier: 'warm' });
+    const expectedBatches = Math.ceil(expectedCount / 2);
+
+    // retries within the same hour reuse job ids, so clear stale children from
+    // an earlier failed attempt of this test before the fan-out runs.
+    const slot = new Date().toISOString().slice(0, 13);
+    for (let batch = 0; batch < expectedBatches; batch += 1) {
+      const stale = await queues.ingest.github.getJob(
+        jobId.snapshot('github', 'warm', slot, batch),
+      );
+      await stale?.remove();
+    }
+
+    const job = await queues.ingest.github.add(
+      'snapshot-fanout',
+      { type: 'snapshot-fanout', source: 'github', tier: 'warm', trigger: 'schedule' },
+      { jobId: `int-ingest.fanout.${Date.now()}` },
+    );
+    const id = requireJobId(job);
+    const result = (await job.waitUntilFinished(events, 30_000)) as IngestResult;
+    expect(result.status).toBe('succeeded');
+    expect(result.itemsSeen).toBe(0);
+
+    const tickSlot = new Date(job.timestamp).toISOString().slice(0, 13);
+    const children: (Job<IngestJob> | undefined)[] = [];
+    for (let batch = 0; batch < expectedBatches; batch += 1) {
+      const child = await queues.ingest.github.getJob(
+        jobId.snapshot('github', 'warm', tickSlot, batch),
+      );
+      expect(child).toBeDefined();
+      children.push(child);
+    }
+    for (const [batch, child] of children.entries()) {
+      expect(child?.data).toMatchObject({
+        type: 'snapshot',
+        source: 'github',
+        tier: 'warm',
+        batch,
+        batchCount: expectedBatches,
+        trigger: 'schedule',
+      });
+      expect(child?.opts.delay ?? 0).toBe(0);
+    }
+
+    await poll(
+      async () => {
+        const states = await Promise.all(
+          children.map(async (child) => (child === undefined ? 'missing' : child.getState())),
+        );
+        return states.every((value) => value === 'completed') ? states : undefined;
+      },
+      'fan-out children to complete',
+      30_000,
+    );
+
+    // every tracked warm item got a snapshot; the alias stub did not
+    for (const item of created.slice(0, 3)) {
+      const points = await db.select().from(snapshots).where(eq(snapshots.itemId, item.id));
+      expect(points.length).toBeGreaterThanOrEqual(1);
+      expect(points.every((point) => point.value === 7)).toBe(true);
+    }
+    const stub = created[3];
+    if (stub === undefined) throw new Error('stub upsert returned no row');
+    const stubPoints = await db.select().from(snapshots).where(eq(snapshots.itemId, stub.id));
+    expect(stubPoints).toHaveLength(0);
+
+    const runs = await runsFor(id);
+    expect(runs).toHaveLength(1);
+    expect(runs[0]?.status).toBe('succeeded');
+    expect(runs[0]?.itemsSeen).toBe(0);
+
+    for (const child of children) {
+      await child?.remove();
+    }
+    const stored = await queues.ingest.github.getJob(id);
+    await stored?.remove();
   });
 
   it('snapshots a tracked item, records the run and enqueues scoring', async () => {

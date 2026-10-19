@@ -45,7 +45,7 @@ export class RunRecorder {
 
   /** Close the run; a second call is a no-op (failed attempts and handlers agree). */
   async finish(
-    status: 'succeeded' | 'partial' | 'failed',
+    status: 'succeeded' | 'partial' | 'failed' | 'skipped',
     error: string | null = null,
   ): Promise<void> {
     if (this.finished) return;

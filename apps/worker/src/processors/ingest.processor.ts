@@ -5,12 +5,14 @@ import {
   IngestJobSchema,
   QUEUE,
   UpstreamError,
+  jobId,
   type IngestJob,
   type ScoringJob,
   type Source,
   type Tier,
 } from '@trendr/core';
 import {
+  countTrackedItems,
   getItemById,
   listTrackedItems,
   loadLatestMetricsByIds,
@@ -30,6 +32,11 @@ import {
 } from '@trendr/sources';
 
 import { attachDeadLetter } from '../dlq.js';
+import {
+  DEFAULT_FANOUT_BATCH_ITEMS,
+  planSnapshotBatches,
+  snapshotHourSlot,
+} from '../ingestion/fanout.js';
 import { RunRecorder } from '../ingestion/run-recorder.js';
 import {
   persistContinuitySnapshots,
@@ -40,6 +47,7 @@ import { sourceApiMetrics } from '../metrics.js';
 import { enqueueScoringRun, workerSettings, type Queues, type ScoringResult } from '../queues.js';
 
 type DiscoverJob = Extract<IngestJob, { type: 'discover' }>;
+type SnapshotFanoutJob = Extract<IngestJob, { type: 'snapshot-fanout' }>;
 type SnapshotJob = Extract<IngestJob, { type: 'snapshot' }>;
 type DailyJob = Extract<IngestJob, { type: 'daily' }>;
 type BackfillJob = Extract<IngestJob, { type: 'backfill' }>;
@@ -53,6 +61,10 @@ export interface IngestDeps {
   scoringQueue?: Queue<ScoringJob, ScoringResult>;
   /** `HF_RATE_PER_5MIN` for the `huggingface:api` bucket (spec §7.4). */
   hfRatePer5Min?: number;
+  /** `FANOUT_BATCH_ITEMS` — items per `snapshot-fanout` child (spec §7.2). */
+  fanoutBatchItems?: number;
+  /** The ingest queue this worker consumes from; required by `snapshot-fanout`. */
+  ingestQueue?: Queue<IngestJob>;
   /** Clock override for tests. */
   now?: () => Date;
 }
@@ -60,7 +72,7 @@ export interface IngestDeps {
 export interface IngestResult {
   type: IngestJob['type'];
   source: Source;
-  status: 'succeeded' | 'partial';
+  status: 'succeeded' | 'partial' | 'skipped';
   itemsSeen: number;
   itemsUpserted: number;
   itemsFailed: number;
@@ -150,8 +162,11 @@ export async function processIngestJob(
         }
       },
     };
-    await runJob({ deps, data, adapter, context, recorder });
+    await runJob({ deps, data, adapter, context, recorder, tick: job.timestamp });
   } catch (error) {
+    if (error instanceof AdapterNotRegisteredError && data.trigger === 'schedule') {
+      return skipScheduledJob(deps, recorder, data, error);
+    }
     await failRun(recorder, error);
     throw asJobError(error);
   }
@@ -231,6 +246,8 @@ interface JobRunInput {
   adapter: SourceAdapter;
   context: AdapterContext;
   recorder: RunRecorder;
+  /** `job.timestamp` — the deterministic §5.2 slot of a fan-out tick. */
+  tick: number;
 }
 
 async function runJob(input: JobRunInput): Promise<void> {
@@ -238,6 +255,9 @@ async function runJob(input: JobRunInput): Promise<void> {
   switch (data.type) {
     case 'discover':
       await runDiscover(input, data);
+      return;
+    case 'snapshot-fanout':
+      await runSnapshotFanout(input, data);
       return;
     case 'snapshot':
       await runSnapshot(input, data);
@@ -294,6 +314,47 @@ async function runDiscover(input: JobRunInput, data: DiscoverJob): Promise<void>
   }
 
   assertFailureQuota(recorder);
+}
+
+/**
+ * Spec §7.2 — split a tracked tier into `FANOUT_BATCH_ITEMS` snapshot children.
+ * JobIds derive from the fan-out job's creation hour, so retries dedupe while
+ * the next scheduled tick gets fresh ids. Cold children are delayed across the
+ * 01:30–04:00 window (§7.2).
+ */
+async function runSnapshotFanout(input: JobRunInput, data: SnapshotFanoutJob): Promise<void> {
+  const { deps, context, tick } = input;
+  if (deps.ingestQueue === undefined) {
+    throw new UnrecoverableError('snapshot-fanout requires an ingest queue');
+  }
+  const count = await countTrackedItems(deps.db, { source: data.source, tier: data.tier });
+  const batches = planSnapshotBatches(
+    count,
+    data.tier,
+    deps.fanoutBatchItems ?? DEFAULT_FANOUT_BATCH_ITEMS,
+  );
+  const slot = snapshotHourSlot(tick);
+  for (const { batch, batchCount, delayMs } of batches) {
+    await deps.ingestQueue.add(
+      'snapshot',
+      {
+        type: 'snapshot',
+        source: data.source,
+        tier: data.tier,
+        batch,
+        batchCount,
+        trigger: 'schedule',
+      },
+      {
+        jobId: jobId.snapshot(data.source, data.tier, slot, batch),
+        ...(delayMs > 0 ? { delay: delayMs } : {}),
+      },
+    );
+  }
+  context.logger.info(
+    { source: data.source, tier: data.tier, count, batches: batches.length },
+    'snapshot fan-out enqueued',
+  );
 }
 
 /** Spec §7.1 step 4 (`snapshot`) — the tracked batch of `(source, tier)`. */
@@ -493,6 +554,38 @@ function chunked<T>(rows: readonly T[], size: number): T[][] {
     chunks.push(rows.slice(offset, offset + size));
   }
   return chunks;
+}
+
+/**
+ * Spec §7.2/§18-4.4 — without credentials a *scheduled* ingest job is skipped:
+ * the run row closes as `skipped` with a clear log instead of burning attempts
+ * and parking in the DLQ. Manual jobs keep §7.5's "missing config is
+ * unrecoverable" rule, so operator-triggered mistakes stay visible.
+ */
+async function skipScheduledJob(
+  deps: IngestDeps,
+  recorder: RunRecorder,
+  data: IngestJob,
+  error: AdapterNotRegisteredError,
+): Promise<IngestResult> {
+  await recorder.finish('skipped', error.message);
+  deps.logger.warn(
+    {
+      source: data.source,
+      type: data.type,
+      runId: recorder.runId.toString(),
+      reason: error.message,
+    },
+    'scheduled ingest job skipped — no adapter registered (credentials missing?)',
+  );
+  return {
+    type: data.type,
+    source: data.source,
+    status: 'skipped',
+    itemsSeen: 0,
+    itemsUpserted: 0,
+    itemsFailed: 0,
+  };
 }
 
 async function failRun(recorder: RunRecorder, error: unknown): Promise<void> {

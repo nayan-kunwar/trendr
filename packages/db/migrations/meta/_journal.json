@@ -15,6 +15,13 @@
       "when": 1792311292375,
       "tag": "0001_partitions",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1792420115949,
+      "tag": "0002_stormy_killer_shrike",
+      "breakpoints": true
     }
   ]
 }

@@ -280,9 +280,32 @@ export async function listTrackedItems(
   db: DbExecutor,
   query: TrackedItemsQuery,
 ): Promise<TrackedItemRef[]> {
+  return db
+    .select({ id: items.id, externalId: items.externalId, kind: items.kind, tier: items.tier })
+    .from(items)
+    .where(and(...trackedItemFilters(query)))
+    .orderBy(asc(items.id));
+}
+
+/**
+ * Spec §7.2 — the tier size a `snapshot-fanout` job splits. Uses the same
+ * filters as `listTrackedItems` (deleted + alias stubs excluded), so the child
+ * batches cover exactly the rows a snapshot would fetch.
+ */
+export async function countTrackedItems(db: DbExecutor, query: TrackedItemsQuery): Promise<number> {
+  const [row] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(items)
+    .where(and(...trackedItemFilters(query)));
+  return row?.count ?? 0;
+}
+
+function trackedItemFilters(query: TrackedItemsQuery) {
   const filters = [
     eq(items.source, query.source),
     eq(items.isDeleted, false),
+    // Alias stubs (§5.4) are name shadows, not upstream-tracked rows: fetching
+    // the old slug would hit a 301 that redirects are never allowed to follow.
     sql`NOT ('stub' = ANY(${items.flags}))`,
   ];
   if (query.tier !== undefined) {
@@ -291,11 +314,7 @@ export async function listTrackedItems(
   if (query.batch !== undefined && query.batchCount !== undefined) {
     filters.push(sql`${items.id} % ${query.batchCount} = ${query.batch}`);
   }
-  return db
-    .select({ id: items.id, externalId: items.externalId, kind: items.kind, tier: items.tier })
-    .from(items)
-    .where(and(...filters))
-    .orderBy(asc(items.id));
+  return filters;
 }
 
 /** Normalized topic slugs of one item (spec §10.4 `topics`), stable order. */

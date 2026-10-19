@@ -736,6 +736,42 @@ be re-checked later. Decisions with alternatives get an ADR in [`docs/adr/`](./a
   int — rename → external_id move + stub + alias row, and a 304 → continuity snapshot from
   `latest_metrics` with `not_modified` recorded on the run.
 
+### Task 4.4 notes
+
+- **Six §7.2 GitHub rows, registered idempotently.** `registerSchedulers` now registers the
+  `gh-discover-*` and `gh-snapshot-*` rows next to the hourly `score-safety` schedulers, all with
+  `tz: 'UTC'` and §7.2's crons (`*/30`, `10 */2`, `20 */3`, `5 * * * *`, `15 */6 * * *`,
+  `30 1 * * *`). There is no `gh-daily` row in the spec table: GitHub daily series come from the
+  hourly snapshots plus `rollup-daily` maintenance. Schedulers register even when `GITHUB_TOKENS`
+  is empty so the stack shows `skipped` runs instead of a silently dead schedule; discovery caps
+  are 500 (new-hot), 300 (rising) and 150 (topics) items per pass.
+- **`snapshot-fanout` payload.** The §18 excerpt registers the job *name* `snapshot-fanout` but
+  shows `data.type: 'snapshot'`; the worker dispatches on payload, so the run uses a dedicated
+  `{type: 'snapshot-fanout', source, tier}` variant (also listed in §17's job-name list). All
+  ingest payloads gained an optional `trigger: 'schedule' | 'manual'`; fan-out children inherit
+  `trigger: 'schedule'`.
+- **Fan-out.** `countTrackedItems` (same filters as `listTrackedItems`: source, tier, not deleted,
+  no `stub` aliases) → `ceil(count / FANOUT_BATCH_ITEMS)` child `snapshot` jobs with
+  `{batch, batchCount}`. An empty tier completes without children. Child job ids come from §5.2's
+  `jobId.snapshot(source, tier, hourSlot, batch)`, with the slot derived from the parent's
+  `job.timestamp` (not `now()`): a retry of the same fan-out dedupes, later ticks get new ids.
+  Hot/warm children run immediately; cold children are delayed evenly across the 01:30–04:00
+  window (150 minutes). `FANOUT_BATCH_ITEMS` is passed through `IngestDeps` from the env (default
+  500).
+- **Scheduled jobs without credentials are `skipped`.** `AdapterNotRegisteredError` +
+  `trigger === 'schedule'` closes the run as `skipped` (already in `run_status_t`) with a warn log
+  naming the source and reason, and the BullMQ job completes on its first attempt — no retries and
+  no DLQ entry. Operator-created jobs keep §7.5's unrecoverable→DLQ behaviour (the 4.2 acceptance
+  test is unchanged), and the fan-out itself uses the same rule, so no children spawn when the
+  adapter is missing.
+- **Schema/migration.** `job_type_t` gained `snapshot-fanout` (`0002_stormy_killer_shrike.sql`)
+  for `ingestion_runs.job_type`; `IngestJobSchema` tests cover the new variant and trigger enum.
+- Acceptance coverage: unit — schedule table (six ids/crons/payloads plus score-safety), fan-out
+  planner (`ceil`, empty tier, cold spread, hour slot); int — scheduled no-adapter job ⇒ `skipped`
+  run + completed job + no DLQ; warm-tier fan-out ⇒ `ceil` deterministic children (batch data,
+  `trigger`, id-derived slot), every tracked item snapshotted, alias stub excluded, fan-out run
+  `succeeded` with zero items seen, and children complete.
+
 ## Environment quirks worth knowing
 
 - `docker compose port <svc> <port>` exits **0** printing `invalid IP:0` when the port is only

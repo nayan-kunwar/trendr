@@ -63,6 +63,8 @@ if (roles.includes('scoring') || roles.includes('ingest')) {
           logger,
           scoringQueue: queues.scoring,
           hfRatePer5Min: env.HF_RATE_PER_5MIN,
+          fanoutBatchItems: env.FANOUT_BATCH_ITEMS,
+          ingestQueue: queues.ingest[source],
         },
         connection: redis,
         concurrency: env.WORKER_CONCURRENCY_INGEST,

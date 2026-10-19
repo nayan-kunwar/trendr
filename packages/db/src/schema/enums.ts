@@ -25,6 +25,7 @@ export const jobTypeEnum = pgEnum('job_type_t', [
   'score',
   'digest',
   'maintenance',
+  'snapshot-fanout',
 ]);
 export const aliasRelEnum = pgEnum('alias_rel_t', [
   'same_project',

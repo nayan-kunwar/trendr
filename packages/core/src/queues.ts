@@ -24,12 +24,22 @@ export const QUEUE = {
   deadLetter: 'dead-letter',
 } as const; // BullMQ queue names must not contain ':'
 
+/** §7.2 schedule vs. operator-triggered: only scheduled jobs may skip (§7.5). */
+export const IngestTriggerSchema = z.enum(['schedule', 'manual']);
+
 export const IngestJobSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('discover'),
     source: SourceSchema,
     strategy: z.string(),
     maxItems: z.number().int().positive(),
+    trigger: IngestTriggerSchema.optional(),
+  }),
+  z.object({
+    type: z.literal('snapshot-fanout'),
+    source: SourceSchema,
+    tier: TierSchema,
+    trigger: IngestTriggerSchema.optional(),
   }),
   z.object({
     type: z.literal('snapshot'),
@@ -37,19 +47,27 @@ export const IngestJobSchema = z.discriminatedUnion('type', [
     tier: TierSchema,
     batch: z.number().int().nonnegative(),
     batchCount: z.number().int().positive(),
+    trigger: IngestTriggerSchema.optional(),
   }),
   z.object({
     type: z.literal('daily'),
     source: SourceSchema,
     day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    trigger: IngestTriggerSchema.optional(),
   }),
   z.object({
     type: z.literal('backfill'),
     source: SourceSchema,
     itemId: z.string(),
     days: z.number().int().min(1).max(365),
+    trigger: IngestTriggerSchema.optional(),
   }),
-  z.object({ type: z.literal('refresh-item'), source: SourceSchema, itemId: z.string() }),
+  z.object({
+    type: z.literal('refresh-item'),
+    source: SourceSchema,
+    itemId: z.string(),
+    trigger: IngestTriggerSchema.optional(),
+  }),
 ]);
 export type IngestJob = z.infer<typeof IngestJobSchema>;
 
