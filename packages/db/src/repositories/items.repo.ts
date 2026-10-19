@@ -1,6 +1,6 @@
 import { and, asc, eq, sql } from 'drizzle-orm';
 
-import type { ItemFlag, ItemKind, Metric, Source, Window } from '@trendr/core';
+import type { ItemFlag, ItemKind, Metric, Source, Tier, Window } from '@trendr/core';
 
 import type { DbExecutor } from '../client.js';
 import { aliasRelEnum } from '../schema/enums.js';
@@ -39,6 +39,15 @@ export interface UpsertedItem {
   externalId: string;
 }
 
+export interface UpsertItemsOptions {
+  /**
+   * Tier written only for rows that are *inserted* by this call (spec §7.1:
+   * discovered items start `warm`). Conflicts preserve the existing tier —
+   * tiering owns it after the first write.
+   */
+  newItemTier?: Tier;
+}
+
 /**
  * Bulk upsert by the natural key `(source, external_id)` (spec §6.2). On
  * conflict the upstream-owned columns are replaced by the new values while
@@ -47,12 +56,22 @@ export interface UpsertedItem {
  * (`burst_suspected`, `manual_hidden`) survive adapter writes. Returns the ids
  * so callers can write snapshots in the same transaction.
  */
-export async function upsertItems(db: DbExecutor, rows: ItemUpsert[]): Promise<UpsertedItem[]> {
+export async function upsertItems(
+  db: DbExecutor,
+  rows: ItemUpsert[],
+  options: UpsertItemsOptions = {},
+): Promise<UpsertedItem[]> {
   if (rows.length === 0) return [];
 
   return db
     .insert(items)
-    .values(rows.map((row) => ({ ...row, flags: row.flags ?? [] })))
+    .values(
+      rows.map((row) => ({
+        ...row,
+        flags: row.flags ?? [],
+        ...(options.newItemTier === undefined ? {} : { tier: options.newItemTier }),
+      })),
+    )
     .onConflictDoUpdate({
       target: [items.source, items.externalId],
       set: {
@@ -101,6 +120,45 @@ export async function findItemByNaturalKey(
       and(eq(items.source, source), eq(items.externalId, externalId), eq(items.isDeleted, false)),
     );
   return row ?? null;
+}
+
+/** The minimum an adapter needs to fetch one tracked item (§7.1 step 4). */
+export interface TrackedItemRef {
+  id: bigint;
+  externalId: string;
+  kind: ItemKind;
+  tier: Tier;
+}
+
+export interface TrackedItemsQuery {
+  source: Source;
+  tier?: Tier;
+  /** `id % batchCount = batch` — the deterministic fan-out slice (spec §7.1). */
+  batch?: number;
+  batchCount?: number;
+}
+
+/**
+ * Spec §7.1 step 4 — the tracked (non-deleted) items of one source,
+ * `ORDER BY id`, optionally restricted to one tier and to the fan-out slice
+ * `id % batchCount = batch`.
+ */
+export async function listTrackedItems(
+  db: DbExecutor,
+  query: TrackedItemsQuery,
+): Promise<TrackedItemRef[]> {
+  const filters = [eq(items.source, query.source), eq(items.isDeleted, false)];
+  if (query.tier !== undefined) {
+    filters.push(eq(items.tier, query.tier));
+  }
+  if (query.batch !== undefined && query.batchCount !== undefined) {
+    filters.push(sql`${items.id} % ${query.batchCount} = ${query.batch}`);
+  }
+  return db
+    .select({ id: items.id, externalId: items.externalId, kind: items.kind, tier: items.tier })
+    .from(items)
+    .where(and(...filters))
+    .orderBy(asc(items.id));
 }
 
 /** Normalized topic slugs of one item (spec §10.4 `topics`), stable order. */

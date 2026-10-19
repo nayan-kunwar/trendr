@@ -17,8 +17,13 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit"
   },
+  "dependencies": {
+    "@trendr/core": "workspace:*",
+    "@trendr/logger": "workspace:*"
+  },
   "devDependencies": {
     "eslint": "^9",
+    "ioredis": "^5.11.1",
     "tsup": "^8",
     "typescript": "^5"
   }

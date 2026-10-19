@@ -641,6 +641,53 @@ be re-checked later. Decisions with alternatives get an ADR in [`docs/adr/`](./a
   `backoffDelay` with the core export (adding the spec's full jitter) and map
   `UpstreamError.retryable`/`retryAfterMs` onto BullMQ attempts and job backoff.
 
+### Task 4.2 notes
+
+- **Scope split inside §7.1 step 5.** The processor and `persistNormalizedItems` write items and
+  (per mode) snapshots + daily metrics in one transaction per chunk. `items.topics` is already
+  carried by `NormalizedItem` but topic normalization (`packages/core/src/topics.ts`,
+  `item_topics`) and alias resolution (`item_aliases`, stub items with tier `cold`) are deferred
+  to the 4.3+ adapter work: they need per-source metadata shapes (GitHub topics, npm keywords,
+  PyPI classifiers, HF `pipeline_tag`, arXiv categories) and per-source stub defaults
+  (name/URL/primary metric) that only the real adapters define. The transaction is structured so
+  both slot in right after the `items` upsert (they need the returned ids).
+- **Discover's minimal-row upsert and backfill fan-out deferred for the same reason.** Refs
+  without a payload (`raw === undefined`) are counted but not yet upserted — "minimal items rows
+  (tier warm for new items)" needs the same per-source defaults. Discovered refs that *do* carry
+  payloads are normalized and upserted now, with `upsertItems`'s new insert-only option
+  (`newItemTier`) implementing §7.1's "tier warm for new items" without touching tiers on
+  conflict (tiering keeps ownership after the first write).
+- **`daily` job has no tier, `FetchOptions.tier` is required.** The processor loads the source's
+  tracked items and groups them by their stored tier, fetching per group — same batching
+  semantics, accurate tier hint, and the per-tier 50 %-failure quota stays scoped correctly.
+- **Run counters vs. §12 metrics.** `ingestion_runs.api_calls` counts one call per
+  `fetchMetrics`/`backfill` invocation for now (≈ one HTTP round trip per chunk for the batch
+  endpoints); exact per-request counts and `rate_limit_remaining` wiring arrive with the first
+  real adapter, which is where the 4.1 `FetchJsonMetricsSink` and `onHeaders` hooks get attached
+  (the sink is adapter-scoped, the recorder is job-scoped).
+- **`trendr_queue_depth` (§14.1, polled every 15 s via `getJobCounts`) is not part of 4.2** — no
+  §7.x code path produces it; it lands with the §10.1/admin + observability task. `trendr_dlq_jobs_total{queue}` (the §7.7 code path)
+  is implemented and unit-tested instead.
+- **Backoff rewiring done as planned.** `apps/worker/src/queues.ts` no longer defines a local
+  `backoffDelay`; the strategy is core's full jitter (`backoffDelay(attemptsMade, 5_000,
+  30 * 60_000)`, §7.5 line 1780) unless the failure is an `UpstreamError` with `retryAfterMs`
+  (429/quota-403), in which case the worker waits exactly that long plus ≤5 s of jitter.
+- **DLQ hardening per §7.7.** Entries land with the deterministic `dlq.{queueName}.{jobId}` id
+  (idempotent re-parks), `removeOnComplete: false` / `removeOnFail: false` (ops-inspectable until
+  purged), and increment `trendr_dlq_jobs_total{queue}` once the entry is stored; a failed park is
+  logged, never thrown from the event handler. `UnrecoverableError` parks on attempt 1.
+- **Missing config is unrecoverable.** `getAdapter` throws `AdapterNotRegisteredError`; the
+  processor maps it (and non-retryable `UpstreamError`s) to BullMQ `UnrecoverableError` so a bad
+  payload or unconfigured source does not burn five attempts, then lands in the DLQ with the
+  reason.
+- Acceptance coverage: unit — adapter registry, §7.4 bucket table (incl. Hugging Face scaling),
+  the backoff strategy branches, and the DLQ park rules (final attempt, unrecoverable-first,
+  intermediate no-op, missing job, park failure); int — schema-invalid payload → DLQ after
+  1 attempt with no `ingestion_runs` row, retryable `UpstreamError` → 5 attempts → DLQ with
+  5 `failed` run rows, missing adapter → unrecoverable, and a happy `snapshot` run that replaces
+  stale metadata, writes the hourly snapshot, records `succeeded` and enqueues the §7.1-step-7
+  scoring job.
+
 ## Environment quirks worth knowing
 
 - `docker compose port <svc> <port>` exits **0** printing `invalid IP:0` when the port is only

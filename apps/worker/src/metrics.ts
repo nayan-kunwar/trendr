@@ -44,3 +44,11 @@ export const scoringAnomalies = new Counter({
   labelNames: ['source', 'type'],
   registers: [registry],
 });
+
+/** `trendr_dlq_jobs_total{queue}` — jobs parked in `dead-letter` (spec §7.7, §14.1). */
+export const dlqJobsTotal = new Counter({
+  name: 'trendr_dlq_jobs_total',
+  help: 'Jobs parked in the dead-letter queue after their final attempt failed.',
+  labelNames: ['queue'],
+  registers: [registry],
+});

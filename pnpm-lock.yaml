@@ -206,6 +206,9 @@ importers:
       '@trendr/logger':
         specifier: workspace:*
         version: link:../../packages/logger
+      '@trendr/sources':
+        specifier: workspace:*
+        version: link:../../packages/sources
       bullmq:
         specifier: ^6.3.16
         version: 6.3.16(ioredis@5.11.1)(pg@8.23.1)
@@ -324,10 +327,20 @@ importers:
         version: 5.9.3
 
   packages/sources:
+    dependencies:
+      '@trendr/core':
+        specifier: workspace:*
+        version: link:../core
+      '@trendr/logger':
+        specifier: workspace:*
+        version: link:../logger
     devDependencies:
       eslint:
         specifier: ^9
         version: 9.39.5(jiti@2.6.1)
+      ioredis:
+        specifier: ^5.11.1
+        version: 5.11.1
       tsup:
         specifier: ^8
         version: 8.5.1(jiti@2.6.1)(postcss@8.5.30)(tsx@4.23.15)(typescript@5.9.3)(yaml@2.9.1)

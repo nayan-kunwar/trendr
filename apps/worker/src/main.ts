@@ -2,12 +2,13 @@ import type { Worker } from 'bullmq';
 import { Redis } from 'ioredis';
 
 import { env } from '@trendr/config';
-import { QUEUE } from '@trendr/core';
+import { QUEUE, SOURCES } from '@trendr/core';
 import { createDb, type Connection } from '@trendr/db';
 import { createLogger } from '@trendr/logger';
 
 import { startMetricsServer } from './metrics-server.js';
 import { registry } from './metrics.js';
+import { createIngestWorker } from './processors/ingest.processor.js';
 import { closeQueues, createQueues } from './queues.js';
 import { registerSchedulers } from './scheduler.js';
 import { createScoringWorker } from './scoring/processor.js';
@@ -31,21 +32,46 @@ if (roles.includes('scheduler') && env.SCHEDULER_ENABLED) {
   schedulerIds = await registerSchedulers(queues, logger);
 }
 
+const workers: Worker[] = [];
 let db: Connection | null = null;
-let scoringWorker: Worker | null = null;
-if (roles.includes('scoring')) {
+if (roles.includes('scoring') || roles.includes('ingest')) {
   db = createDb(env.DATABASE_URL);
-  scoringWorker = createScoringWorker({
-    db: db.db,
-    redis,
-    connection: redis,
-    notifyQueue: queues.notify,
-    deadLetter: queues.deadLetter,
-    logger,
-  });
-  scoringWorker.on('completed', () => {
-    lastJobByQueue[QUEUE.scoring] = new Date().toISOString();
-  });
+
+  if (roles.includes('scoring')) {
+    const scoringWorker = createScoringWorker({
+      db: db.db,
+      redis,
+      connection: redis,
+      notifyQueue: queues.notify,
+      deadLetter: queues.deadLetter,
+      logger,
+    });
+    scoringWorker.on('completed', () => {
+      lastJobByQueue[QUEUE.scoring] = new Date().toISOString();
+    });
+    workers.push(scoringWorker);
+  }
+
+  if (roles.includes('ingest')) {
+    for (const source of SOURCES) {
+      const ingestWorker = createIngestWorker(source, {
+        deps: {
+          db: db.db,
+          redis,
+          logger,
+          scoringQueue: queues.scoring,
+          hfRatePer5Min: env.HF_RATE_PER_5MIN,
+        },
+        connection: redis,
+        concurrency: env.WORKER_CONCURRENCY_INGEST,
+        deadLetter: queues.deadLetter,
+      });
+      ingestWorker.on('completed', () => {
+        lastJobByQueue[QUEUE.ingest[source]] = new Date().toISOString();
+      });
+      workers.push(ingestWorker);
+    }
+  }
 }
 
 const metricsServer = await startMetricsServer({
@@ -71,8 +97,8 @@ async function shutdown(signal: string): Promise<void> {
   logger.info({ signal }, 'worker stopping');
   try {
     await metricsServer.close();
-    if (scoringWorker !== null) {
-      await scoringWorker.close();
+    for (const worker of workers) {
+      await worker.close();
     }
     await closeQueues(queues);
     if (db !== null) {

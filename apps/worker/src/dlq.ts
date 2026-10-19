@@ -2,11 +2,14 @@ import { UnrecoverableError, type Queue, type Worker } from 'bullmq';
 
 import type { Logger } from '@trendr/logger';
 
+import { dlqJobsTotal } from './metrics.js';
 import type { DeadLetterJob } from './queues.js';
 
 /**
  * Spec §7.7 — once a job's last attempt failed (or it failed unrecoverably),
  * park its payload and error in the `dead-letter` queue for inspection.
+ * Entries are retained until ops purge them (`removeOn*: false`) and are
+ * deduplicated by `dlq.{queueName}.{jobId}`.
  */
 export function attachDeadLetter(
   worker: Worker,
@@ -32,11 +35,20 @@ export function attachDeadLetter(
       attemptsMade: job.attemptsMade,
       failedAt: new Date().toISOString(),
     };
-    void deadLetter.add('dead', entry).catch((dlqError: unknown) => {
-      logger?.error(
-        { err: dlqError, jobId: job.id },
-        'could not move job to the dead-letter queue',
-      );
-    });
+    void deadLetter
+      .add('dead', entry, {
+        ...(job.id === undefined ? {} : { jobId: `dlq.${job.queueName}.${job.id}` }),
+        removeOnComplete: false,
+        removeOnFail: false,
+      })
+      .then(() => {
+        dlqJobsTotal.inc({ queue: job.queueName });
+      })
+      .catch((dlqError: unknown) => {
+        logger?.error(
+          { err: dlqError, jobId: job.id },
+          'could not move job to the dead-letter queue',
+        );
+      });
   });
 }

@@ -3,8 +3,12 @@ import { Redis } from 'ioredis';
 
 import {
   QUEUE,
+  SOURCES,
   WINDOWS,
+  backoffDelay,
   jobId,
+  UpstreamError,
+  type IngestJob,
   type NotifyJob,
   type ScoringJob,
   type Source,
@@ -25,14 +29,18 @@ export const defaultJobOpts: JobsOptions = {
   removeOnFail: { age: 7 * 24 * 3600 },
 };
 
-/** Exponential backoff between `baseMs` and `maxMs` (spec §7.5 helper). */
-export function backoffDelay(attemptsMade: number, baseMs: number, maxMs: number): number {
-  return Math.min(maxMs, baseMs * 2 ** Math.max(0, attemptsMade - 1));
-}
-
-/** §7.5: retried jobs back off from 5 s up to 30 minutes between attempts. */
+/**
+ * Spec §7.5 — custom backoff: when upstream asked us to wait (`429` /
+ * quota-403 surfaced as `UpstreamError.retryAfterMs`), wait exactly that long
+ * plus jitter; everything else uses full jitter between 5 s and 30 minutes.
+ */
 export const workerSettings: NonNullable<WorkerOptions['settings']> = {
-  backoffStrategy: (attemptsMade: number) => backoffDelay(attemptsMade, 5_000, 30 * 60_000),
+  backoffStrategy: (attemptsMade, _type, err) => {
+    if (err instanceof UpstreamError && err.retryAfterMs) {
+      return err.retryAfterMs + Math.floor(Math.random() * 5_000);
+    }
+    return backoffDelay(attemptsMade, 5_000, 30 * 60_000);
+  },
 };
 
 /** BullMQ requires `maxRetriesPerRequest: null` (spec §3); ioredis reconnects on its own. */
@@ -53,6 +61,7 @@ export interface DeadLetterJob {
 }
 
 export interface Queues {
+  ingest: Record<Source, Queue<IngestJob>>;
   scoring: Queue<ScoringJob, ScoringResult>;
   notify: Queue<NotifyJob>;
   deadLetter: Queue<DeadLetterJob>;
@@ -65,24 +74,26 @@ export interface ScoringResult {
 }
 
 export function createQueues(connection: Redis): Queues {
+  const options = { connection, defaultJobOptions: defaultJobOpts };
+  const ingest = {} as Record<Source, Queue<IngestJob>>;
+  for (const source of SOURCES) {
+    ingest[source] = new Queue<IngestJob>(QUEUE.ingest[source], options);
+  }
   return {
-    scoring: new Queue<ScoringJob, ScoringResult>(QUEUE.scoring, {
-      connection,
-      defaultJobOptions: defaultJobOpts,
-    }),
-    notify: new Queue<NotifyJob>(QUEUE.notify, {
-      connection,
-      defaultJobOptions: defaultJobOpts,
-    }),
-    deadLetter: new Queue<DeadLetterJob>(QUEUE.deadLetter, {
-      connection,
-      defaultJobOptions: defaultJobOpts,
-    }),
+    ingest,
+    scoring: new Queue<ScoringJob, ScoringResult>(QUEUE.scoring, options),
+    notify: new Queue<NotifyJob>(QUEUE.notify, options),
+    deadLetter: new Queue<DeadLetterJob>(QUEUE.deadLetter, options),
   };
 }
 
 export async function closeQueues(queues: Queues): Promise<void> {
-  await Promise.all([queues.scoring.close(), queues.notify.close(), queues.deadLetter.close()]);
+  await Promise.all([
+    ...Object.values(queues.ingest).map((queue) => queue.close()),
+    queues.scoring.close(),
+    queues.notify.close(),
+    queues.deadLetter.close(),
+  ]);
 }
 
 /**
