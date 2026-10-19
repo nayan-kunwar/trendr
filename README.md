@@ -16,8 +16,8 @@ an MCP server for agents.
 | 0     | Scaffolding, tooling, CI skeleton, Compose stack | ✅ done |
 | 1     | Database + core domain                           | ✅ done |
 | 2     | Scoring engine (TDD)                             | ✅ done |
-| 3     | Read API (public)                                | ⏳ next |
-| 4     | Ingestion framework + GitHub adapter             | ⏳      |
+| 3     | Read API (public)                                | ✅ done |
+| 4     | Ingestion framework + GitHub adapter             | ⏳ next |
 | 5     | npm, PyPI, Hugging Face, arXiv, MCP adapters     | ⏳      |
 | 6     | Web frontend                                     | ⏳      |
 | 7     | Accounts, watchlists, alerts, digest             | ⏳      |
@@ -119,7 +119,8 @@ Vitest runs as one workspace from the repo root with `unit` and `int` projects; 
 resolve to sources, so tests never need a prior build. CI
 ([`.github/workflows/ci.yml`](./.github/workflows/ci.yml)) runs lint + typecheck, unit tests with a
 coverage artifact, integration tests, `gitleaks` + `pnpm audit`, and a Compose smoke test that
-builds the whole stack and waits for health.
+builds the whole stack, waits for health, seeds the database, triggers a scoring run and asserts
+`/v1/trending` returns entries.
 
 ## Troubleshooting
 
