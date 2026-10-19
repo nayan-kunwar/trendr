@@ -1,4 +1,4 @@
-import { and, asc, eq, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, sql } from 'drizzle-orm';
 
 import type { ItemFlag, ItemKind, Metric, Source, Tier, Window } from '@trendr/core';
 
@@ -122,6 +122,137 @@ export async function findItemByNaturalKey(
   return row ?? null;
 }
 
+/** Rename-detection row: what `upstream_id` currently points at (spec §5.4). */
+export interface ItemByUpstreamId {
+  id: bigint;
+  externalId: string;
+}
+
+/**
+ * Spec §5.4 — the tracked rows for a batch of upstream node ids. Used before
+ * the `(source, external_id)` upsert to spot renames: same node id, new name.
+ */
+export async function loadItemsByUpstreamIds(
+  db: DbExecutor,
+  source: Source,
+  upstreamIds: readonly string[],
+): Promise<Map<string, ItemByUpstreamId>> {
+  if (upstreamIds.length === 0) return new Map();
+  const rows = await db
+    .select({ id: items.id, externalId: items.externalId, upstreamId: items.upstreamId })
+    .from(items)
+    .where(and(eq(items.source, source), inArray(items.upstreamId, [...upstreamIds])));
+  const byUpstreamId = new Map<string, ItemByUpstreamId>();
+  for (const row of rows) {
+    if (row.upstreamId !== null) {
+      byUpstreamId.set(row.upstreamId, { id: row.id, externalId: row.externalId });
+    }
+  }
+  return byUpstreamId;
+}
+
+export interface ItemRenameInput {
+  source: Source;
+  /** The tracked row whose `external_id` changed upstream. */
+  itemId: bigint;
+  fromExternalId: string;
+  toExternalId: string;
+  /** `item_aliases.evidence`, e.g. `github_rename` (spec §5.4). */
+  evidence: string;
+}
+
+export type ItemRenameOutcome = 'renamed' | 'target-exists' | 'item-missing';
+
+/**
+ * Spec §5.4 — an upstream rename: move `items.external_id` to the new slug and
+ * keep the old name resolvable. The old name gets a `tier='cold'`,
+ * `flags=['stub']` item (deliberately *not* soft-deleted so `/aliases` still
+ * exposes it) plus an `item_aliases` row (`same_project`, confidence 1) from
+ * the renamed item to the stub. The stub keeps the previous metadata and URL
+ * but no `upstream_id` — that stays unique to the live row.
+ */
+export async function applyItemRename(
+  db: DbExecutor,
+  input: ItemRenameInput,
+): Promise<ItemRenameOutcome> {
+  if (input.fromExternalId === input.toExternalId) return 'renamed';
+
+  const [current] = await db
+    .select({
+      id: items.id,
+      kind: items.kind,
+      primaryMetric: items.primaryMetric,
+      description: items.description,
+      url: items.url,
+      homepage: items.homepage,
+      language: items.language,
+      license: items.license,
+      owner: items.owner,
+    })
+    .from(items)
+    .where(and(eq(items.source, input.source), eq(items.externalId, input.fromExternalId)));
+  if (current?.id !== input.itemId) return 'item-missing';
+
+  const [target] = await db
+    .select({ id: items.id })
+    .from(items)
+    .where(and(eq(items.source, input.source), eq(items.externalId, input.toExternalId)));
+  if (target !== undefined && target.id !== input.itemId) return 'target-exists';
+
+  await db
+    .update(items)
+    .set({ externalId: input.toExternalId, updatedAt: sql`now()` })
+    .where(eq(items.id, input.itemId));
+
+  const inserted = await db
+    .insert(items)
+    .values({
+      source: input.source,
+      kind: current.kind,
+      externalId: input.fromExternalId,
+      upstreamId: null,
+      name: input.fromExternalId.split('/').pop() ?? input.fromExternalId,
+      displayName: input.fromExternalId,
+      description: current.description,
+      url: current.url,
+      homepage: current.homepage,
+      language: current.language,
+      license: current.license,
+      owner: current.owner,
+      primaryMetric: current.primaryMetric,
+      tier: 'cold',
+      flags: ['stub'],
+    })
+    .onConflictDoNothing({ target: [items.source, items.externalId] })
+    .returning({ id: items.id });
+
+  let stubId = inserted[0]?.id;
+  if (stubId === undefined) {
+    // The old name is already tracked (e.g. rename back and forth): reuse it.
+    const [existing] = await db
+      .select({ id: items.id })
+      .from(items)
+      .where(and(eq(items.source, input.source), eq(items.externalId, input.fromExternalId)));
+    if (existing === undefined) {
+      throw new Error(`rename stub for "${input.fromExternalId}" vanished mid-transaction`);
+    }
+    stubId = existing.id;
+  }
+
+  await db
+    .insert(itemAliases)
+    .values({
+      itemId: input.itemId,
+      aliasItemId: stubId,
+      relation: 'same_project',
+      confidence: 1,
+      evidence: input.evidence,
+    })
+    .onConflictDoNothing();
+
+  return 'renamed';
+}
+
 /** The minimum an adapter needs to fetch one tracked item (§7.1 step 4). */
 export interface TrackedItemRef {
   id: bigint;
@@ -141,13 +272,19 @@ export interface TrackedItemsQuery {
 /**
  * Spec §7.1 step 4 — the tracked (non-deleted) items of one source,
  * `ORDER BY id`, optionally restricted to one tier and to the fan-out slice
- * `id % batchCount = batch`.
+ * `id % batchCount = batch`. Alias stubs (§5.4) are excluded: they are name
+ * shadows kept for lookups, and fetching the old slug would hit a 301 that
+ * redirects are never allowed to follow.
  */
 export async function listTrackedItems(
   db: DbExecutor,
   query: TrackedItemsQuery,
 ): Promise<TrackedItemRef[]> {
-  const filters = [eq(items.source, query.source), eq(items.isDeleted, false)];
+  const filters = [
+    eq(items.source, query.source),
+    eq(items.isDeleted, false),
+    sql`NOT ('stub' = ANY(${items.flags}))`,
+  ];
   if (query.tier !== undefined) {
     filters.push(eq(items.tier, query.tier));
   }
@@ -170,6 +307,24 @@ export async function loadItemTopics(db: DbExecutor, itemId: bigint): Promise<st
     .where(eq(itemTopics.itemId, itemId))
     .orderBy(asc(topics.slug));
   return rows.map((row) => row.slug);
+}
+
+/** One item's last stored metric values — the 304 continuity source (§7.3.1). */
+export interface LatestItemMetrics {
+  id: bigint;
+  latestMetrics: Partial<Record<string, number>>;
+}
+
+/** Spec §7.3.1 — `latest_metrics` for the items about to be continuity-written. */
+export async function loadLatestMetricsByIds(
+  db: DbExecutor,
+  itemIds: readonly bigint[],
+): Promise<LatestItemMetrics[]> {
+  if (itemIds.length === 0) return [];
+  return db
+    .select({ id: items.id, latestMetrics: items.latestMetrics })
+    .from(items)
+    .where(inArray(items.id, [...itemIds]));
 }
 
 export interface ItemScoreRow {

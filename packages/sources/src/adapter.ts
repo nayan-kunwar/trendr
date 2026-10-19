@@ -1,4 +1,5 @@
 import type { Item, ItemKind, Metric, RedisTokenBucket, Source, Tier } from '@trendr/core';
+import type { FetchJsonMetricsSink } from '@trendr/core';
 import type { Logger } from '@trendr/logger';
 
 /**
@@ -14,6 +15,12 @@ export interface DiscoveredRef {
   externalId: string; // canonical (see ids.ts)
   hint?: { reason: string; query?: string; rank?: number };
   raw?: unknown; // upstream payload if discovery already returned full data
+  /**
+   * `items.id` when the ref is already tracked. Optional extension of the
+   * spec shape: adapters need it for per-item caches (`etag:github:{itemId}`,
+   * §7.3.1) and the processor for 304 continuity writes.
+   */
+  itemId?: bigint;
 }
 
 /** Upstream payload + metrics for one item, as fetched (pre-normalization). */
@@ -55,12 +62,36 @@ export type AliasRelation =
   | 'model_of_paper'
   | 'registry_entry_of';
 
+/** Upstream rate-limit state observed from response headers (spec §7.4, §14.1). */
+export interface RateLimitInfo {
+  /** `x-ratelimit-resource` — `core`, `search` or `graphql`. */
+  resource: string;
+  remaining: number;
+  resetAt: Date | null;
+}
+
+/** Fine-grained PAT expiry (`github-authentication-token-expiration`, GAP-8). */
+export interface TokenExpiryInfo {
+  tokenIndex: number;
+  expiresAt: Date;
+}
+
 export interface AdapterContext {
   logger: Logger;
   bucket: RedisTokenBucket; // per-source rate limiter (Section 7.4)
   signal: AbortSignal; // job cancellation / shutdown
   now: () => Date; // injectable clock for tests
   runId: bigint;
+  /**
+   * §12 observability sink. Additive extension of the spec shape: the worker
+   * passes a per-job composite so `ingestion_runs.api_calls` and the
+   * `trendr_source_api_*` metrics come from the exact number of HTTP calls.
+   */
+  metrics?: FetchJsonMetricsSink;
+  /** §7.4: last observed rate-limit state (gauge + `rate_limit_remaining` on the run). */
+  onRateLimit?: (info: RateLimitInfo) => void;
+  /** GAP-8: PAT expiry reported by GitHub responses. */
+  onTokenExpiry?: (info: TokenExpiryInfo) => void;
 }
 
 export interface DiscoverOptions {

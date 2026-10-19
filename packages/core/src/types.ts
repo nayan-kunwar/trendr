@@ -97,7 +97,14 @@ export interface Item {
   metadata: Record<string, unknown>; // source-specific (validated per source by Zod)
 }
 export type ItemFlag =
-  'burst_suspected' | 'fork' | 'deprecated' | 'gated' | 'yanked' | 'manual_hidden';
+  | 'burst_suspected'
+  | 'fork'
+  | 'deprecated'
+  | 'gated'
+  | 'yanked'
+  | 'manual_hidden'
+  /** §5.4/§7.1: alias-target stub kept for rename/alias resolution (never scheduled for refresh). */
+  | 'stub';
 
 /** One point of a time series (row in `snapshots`). captured_at is the *bucket start*. */
 export interface MetricSnapshot {

@@ -1,0 +1,58 @@
+{
+  "data": {
+    "r0": {
+      "id": "R_kgDOMYk3Xw",
+      "nameWithOwner": "acme/vector-forge",
+      "url": "https://github.com/acme/vector-forge",
+      "description": "Vector search toolkit for LLM agents",
+      "homepageUrl": "https://vectorforge.dev",
+      "createdAt": "2026-10-13T09:12:44Z",
+      "pushedAt": "2026-10-18T21:58:07Z",
+      "isArchived": false,
+      "isFork": false,
+      "stargazerCount": 842,
+      "forkCount": 37,
+      "watchers": { "totalCount": 95 },
+      "issues": { "totalCount": 12 },
+      "primaryLanguage": { "name": "TypeScript" },
+      "repositoryTopics": {
+        "nodes": [
+          { "topic": { "name": "mcp-server" } },
+          { "topic": { "name": "llm" } },
+          { "topic": { "name": "typescript" } },
+          { "topic": { "name": "vector-search" } }
+        ]
+      },
+      "licenseInfo": { "spdxId": "MIT" },
+      "owner": { "login": "acme" }
+    },
+    "r1": null,
+    "r2": {
+      "id": "R_kgDOAb1cde",
+      "nameWithOwner": "legacy-labs/old-forge",
+      "url": "https://github.com/legacy-labs/old-forge",
+      "description": null,
+      "homepageUrl": null,
+      "createdAt": "2021-04-02T08:00:00Z",
+      "pushedAt": "2023-11-14T10:22:41Z",
+      "isArchived": true,
+      "isFork": true,
+      "stargazerCount": 61,
+      "forkCount": 4,
+      "watchers": { "totalCount": 12 },
+      "issues": { "totalCount": 2 },
+      "primaryLanguage": { "name": "Python" },
+      "repositoryTopics": { "nodes": [{ "topic": { "name": "archived-experiment" } }] },
+      "licenseInfo": null,
+      "owner": { "login": "legacy-labs" }
+    },
+    "rateLimit": { "cost": 1, "remaining": 4987, "resetAt": "2026-10-19T01:00:00Z" }
+  },
+  "errors": [
+    {
+      "type": "NOT_FOUND",
+      "path": ["r1"],
+      "message": "Could not resolve to a Repository with the name 'legacy-labs/gone-away'."
+    }
+  ]
+}

@@ -14,17 +14,22 @@
   "scripts": {
     "build": "tsup src/index.ts --format esm --dts --sourcemap --clean",
     "dev": "tsup src/index.ts --format esm --dts --watch",
+    "fixtures:record": "tsx src/github/record.ts",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@trendr/core": "workspace:*",
-    "@trendr/logger": "workspace:*"
+    "@trendr/logger": "workspace:*",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
+    "@types/node": "^22",
     "eslint": "^9",
     "ioredis": "^5.11.1",
     "tsup": "^8",
-    "typescript": "^5"
+    "tsx": "^4",
+    "typescript": "^5",
+    "undici": "^7"
   }
 }

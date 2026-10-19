@@ -6,6 +6,7 @@ import { QUEUE, SOURCES } from '@trendr/core';
 import { createDb, type Connection } from '@trendr/db';
 import { createLogger } from '@trendr/logger';
 
+import { registerIngestAdapters } from './ingestion/adapters.js';
 import { startMetricsServer } from './metrics-server.js';
 import { registry } from './metrics.js';
 import { createIngestWorker } from './processors/ingest.processor.js';
@@ -53,6 +54,7 @@ if (roles.includes('scoring') || roles.includes('ingest')) {
   }
 
   if (roles.includes('ingest')) {
+    registerIngestAdapters(redis, logger);
     for (const source of SOURCES) {
       const ingestWorker = createIngestWorker(source, {
         deps: {

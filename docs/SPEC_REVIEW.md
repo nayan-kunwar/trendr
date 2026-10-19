@@ -688,6 +688,54 @@ be re-checked later. Decisions with alternatives get an ADR in [`docs/adr/`](./a
   stale metadata, writes the hourly snapshot, records `succeeded` and enqueues the §7.1-step-7
   scoring job.
 
+### Task 4.3 notes
+
+- **Hand-authored fixtures.** `GITHUB_TOKENS` is empty in this environment, so
+  `packages/sources/src/github/__fixtures__/` was authored by hand against the documented
+  REST/GraphQL shapes (they parse through the same Zod schemas the adapter uses at runtime) and
+  `meta.json` marks the GAP evidence `provisional`. `record.ts` (`RECORD=1 pnpm fixtures:record
+  --source github`, loads `.env` itself, sanitizes tokens) regenerates every fixture from live
+  responses once a token is configured; a unit test scans the fixtures for token-shaped strings.
+- **Fetch paths.** Single refs refresh via REST conditional GET (`If-None-Match`; per-item
+  `etag:github:{itemId}` in Redis, 7-day TTL; 304 → `notModified`); batches go through one GraphQL
+  POST with ≤ 50 aliases (the tested `batchSize`). 404 maps to `notFound` (counted per item, not
+  fatal). 3xx is never followed (§15 redirect hardening) and surfaces as a non-retryable error.
+- **Rename handling (§5.4).** Before the `(source, external_id)` upsert, `persistNormalizedItems`
+  looks up `upstream_id`s (`loadItemsByUpstreamIds`) and moves a row whose `external_id` changed:
+  `applyItemRename` updates the name, inserts a `tier='cold'`, `flags=['stub']` item for the old slug
+  (deliberately not soft-deleted, so `/aliases` keeps surfacing it) and an `item_aliases` row
+  (`same_project`, confidence 1, evidence `github_rename`). Stubs are excluded from
+  `listTrackedItems`: fetching the dead slug would 301 and, since redirects are never followed, kill
+  the snapshot job. An explicit `refresh-item` on a stub still surfaces the 301 as non-retryable.
+- **304 continuity (§7.3.1).** In `snapshot` mode the processor rewrites each 304 item's last stored
+  values (`items.latest_metrics`) into the current bucket via `persistContinuitySnapshots` and counts
+  `not_modified`; `daily` mode skips it (no snapshot rows). Items that changed in the same run were
+  normalized first, so a later 304 still falls back to current values.
+- **Exact `api_calls`.** `ingestion_runs.api_calls` and the `trendr_source_api_*` metrics now come
+  from the same per-job `FetchJsonMetricsSink` the adapter writes on every HTTP call — the 4.2
+  "one per batch" counting is gone. `onRateLimit` feeds `trendr_rate_limit_remaining{source,resource}`
+  (next to the reserve pause), and `onTokenExpiry` feeds GAP-8's gauge/log (ADR-0013).
+- **Item topics: normalization in, persistence still out.** `packages/core/src/topics.ts` normalizes
+  slugs (lowercase, `_`→`-`, synonyms, ≤ 20 per item, 50-char cap mirroring the §6.2 CHECK); GitHub
+  repo topics flow into `NormalizedItem['item'].topics`. Writing `topics`/`item_topics` rows is still
+  deferred with the 4.2 note (it needs chunk-level topic diffing) — nothing reads the columns yet;
+  it lands with the discovery/search workstream.
+- **Discover still doesn't fan out to backfill** (4.2 note stands): `discover` upserts
+  payload-carrying refs only. The search strategies (new-hot, rising, topics, active-established with
+  `created:` range slicing for > 1000-result queries, ≤ 10 pages each) and `backfill` are implemented
+  and tested; scheduling and the discover→backfill fan-out land with 4.4.
+- **GAP-1/7/8 recorded as ADRs 0011–0013** (provisional until a live token runs the recorder):
+  batch cost is measured via the always-requested `rateLimit { cost }`, the stargazer walk is capped
+  (`BACKFILL_GITHUB_MAX_PAGES`, default 50) and emits only provably complete days, and PAT expiry is
+  surfaced from `github-authentication-token-expiration` when present.
+- Acceptance coverage: unit — fixtures (normalize repo/archived/fork/renamed/not-found, search
+  mapping, GraphQL batch parse incl. a `NOT_FOUND` alias), topic normalizer, and request shapes
+  (≤ 50 aliases + token rotation, `If-None-Match`/ETag round-trip, 304, 404, reserve pause + GAP-8
+  expiry, `created:` slicing for a 1,200-result query, `maxItems`, topics query,
+  `Accept: application/vnd.github.star+json` + backfill walk/cap, fatal vs rate-limited errors);
+  int — rename → external_id move + stub + alias row, and a 304 → continuity snapshot from
+  `latest_metrics` with `not_modified` recorded on the run.
+
 ## Environment quirks worth knowing
 
 - `docker compose port <svc> <port>` exits **0** printing `invalid IP:0` when the port is only

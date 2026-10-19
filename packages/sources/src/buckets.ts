@@ -60,6 +60,15 @@ export function createBucket(
   return new RedisTokenBucket(redis, bucketSpec(name, options));
 }
 
+/**
+ * Spec §7.3.1 — with several tokens the adapter round-robins and keeps one
+ * core bucket per token (`rl:github:core:{tokenIdx}`), so the per-token quota
+ * is never exceeded by the multitoken deployment.
+ */
+export function githubCoreBucketSpec(tokenIndex: number): BucketSpec {
+  return { name: `github:core:${tokenIndex}`, ...BUCKETS['github:core'] };
+}
+
 /** The bucket every adapter uses for its main API endpoint (spec §7.4). */
 export const SOURCE_PRIMARY_BUCKET: Record<Source, BucketName> = {
   github: 'github:core',

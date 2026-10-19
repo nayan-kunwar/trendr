@@ -8,4 +8,5 @@ export * from './queues.js';
 export * from './rate-limit/token-bucket.js';
 export * from './redis-keys.js';
 export * from './scoring/index.js';
+export * from './topics.js';
 export * from './types.js';

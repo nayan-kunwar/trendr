@@ -1,13 +1,17 @@
-import type { Tier } from '@trendr/core';
+import type { Metric, Source, Tier } from '@trendr/core';
 import {
+  applyItemRename,
+  loadItemsByUpstreamIds,
   upsertDailyMetrics,
   upsertItems,
   upsertSnapshots,
   type DailyMetricUpsert,
   type Db,
+  type DbExecutor,
   type ItemUpsert,
   type SnapshotUpsert,
 } from '@trendr/db';
+import type { Logger } from '@trendr/logger';
 import type { NormalizedItem } from '@trendr/sources';
 
 /** Spec §6.3 — snapshot bucket start: hourly for hot/warm, daily for cold. */
@@ -35,13 +39,16 @@ export interface PersistOptions {
   tier?: Tier;
   /** Tier for newly inserted items (discover starts items `warm`); existing tiers are preserved. */
   newItemTier?: Tier;
+  /** Receives rename detections (§5.4); omit in tests. */
+  logger?: Logger;
 }
 
 /**
  * Spec §7.1 step 5 — bulk upsert of one chunk in a single transaction:
- * `items` (metadata) and, per mode, `snapshots` + `daily_metrics`. Returns
- * how many items were upserted. (`item_topics`, alias resolution and stub
- * items land with the first real adapters — see docs/SPEC_REVIEW.md.)
+ * `items` (metadata), upstream rename handling (§5.4) and, per mode,
+ * `snapshots` + `daily_metrics`. Returns how many items were upserted.
+ * (`item_topics` persistence still lands with a later task — see
+ * docs/SPEC_REVIEW.md.)
  */
 export async function persistNormalizedItems(
   db: Db,
@@ -55,6 +62,10 @@ export async function persistNormalizedItems(
       : bucketCapturedAt(options.tier, options.capturedAt);
 
   return db.transaction(async (tx) => {
+    // §5.4: detect renames via the stable `upstream_id` first, so the
+    // (source, external_id) upsert below lands on the renamed row instead of
+    // inserting a duplicate under the new name.
+    await applySourceRenames(tx, normalized, options.logger);
     const upserted = await upsertItems(tx, normalized.map(toItemUpsert), {
       ...(options.newItemTier === undefined ? {} : { newItemTier: options.newItemTier }),
     });
@@ -105,6 +116,87 @@ export async function persistDailySeries(
     db,
     rows.map((row) => ({ itemId, metric: row.metric, day: row.day, value: row.value })),
   );
+}
+
+/**
+ * Spec §5.4 — detect upstream renames inside one chunk: group the payloads by
+ * `(source, upstream_id)`, load the tracked rows for those node ids and let
+ * `applyItemRename` move any row whose `external_id` changed. Identification
+ * is by node id, never by name.
+ */
+async function applySourceRenames(
+  db: DbExecutor,
+  normalized: readonly NormalizedItem[],
+  logger?: Logger,
+): Promise<void> {
+  const bySource = new Map<Source, Map<string, string>>();
+  for (const { item } of normalized) {
+    if (item.upstreamId === null) continue;
+    const externalIdByUpstreamId = bySource.get(item.source) ?? new Map<string, string>();
+    externalIdByUpstreamId.set(item.upstreamId, item.externalId);
+    bySource.set(item.source, externalIdByUpstreamId);
+  }
+
+  for (const [source, externalIdByUpstreamId] of bySource) {
+    const existing = await loadItemsByUpstreamIds(db, source, [...externalIdByUpstreamId.keys()]);
+    for (const [upstreamId, externalId] of externalIdByUpstreamId) {
+      const row = existing.get(upstreamId);
+      if (row === undefined || row.externalId === externalId) continue;
+      const outcome = await applyItemRename(db, {
+        source,
+        itemId: row.id,
+        fromExternalId: row.externalId,
+        toExternalId: externalId,
+        evidence: `${source}_rename`, // §5.4 e.g. `github_rename`
+      });
+      if (outcome === 'renamed') {
+        logger?.info(
+          { source, from: row.externalId, to: externalId },
+          'tracked item renamed upstream',
+        );
+      } else if (outcome === 'target-exists') {
+        logger?.warn(
+          { source, from: row.externalId, to: externalId },
+          'rename target already tracked; keeping both rows',
+        );
+      }
+    }
+  }
+}
+
+export interface ContinuitySnapshotInput {
+  itemId: bigint;
+  metrics: Partial<Record<Metric, number>>;
+}
+
+/**
+ * Spec §7.3.1 — `304 Not Modified` continuity: rewrite an item's last stored
+ * values into the current bucket so the series (and the next scoring window)
+ * stays continuous without touching upstream. Returns snapshot rows written.
+ */
+export async function persistContinuitySnapshots(
+  db: DbExecutor,
+  rows: readonly ContinuitySnapshotInput[],
+  options: { tier: Tier; capturedAt: Date; runId: bigint | null },
+): Promise<number> {
+  const capturedAt = bucketCapturedAt(options.tier, options.capturedAt);
+  const snapshots: SnapshotUpsert[] = [];
+  for (const row of rows) {
+    for (const [metric, value] of Object.entries(row.metrics)) {
+      if (typeof value !== 'number') continue;
+      snapshots.push({
+        itemId: row.itemId,
+        metric: metric as Metric,
+        capturedAt,
+        observedAt: options.capturedAt,
+        value,
+        runId: options.runId,
+      });
+    }
+  }
+  if (snapshots.length === 0) return 0;
+  await upsertSnapshots(db, snapshots, { refreshAggregates: true });
+  return snapshots.length;
 }
 
 function toItemUpsert(normalized: NormalizedItem): ItemUpsert {

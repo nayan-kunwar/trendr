@@ -1,0 +1,11 @@
+{
+  "fixtures": "hand-authored",
+  "reason": "GITHUB_TOKENS is empty in the local .env, so the live recorder could not run at implementation time. Shapes mirror the documented GitHub payloads (search minimal repo, REST repo, GraphQL batch with NOT_FOUND alias, stargazers star+json).",
+  "recordCommand": "RECORD=1 pnpm fixtures:record --source github",
+  "recordedAt": null,
+  "gapEvidence": {
+    "gap1_graphqlCost": "provisional: 1 point per ≤50-alias batch (documented); the adapter requests rateLimit{cost} on every batch and logs the measured value",
+    "gap7_stargazerDepth": "provisional: BACKFILL_GITHUB_MAX_PAGES=50 stays below the commonly reported ~400-page stargazer pagination cap",
+    "gap8_tokenExpiry": "provisional: github-authentication-token-expiration is parsed opportunistically; verified when a fine-grained PAT is configured"
+  }
+}

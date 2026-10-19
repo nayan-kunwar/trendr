@@ -10,7 +10,13 @@ import {
   type Source,
   type Tier,
 } from '@trendr/core';
-import { getItemById, listTrackedItems, type Db, type TrackedItemRef } from '@trendr/db';
+import {
+  getItemById,
+  listTrackedItems,
+  loadLatestMetricsByIds,
+  type Db,
+  type TrackedItemRef,
+} from '@trendr/db';
 import type { Logger } from '@trendr/logger';
 import {
   AdapterNotRegisteredError,
@@ -25,7 +31,12 @@ import {
 
 import { attachDeadLetter } from '../dlq.js';
 import { RunRecorder } from '../ingestion/run-recorder.js';
-import { persistDailySeries, persistNormalizedItems } from '../ingestion/upsert.js';
+import {
+  persistContinuitySnapshots,
+  persistDailySeries,
+  persistNormalizedItems,
+} from '../ingestion/upsert.js';
+import { sourceApiMetrics } from '../metrics.js';
 import { enqueueScoringRun, workerSettings, type Queues, type ScoringResult } from '../queues.js';
 
 type DiscoverJob = Extract<IngestJob, { type: 'discover' }>;
@@ -97,18 +108,47 @@ export async function processIngestJob(
 
   try {
     const adapter = getAdapter(data.source);
+    const log = deps.logger.child({
+      source: data.source,
+      jobId: job.id,
+      runId: recorder.runId.toString(),
+    });
     const context: AdapterContext = {
-      logger: deps.logger.child({
-        source: data.source,
-        jobId: job.id,
-        runId: recorder.runId.toString(),
-      }),
+      logger: log,
       bucket: createBucket(deps.redis, SOURCE_PRIMARY_BUCKET[data.source], {
         ...(deps.hfRatePer5Min === undefined ? {} : { hfRatePer5Min: deps.hfRatePer5Min }),
       }),
       signal: signal ?? new AbortController().signal,
       now,
       runId: recorder.runId,
+      // §7.4/§14.1: the adapter reports every upstream request through the
+      // sink, so `api_calls` is exact (one per HTTP call, not per batch).
+      metrics: {
+        request: (source, endpoint, status) => {
+          recorder.apiCalls += 1;
+          sourceApiMetrics.request(source, endpoint, status);
+        },
+        error: (source, endpoint, kind) => {
+          sourceApiMetrics.error(source, endpoint, kind);
+        },
+        duration: (source, endpoint, seconds) => {
+          sourceApiMetrics.duration(source, endpoint, seconds);
+        },
+      },
+      onRateLimit: (info) => {
+        recorder.rateLimitRemaining = info.remaining;
+        sourceApiMetrics.rateLimit(data.source, info.resource, info.remaining);
+      },
+      onTokenExpiry: (info) => {
+        sourceApiMetrics.tokenExpiry(data.source, info.tokenIndex, info.expiresAt);
+        const days = (info.expiresAt.getTime() - now().getTime()) / 86_400_000;
+        if (days <= 14) {
+          log.warn(
+            { tokenIndex: info.tokenIndex, expiresAt: info.expiresAt.toISOString() },
+            'source token expires within two weeks',
+          );
+        }
+      },
     };
     await runJob({ deps, data, adapter, context, recorder });
   } catch (error) {
@@ -226,7 +266,6 @@ async function runDiscover(input: JobRunInput, data: DiscoverJob): Promise<void>
 
   for await (const page of pages) {
     context.signal.throwIfAborted();
-    recorder.apiCalls += 1;
     recorder.itemsSeen += page.length;
 
     const toPersist: NormalizedItem[] = [];
@@ -304,7 +343,6 @@ async function runBackfill(input: JobRunInput, data: BackfillJob): Promise<void>
   }
 
   recorder.itemsSeen += 1;
-  recorder.apiCalls += 1;
   const daily = await adapter.backfill(context, toRef(data.source, item), data.days);
   await persistDailySeries(deps.db, item.id, daily);
   recorder.itemsUpserted += 1;
@@ -335,10 +373,10 @@ interface FetchAndPersistInput extends JobRunInput {
 async function fetchAndPersist(input: FetchAndPersistInput): Promise<void> {
   const { deps, adapter, context, recorder, refs, tier, mode } = input;
   recorder.itemsSeen += refs.length;
+  const notModified: DiscoveredRef[] = [];
 
   for (const chunk of chunked(refs, Math.max(1, adapter.batchSize))) {
     context.signal.throwIfAborted();
-    recorder.apiCalls += 1;
     const fetched = await adapter.fetchMetrics(context, chunk, { tier });
 
     const toPersist: NormalizedItem[] = [];
@@ -350,6 +388,7 @@ async function fetchAndPersist(input: FetchAndPersistInput): Promise<void> {
       }
       if (item.notModified === true) {
         recorder.notModified += 1;
+        notModified.push(item.ref);
         continue;
       }
       const normalized = adapter.normalize(item);
@@ -370,11 +409,43 @@ async function fetchAndPersist(input: FetchAndPersistInput): Promise<void> {
         tier,
         capturedAt: context.now(),
         runId: recorder.runId,
+        logger: context.logger,
       });
     }
   }
 
+  if (mode === 'snapshot' && notModified.length > 0) {
+    await persistContinuity(deps, context, recorder, notModified, tier);
+  }
+
   assertFailureQuota(recorder);
+}
+
+/**
+ * Spec §7.3.1 — a `304 Not Modified` item reuses its last stored values: they
+ * are written into this run's bucket so the series stays continuous without an
+ * upstream body. Items that did change were normalized above, so the stored
+ * `latest_metrics` a later 304 falls back to is always current.
+ */
+async function persistContinuity(
+  deps: IngestDeps,
+  context: AdapterContext,
+  recorder: RunRecorder,
+  refs: readonly DiscoveredRef[],
+  tier: Tier,
+): Promise<void> {
+  const ids = refs.map((ref) => ref.itemId).filter((id): id is bigint => id !== undefined);
+  if (ids.length === 0) return;
+  const rows = await loadLatestMetricsByIds(deps.db, ids);
+  const written = await persistContinuitySnapshots(
+    deps.db,
+    rows.map((row) => ({ itemId: row.id, metrics: row.latestMetrics })),
+    { tier, capturedAt: context.now(), runId: recorder.runId },
+  );
+  context.logger.debug(
+    { items: rows.length, snapshots: written },
+    'wrote 304 continuity snapshots from latest stored values',
+  );
 }
 
 /** Spec §7.1: more than half the items failing means the job is retried. */
@@ -413,7 +484,7 @@ async function loadTrackedItem(
 }
 
 function toRef(source: Source, item: TrackedItemRef): DiscoveredRef {
-  return { source, kind: item.kind, externalId: item.externalId };
+  return { source, kind: item.kind, externalId: item.externalId, itemId: item.id };
 }
 
 function chunked<T>(rows: readonly T[], size: number): T[][] {

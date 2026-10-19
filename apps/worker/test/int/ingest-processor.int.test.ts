@@ -1,7 +1,7 @@
 import { setTimeout as sleep } from 'node:timers/promises';
 
 import { QueueEvents, type Job, type Worker } from 'bullmq';
-import { eq, sql } from 'drizzle-orm';
+import { and, asc, eq, sql } from 'drizzle-orm';
 import { Redis } from 'ioredis';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
@@ -9,9 +9,11 @@ import { QUEUE, UpstreamError, type IngestJob } from '@trendr/core';
 import {
   createDb,
   ingestionRuns,
+  itemAliases,
   items,
   snapshots,
   upsertItems,
+  upsertSnapshots,
   type Connection,
   type Db,
 } from '@trendr/db';
@@ -23,6 +25,7 @@ import {
   type SourceAdapter,
 } from '@trendr/sources';
 
+import { bucketCapturedAt } from '../../src/ingestion/upsert.js';
 import { createIngestWorker, type IngestResult } from '../../src/processors/ingest.processor.js';
 import {
   closeQueues,
@@ -38,19 +41,30 @@ import {
  * unrecoverable failure) goes straight to the DLQ after one attempt. A happy
  * snapshot run records `ingestion_runs`, upserts items + snapshots and
  * enqueues the §7.1-step-7 scoring job.
+ *
+ * Task 4.3 acceptance: a payload whose `upstream_id` matches a tracked row
+ * with a new `external_id` renames it and keeps the old slug as an alias stub
+ * (§5.4); a `304 Not Modified` item gets a continuity snapshot from
+ * `items.latest_metrics` (§7.3.1) and is counted in `not_modified`.
  */
 
 const PREFIX = 'int-ingest/';
 const ITEM_PREFIX_PATTERN = `${PREFIX}%`;
 
-const state = { failFetchMetrics: false };
+const state = {
+  failFetchMetrics: false,
+  /** Refs answered `304 Not Modified` regardless of the prefix heuristic. */
+  notModifiedRefs: new Set<string>(),
+  /** Simulated upstream renames: old `external_id` → new `external_id`. */
+  renames: new Map<string, string>(),
+};
 
-function itemUpsert(externalId: string, name: string) {
+function itemUpsert(externalId: string, name: string, upstreamId: string | null = null) {
   return {
     source: 'github' as const,
     kind: 'repo' as const,
     externalId,
-    upstreamId: null,
+    upstreamId,
     name,
     displayName: externalId,
     description: null,
@@ -83,25 +97,26 @@ function fakeAdapter(): SourceAdapter {
       const fetchedAt = new Date();
       return Promise.resolve(
         refs.map((ref) =>
-          ref.externalId.startsWith(PREFIX)
-            ? { ref, raw: { name: 'fresh-widget' }, fetchedAt }
-            : { ref, raw: null, fetchedAt, notModified: true },
+          state.notModifiedRefs.has(ref.externalId) || !ref.externalId.startsWith(PREFIX)
+            ? { ref, raw: null, fetchedAt, notModified: true }
+            : { ref, raw: { name: 'fresh-widget' }, fetchedAt },
         ),
       );
     },
     normalize: (fetched: FetchedItem): NormalizedItem | null => {
       const externalId = fetched.ref.externalId;
       if (!externalId.startsWith(PREFIX)) return null;
+      const renamed = state.renames.get(externalId) ?? externalId;
       return {
         item: {
           source: 'github',
           kind: 'repo',
-          externalId,
-          upstreamId: null,
+          externalId: renamed,
+          upstreamId: renamed === externalId ? null : `R_${renamed}`,
           name: 'fresh-widget',
-          displayName: externalId,
+          displayName: renamed,
           description: null,
-          url: `https://github.com/${externalId}`,
+          url: `https://github.com/${renamed}`,
           homepage: null,
           language: null,
           license: null,
@@ -337,5 +352,116 @@ describe('ingest processor (spec §7.1/§7.7)', () => {
 
     const stored = await queues.ingest.github.getJob(id);
     await stored?.remove();
+  });
+
+  it('renames an item via upstream_id and keeps the old slug as an alias stub (§5.4)', async () => {
+    const oldId = `${PREFIX}rename-old`;
+    const newId = `${PREFIX}rename-new`;
+    const upstreamId = `R_${newId}`;
+    await db.execute(sql`DELETE FROM items WHERE external_id IN (${oldId}, ${newId})`);
+    state.renames.set(oldId, newId);
+
+    try {
+      const [created] = await upsertItems(db, [itemUpsert(oldId, 'old-name', upstreamId)], {
+        newItemTier: 'hot',
+      });
+      if (created === undefined) throw new Error('item upsert returned no row');
+
+      const job = await queues.ingest.github.add(
+        'snapshot',
+        { type: 'snapshot', source: 'github', tier: 'hot', batch: 0, batchCount: 1 },
+        { jobId: `int-ingest.rename.${Date.now()}` },
+      );
+      const id = requireJobId(job);
+      const result = (await job.waitUntilFinished(events, 30_000)) as IngestResult;
+      expect(result.status).toBe('succeeded');
+
+      const [renamed] = await db.select().from(items).where(eq(items.id, created.id));
+      expect(renamed?.externalId).toBe(newId);
+      expect(renamed?.upstreamId).toBe(upstreamId);
+
+      const [stub] = await db
+        .select()
+        .from(items)
+        .where(and(eq(items.source, 'github'), eq(items.externalId, oldId)));
+      expect(stub?.tier).toBe('cold');
+      expect(stub?.flags).toContain('stub');
+      expect(stub?.upstreamId).toBeNull();
+      expect(stub?.isDeleted).toBe(false);
+
+      const aliases = await db.select().from(itemAliases).where(eq(itemAliases.itemId, created.id));
+      expect(aliases).toHaveLength(1);
+      expect(aliases[0]?.aliasItemId).toBe(stub?.id);
+      expect(aliases[0]?.relation).toBe('same_project');
+      expect(aliases[0]?.confidence).toBe(1);
+      expect(aliases[0]?.evidence).toBe('github_rename');
+
+      const stored = await queues.ingest.github.getJob(id);
+      await stored?.remove();
+    } finally {
+      state.renames.delete(oldId);
+    }
+  });
+
+  it('writes a 304 continuity snapshot from latest_metrics and counts not_modified (§7.3.1)', async () => {
+    const externalId = `${PREFIX}continuity`;
+    await db.execute(sql`DELETE FROM items WHERE external_id = ${externalId}`);
+
+    const [created] = await upsertItems(db, [itemUpsert(externalId, 'continuity')], {
+      newItemTier: 'cold',
+    });
+    if (created === undefined) throw new Error('item upsert returned no row');
+
+    const seededAt = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    seededAt.setUTCHours(0, 0, 0, 0);
+    await upsertSnapshots(
+      db,
+      [
+        {
+          itemId: created.id,
+          metric: 'stars',
+          capturedAt: seededAt,
+          observedAt: seededAt,
+          value: 42,
+          runId: null,
+        },
+      ],
+      { refreshAggregates: true },
+    );
+    const [seeded] = await db.select().from(items).where(eq(items.id, created.id));
+    expect(seeded?.latestMetrics).toEqual({ stars: 42 });
+
+    state.notModifiedRefs.add(externalId);
+    try {
+      const bucket = bucketCapturedAt('cold', new Date());
+      const job = await queues.ingest.github.add(
+        'snapshot',
+        { type: 'snapshot', source: 'github', tier: 'cold', batch: 0, batchCount: 1 },
+        { jobId: `int-ingest.continuity.${Date.now()}` },
+      );
+      const id = requireJobId(job);
+      const result = (await job.waitUntilFinished(events, 30_000)) as IngestResult;
+      expect(result.status).toBe('succeeded');
+
+      const runs = await runsFor(id);
+      expect(runs).toHaveLength(1);
+      expect(runs[0]?.notModified).toBeGreaterThanOrEqual(1);
+
+      const points = await db
+        .select()
+        .from(snapshots)
+        .where(eq(snapshots.itemId, created.id))
+        .orderBy(asc(snapshots.capturedAt));
+      expect(points).toHaveLength(2);
+      const continuity = points[1];
+      expect(continuity?.capturedAt.getTime()).toBe(bucket.getTime());
+      expect(continuity?.value).toBe(42);
+      expect(continuity?.runId).toEqual(runs[0]?.id);
+
+      const stored = await queues.ingest.github.getJob(id);
+      await stored?.remove();
+    } finally {
+      state.notModifiedRefs.delete(externalId);
+    }
   });
 });
