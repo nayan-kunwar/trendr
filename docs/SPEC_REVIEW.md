@@ -568,6 +568,28 @@ be re-checked later. Decisions with alternatives get an ADR in [`docs/adr/`](./a
   a PUBLISH in the first milliseconds can land before SUBSCRIBE. Reconnect/snapshot covers
   state; int tests wait for `PUBSUB CHANNELS` to include the channel before publishing.
 
+### Task 3.7 notes
+
+- **compose-smoke now seeds and asserts trending.** The new step runs the spec §17.4
+  commands (`docker compose exec -T api node packages/db/dist/seed.js`, then
+  `curl … /v1/trending?scope=all&window=7d | jq -e '.data | length > 0'`) with one addition
+  between them: the task 2.6 admin-less scoring CLI
+  (`docker compose exec -T worker node dist/score-cli.js --source github`) plus a bounded
+  poll (30 × 2 s) around the assertion. Rationale: the seed writes items/series but no
+  scores, and the `score-safety` scheduler is hourly, so the spec's immediate assert would
+  race an empty board; scoring any one source rebuilds the combined `all` board (§8.4 step
+  9), so the spec's exact `all` query is preserved.
+- **Container paths.** `pnpm deploy` ships only the app's own tree: the seed runs in the
+  **api** image through the `packages/db` symlink `node.Dockerfile` creates for every app,
+  while `score-cli` (`dist/score-cli.js`, a worker tsup entry) runs in the **worker** image.
+  Both containers carry `DATABASE_URL`/`REDIS_URL` via `env_file` and `node-env`.
+- Verified locally with the exact workflow commands (Docker 29.7, Compose v5.4): the seed
+  is idempotent (`200 items … API key dt_live_seedkey1…`), the CLI enqueues the run and the
+  first poll already answered `entries=50 runId=9`; `/readyz` reports ready; the web image
+  serves HTML in-network. The web service's host port 3000 is occupied on this machine by
+  an unrelated project, so the job's `localhost:3000` check effectively runs on CI only
+  (see quirks).
+
 ## Environment quirks worth knowing
 
 - `docker compose port <svc> <port>` exits **0** printing `invalid IP:0` when the port is only
@@ -582,3 +604,8 @@ be re-checked later. Decisions with alternatives get an ADR in [`docs/adr/`](./a
 - The worker metrics port (`9464`) is `expose`d for Prometheus and must never be published; the
   acceptance check does an in-network GET (`docker compose exec api …`) plus a host-side refusal
   check.
+- On this machine **host port 3000 is taken by an unrelated project** (`gmail-bulk-sender`'s
+  `next start`), so a local `docker compose up` cannot publish the web service. Verify web
+  in-network instead (`docker run --network trendr_default` + an in-network `curl` to the
+  container name); CI runners have 3000 free, and the workflow's `localhost:3000` check is
+  unaffected.

@@ -2,8 +2,7 @@
 #  - Unit/int suites run through the root Vitest workspace (`pnpm test` / `pnpm test:int`);
 #    the spec's `pnpm turbo run test` would be a no-op until packages define per-package
 #    test scripts, and per-package Vitest runs would re-run the whole suite N times.
-#  - The compose-smoke seed step arrives with Phase 3 (3.7) and the nightly contract
-#    job with Phase 5 (5.6).
+#  - The nightly contract job arrives with Phase 5 (5.6).
 name: CI
 on:
   pull_request:
@@ -89,7 +88,22 @@ jobs:
       - run: curl -fsS http://localhost:4000/readyz && curl -fsS http://localhost:3000 >/dev/null
       - name: Worker health (port 9464 is not published; check inside the container)
         run: docker compose exec -T worker node -e "fetch('http://localhost:9464/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
-      # Seed + trending-assertion step arrives with Phase 3 (3.7).
+      # Spec §17.4 — seed, then assert trending. The spec snippet asserts immediately
+      # after seeding, but boards only exist after a scoring run (the score-safety
+      # scheduler is hourly), so the task 2.6 admin-less CLI (score-cli lives in the
+      # worker image) triggers one and the assertion polls briefly for the board.
+      - name: Seed, score, trending assertion
+        run: |
+          docker compose exec -T api node packages/db/dist/seed.js
+          docker compose exec -T worker node dist/score-cli.js --source github
+          for attempt in $(seq 1 30); do
+            if curl -fsS "http://localhost:4000/v1/trending?scope=all&window=7d" | jq -e '.data | length > 0'; then
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "trending assertion failed after 60 s" >&2
+          exit 1
       - if: failure()
         run: docker compose logs --no-color > compose.log
       - if: failure()
