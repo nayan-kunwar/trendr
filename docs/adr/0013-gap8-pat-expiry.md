@@ -1,6 +1,6 @@
 # 0013 — Fine-grained PAT expiry is surfaced, not guessed (GAP-8)
 
-- Status: Provisional (header observed by the recorder once a live token exists)
+- Status: Verified (header observed live 2026-10-19: `2027-01-17 16:40:21 UTC`)
 - Date: 2026-10-19
 - Phase: 4 (4.3)
 - Source: TRENDR_SPEC.md §7.3.1/§14.1; GAP-8
@@ -28,6 +28,10 @@ the GitHub adapter).
 - The recorder (`record.ts`) captures the raw header it sees into
   `__fixtures__/meta.json` so the first live run turns this from provisional
   into verified without code changes.
+- Verified live (2026-10-19): every REST response carried
+  `github-authentication-token-expiration: 2027-01-17 16:40:21 UTC`; the
+  recorder stored the raw value in `meta.json` and `Date.parse` handles the
+  format as designed.
 
 ## Consequences
 

@@ -117,13 +117,4 @@ export function withCreatedRange(
   return { ...query, q: qualifiers.join(' '), created };
 }
 
-/** `Link` header → `rel="last"` page number (spec §7.3.1 backfill walk). */
-export function parseLastPage(link: string | null): number | null {
-  if (link === null) return null;
-  const match = /[?&]page=(\d+)>;\s*rel="last"/.exec(link);
-  if (match?.[1] === undefined) return null;
-  const page = Number(match[1]);
-  return Number.isFinite(page) && page > 0 ? page : null;
-}
-
 export { DAY_MS };

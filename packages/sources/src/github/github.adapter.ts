@@ -18,15 +18,9 @@ import type {
   SourceAdapter,
 } from '../adapter.js';
 import { createBucket, githubCoreBucketSpec } from '../buckets.js';
-import {
-  buildBatchQuery,
-  cumulativeStarHistory,
-  GRAPHQL_MAX_ALIASES,
-  parseBatchResponse,
-} from './graphql.js';
+import { buildBatchQuery, GRAPHQL_MAX_ALIASES, parseBatchResponse } from './graphql.js';
 import {
   buildSearchQueries,
-  parseLastPage,
   SEARCH_MAX_PAGE,
   SEARCH_PAGE_SIZE,
   splitCreatedRange,
@@ -39,21 +33,28 @@ import {
   GitHubGraphqlEnvelopeSchema,
   GitHubRestRepoSchema,
   GitHubSearchResponseSchema,
-  GitHubStargazerPageSchema,
+  GitHubStargazerCountSchema,
+  GitHubStargazerHistorySchema,
   type GitHubRepoRaw,
   type GitHubRestRepo,
 } from './schemas.js';
+import {
+  cumulativeStarHistory,
+  dailyStarCounts,
+  STARGAZER_HISTORY_MAX_PAGE,
+  STARGAZER_HISTORY_PAGE_SIZE,
+  stargazerCoverageStart,
+} from './stars.js';
 
 /**
  * Spec §7.3.1 — the GitHub adapter: REST search discovery (date-sliced),
  * GraphQL batch snapshots, REST conditional refresh with Redis ETags, rename
- * detection via `nameWithOwner` (§5.4) and the stargazer backfill walk.
+ * detection via `nameWithOwner` (§5.4) and the stargazer history backfill
+ * (ADR 0012).
  */
 
 const GITHUB_API = 'https://api.github.com';
 const ETAG_TTL_SECONDS = 7 * 24 * 3_600; // spec §7.3.1
-const STARGAZER_ACCEPT = 'application/vnd.github.star+json';
-const STARGAZER_PAGE_SIZE = 100;
 const DAY_MS = 86_400_000;
 const DEFAULT_RESERVE = 200; // GITHUB_RESERVE
 const DEFAULT_BACKFILL_MAX_PAGES = 50; // BACKFILL_GITHUB_MAX_PAGES
@@ -104,7 +105,7 @@ export interface GitHubAdapterConfig {
   userAgent: string;
   /** `GITHUB_RESERVE` — pause a bucket below this remaining budget (§7.4). */
   reserve?: number;
-  /** `BACKFILL_GITHUB_MAX_PAGES`. */
+  /** `BACKFILL_GITHUB_MAX_PAGES` — `stargazers/history` pages (30 weeks each). */
   backfillMaxPages?: number;
   buckets: GitHubBuckets;
   etags: GitHubEtagStore;
@@ -474,73 +475,76 @@ export function createGitHubAdapter(
 
     normalize: normalizeGitHubItem,
 
-    /** Spec §7.3.1 backfill: walk stargazers backward → end-of-day cumulative stars. */
+    /**
+     * Spec §7.3.1 backfill (ADR 0012): GitHub retired the stargazers listing
+     * for non-collaborators, so history comes from `stargazers/history` —
+     * weekly buckets whose `days` array holds the stars created each UTC day —
+     * plus one `stargazers/count` call for the total. One page covers 30
+     * weeks, so a 35-day window costs two requests regardless of repo size.
+     */
     async backfill(ctx, ref, days) {
       const { index, token } = nextToken();
       const bucket = bucketForCore(index);
+      const requestOptions = {
+        bucket,
+        source: 'github',
+        userAgent: config.userAgent,
+        headers: authHeaders(token),
+        onHeaders: makeOnHeaders(ctx, index, bucket),
+        ...sinkOptions(ctx),
+        signal: ctx.signal,
+      };
 
-      const requestPage = async (
-        page: number,
-      ): Promise<{ timestamps: number[]; lastPage: number }> => {
+      const countResult = await fetchJson({
+        ...requestOptions,
+        url: `${GITHUB_API}/repos/${ref.externalId}/stargazers/count`,
+        schema: GitHubStargazerCountSchema,
+        endpoint: 'repos.stargazers.count',
+      });
+      if (countResult.status !== 'ok') {
+        throw new UpstreamError(
+          `stargazers count returned ${countResult.status}`,
+          'github',
+          null,
+          null,
+          false,
+        );
+      }
+      const totalStars = countResult.data.count;
+      if (totalStars <= 0) return [];
+
+      const cutoff = new Date(ctx.now().getTime() - Math.max(1, days) * DAY_MS);
+      const counts = new Map<string, number>();
+      let coverageStart: Date | null = null;
+      const maxPages = Math.min(backfillMaxPages, STARGAZER_HISTORY_MAX_PAGE);
+      for (let page = 1; page <= maxPages; page += 1) {
+        ctx.signal.throwIfAborted();
         const result = await fetchJson({
-          url: `${GITHUB_API}/repos/${ref.externalId}/stargazers?per_page=${STARGAZER_PAGE_SIZE}&page=${page}`,
-          schema: GitHubStargazerPageSchema,
-          bucket,
-          source: 'github',
-          endpoint: 'repos.stargazers',
-          userAgent: config.userAgent,
-          headers: { ...authHeaders(token), accept: STARGAZER_ACCEPT },
-          onHeaders: makeOnHeaders(ctx, index, bucket),
-          ...sinkOptions(ctx),
-          signal: ctx.signal,
+          ...requestOptions,
+          url: `${GITHUB_API}/repos/${ref.externalId}/stargazers/history?per_page=${STARGAZER_HISTORY_PAGE_SIZE}&page=${page}`,
+          schema: GitHubStargazerHistorySchema,
+          endpoint: 'repos.stargazers.history',
         });
         if (result.status !== 'ok') {
           throw new UpstreamError(
-            `stargazers returned ${result.status}`,
+            `stargazers history returned ${result.status}`,
             'github',
             null,
             null,
             false,
           );
         }
-        return {
-          timestamps: result.data
-            .map((row) => Date.parse(row.starred_at))
-            .filter((value) => Number.isFinite(value)),
-          lastPage: parseLastPage(result.headers.get('link')) ?? 1,
-        };
-      };
-
-      const cutoff = new Date(ctx.now().getTime() - Math.max(1, days) * DAY_MS);
-      const first = await requestPage(1);
-      let pagesFetched = 1;
-      const walked: number[] = [];
-      let totalStars: number;
-      if (first.lastPage === 1) {
-        walked.push(...first.timestamps);
-        totalStars = first.timestamps.length;
-      } else {
-        const last = await requestPage(first.lastPage);
-        pagesFetched += 1;
-        totalStars = (first.lastPage - 1) * STARGAZER_PAGE_SIZE + last.timestamps.length;
-        walked.push(...last.timestamps);
-        let page = first.lastPage - 1;
-        let done = last.timestamps.some((value) => value < cutoff.getTime());
-        while (!done && page >= 1 && pagesFetched < backfillMaxPages) {
-          ctx.signal.throwIfAborted();
-          const batch = page === 1 ? first : await requestPage(page);
-          pagesFetched += 1;
-          walked.push(...batch.timestamps);
-          done = batch.timestamps.some((value) => value < cutoff.getTime());
-          page -= 1;
-        }
+        if (result.data.length === 0) break;
+        for (const [day, value] of dailyStarCounts(result.data)) counts.set(day, value);
+        coverageStart = stargazerCoverageStart(result.data);
+        // Once the oldest fetched week starts at or before the cutoff instant,
+        // every day the window needs is covered — stop paging.
+        if (coverageStart !== null && coverageStart.getTime() <= cutoff.getTime()) break;
       }
-
-      return cumulativeStarHistory(walked, totalStars, cutoff, ctx.now()).map((row) => ({
-        metric: 'stars' as const,
-        day: row.day,
-        value: row.value,
-      }));
+      if (coverageStart === null) return [];
+      return cumulativeStarHistory(counts, totalStars, cutoff, ctx.now(), coverageStart).map(
+        (row) => ({ metric: 'stars' as const, day: row.day, value: row.value }),
+      );
     },
   };
 }

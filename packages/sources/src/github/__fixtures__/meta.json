@@ -1,11 +1,41 @@
 {
-  "fixtures": "hand-authored",
-  "reason": "GITHUB_TOKENS is empty in the local .env, so the live recorder could not run at implementation time. Shapes mirror the documented GitHub payloads (search minimal repo, REST repo, GraphQL batch with NOT_FOUND alias, stargazers star+json).",
-  "recordCommand": "RECORD=1 pnpm fixtures:record --source github",
-  "recordedAt": null,
-  "gapEvidence": {
-    "gap1_graphqlCost": "provisional: 1 point per ≤50-alias batch (documented); the adapter requests rateLimit{cost} on every batch and logs the measured value",
-    "gap7_stargazerDepth": "provisional: BACKFILL_GITHUB_MAX_PAGES=50 stays below the commonly reported ~400-page stargazer pagination cap",
-    "gap8_tokenExpiry": "provisional: github-authentication-token-expiration is parsed opportunistically; verified when a fine-grained PAT is configured"
+  "recordedAt": "2026-10-19T16:56:30.504Z",
+  "userAgent": "Trendr/1.0 (+https://github.com/nayankunwar/trendr)",
+  "graphql": [
+    {
+      "aliases": 3,
+      "probe": true,
+      "cost": 1,
+      "remaining": 4996,
+      "resetAt": "2026-10-19T17:42:13Z"
+    },
+    {
+      "aliases": 50,
+      "probe": true,
+      "cost": 1,
+      "remaining": 4995,
+      "resetAt": "2026-10-19T17:42:13Z"
+    },
+    {
+      "aliases": 3,
+      "probe": false,
+      "cost": 1,
+      "remaining": 4997,
+      "resetAt": "2026-10-19T17:42:13Z"
+    }
+  ],
+  "tokenExpiryHeader": "2027-01-17 16:40:21 UTC",
+  "restEtag": "W/\"d30a41fa8fa274693b64b337a90b853a5eb4a67c363dbaaeb55569e487db555f\"",
+  "searchRateLimitRemaining": "29",
+  "stargazerHistory": {
+    "repo": "sindresorhus/got",
+    "weeksPerPage": 30,
+    "newestWeek": 1792281600,
+    "oldestWeek": 1774742400
+  },
+  "stargazerListing": {
+    "repo": "sindresorhus/got",
+    "status": 403,
+    "message": "Resource not accessible by personal access token"
   }
 }

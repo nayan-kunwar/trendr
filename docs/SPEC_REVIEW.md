@@ -27,6 +27,12 @@ be re-checked later. Decisions with alternatives get an ADR in [`docs/adr/`](./a
   Compose v5.4.0 / Docker Desktop 29.7.2 (`migrate` `Exited (0)` is accepted; see ADR-0005).
 - **GAP-11** — `pnpm deploy` flags on the pinned major: `--prod --legacy` works on pnpm 11.7.0; the
   deployed-layout caveat is handled in the image (ADR-0006).
+- **GAP-1** — GraphQL batch cost measured live (2026-10-19): 1 point for 3 aliases, 1 point for 50
+  aliases, and 1 point for the production snapshot batch (ADR-0011).
+- **GAP-7** — the stargazers listing is retired for non-collaborators (live 403), so the backfill
+  reads `stargazers/history` weekly buckets + `stargazers/count` instead; reachable depth
+  ≈ 100 × 30 weeks (ADR-0012, deviation note under task 4.3).
+- **GAP-8** — fine-grained PAT expiry header captured live (`2027-01-17 16:40:21 UTC`, ADR-0013).
 
 ## Phase 1 notes
 
@@ -690,12 +696,26 @@ be re-checked later. Decisions with alternatives get an ADR in [`docs/adr/`](./a
 
 ### Task 4.3 notes
 
-- **Hand-authored fixtures.** `GITHUB_TOKENS` is empty in this environment, so
-  `packages/sources/src/github/__fixtures__/` was authored by hand against the documented
-  REST/GraphQL shapes (they parse through the same Zod schemas the adapter uses at runtime) and
-  `meta.json` marks the GAP evidence `provisional`. `record.ts` (`RECORD=1 pnpm fixtures:record
-  --source github`, loads `.env` itself, sanitizes tokens) regenerates every fixture from live
-  responses once a token is configured; a unit test scans the fixtures for token-shaped strings.
+- **Fixtures are live recordings (re-recorded 2026-10-19).** With a fine-grained PAT in `.env`,
+  `record.ts` (`RECORD=1 pnpm fixtures:record --source github`) ran end to end: search (new-hot +
+  topic), REST repo (ETag + expiry header), the **production** `buildBatchQuery` snapshot response
+  (`graphql-batch.json` — the recorder replays the adapter's own query, not the minimal cost probe),
+  `stargazers/history` page 1, `stargazers/count`, the retired listing's 403
+  (`stargazers-listing.json`) and `meta.json` (costs, expiry header, history window). Tests assert
+  fixture mapping structurally (against each fixture's own raw values), so re-recording refreshes
+  the data without invalidating assertions; `graphql-renamed.json` stays hand-authored (a synthetic
+  rename edge case, like the flag-flip in the archived/fork test). A unit test scans the fixtures
+  for token-shaped strings.
+- **Deviation — GitHub retired the stargazer listing (June 2026).** `GET /repos/{o}/{r}/stargazers`
+  (also watchers/subscriptions) is now limited to admins and collaborators: a live call answers
+  `403 Resource not accessible by personal access token` (unauthenticated: 401). Spec §7.3.1's
+  backfill mechanism ("walk `stargazers?per_page=100` with `Accept: application/vnd.github.star+json`")
+  and the task 4.3 acceptance line naming that header are superseded: `backfill` pages
+  `stargazers/history` (30 weeks per page, `days[7]` Sunday-first UTC) plus one `stargazers/count`,
+  so requests no longer scale with star count and the reachable depth is ≈ 100 × 30 weeks.
+  `BACKFILL_GITHUB_MAX_PAGES` remains as a budget guard. Output semantics are unchanged:
+  end-of-day cumulative `stars` in `daily_metrics`, truncated to days the fetched pages fully cover.
+  ADR-0012 records the decision and the live evidence.
 - **Fetch paths.** Single refs refresh via REST conditional GET (`If-None-Match`; per-item
   `etag:github:{itemId}` in Redis, 7-day TTL; 304 → `notModified`); batches go through one GraphQL
   POST with ≤ 50 aliases (the tested `batchSize`). 404 maps to `notFound` (counted per item, not
@@ -724,15 +744,16 @@ be re-checked later. Decisions with alternatives get an ADR in [`docs/adr/`](./a
   payload-carrying refs only. The search strategies (new-hot, rising, topics, active-established with
   `created:` range slicing for > 1000-result queries, ≤ 10 pages each) and `backfill` are implemented
   and tested; scheduling and the discover→backfill fan-out land with 4.4.
-- **GAP-1/7/8 recorded as ADRs 0011–0013** (provisional until a live token runs the recorder):
-  batch cost is measured via the always-requested `rateLimit { cost }`, the stargazer walk is capped
-  (`BACKFILL_GITHUB_MAX_PAGES`, default 50) and emits only provably complete days, and PAT expiry is
-  surfaced from `github-authentication-token-expiration` when present.
+- **GAP-1/7/8 are verified** (ADRs 0011–0013): the 50-alias batch costs 1 GraphQL point (measured
+  live), the stargazer backfill reads weekly `stargazers/history` buckets because the user listing
+  is retired for non-collaborators (see the deviation note above), and the PAT expiry header was
+  captured (`2027-01-17 16:40:21 UTC`).
 - Acceptance coverage: unit — fixtures (normalize repo/archived/fork/renamed/not-found, search
   mapping, GraphQL batch parse incl. a `NOT_FOUND` alias), topic normalizer, and request shapes
   (≤ 50 aliases + token rotation, `If-None-Match`/ETag round-trip, 304, 404, reserve pause + GAP-8
   expiry, `created:` slicing for a 1,200-result query, `maxItems`, topics query,
-  `Accept: application/vnd.github.star+json` + backfill walk/cap, fatal vs rate-limited errors);
+  `stargazers/history` paging (`per_page=30`) + `stargazers/count`, truncation at the page cap,
+  empty-repo short-circuit, fatal vs rate-limited errors);
   int — rename → external_id move + stub + alias row, and a 304 → continuity snapshot from
   `latest_metrics` with `not_modified` recorded on the run.
 

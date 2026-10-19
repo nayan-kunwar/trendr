@@ -85,9 +85,22 @@ export const GitHubGraphqlRateLimitSchema = z.object({
 });
 export type GitHubGraphqlRateLimit = z.infer<typeof GitHubGraphqlRateLimitSchema>;
 
-/** `GET /repos/{o}/{r}/stargazers` with `Accept: application/vnd.github.star+json`. */
-export const GitHubStargazerPageSchema = z.array(z.object({ starred_at: z.string() }));
-export type GitHubStargazerPage = z.infer<typeof GitHubStargazerPageSchema>;
+/**
+ * `GET /repos/{o}/{r}/stargazers/history` (ADR 0012): weekly buckets, `week`
+ * is the Sunday 00:00 UTC epoch-seconds and `days` holds the stars created on
+ * each day, Sunday first.
+ */
+export const GitHubStargazerHistorySchema = z.array(
+  z.object({
+    week: z.number(),
+    total: z.number(),
+    days: z.array(z.number()).length(7),
+  }),
+);
+export type GitHubStargazerHistory = z.infer<typeof GitHubStargazerHistorySchema>;
+
+/** `GET /repos/{o}/{r}/stargazers/count` (ADR 0012). */
+export const GitHubStargazerCountSchema = z.object({ count: z.number() });
 
 /** Both shapes flow into one `normalize` (spec §5.1: pure, fixture-tested). */
 export type GitHubRepoRaw = GitHubRestRepo | GitHubGraphqlRepo;

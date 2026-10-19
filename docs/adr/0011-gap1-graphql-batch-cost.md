@@ -1,6 +1,6 @@
 # 0011 — GitHub GraphQL batch point cost is measured, not assumed (GAP-1)
 
-- Status: Provisional (no live `GITHUB_TOKENS` in this environment)
+- Status: Verified (measured live 2026-10-19 — 1 point at 3 and 50 aliases, and for the production snapshot batch)
 - Date: 2026-10-19
 - Phase: 4 (4.3)
 - Source: TRENDR_SPEC.md §7.3.1; GAP-1
@@ -30,13 +30,16 @@ the hourly budget silently.
 - No throttling step charges more than the bucket's configured unit cost until a
   live measurement says otherwise; the spike is confined to `parseBatchResponse`
   and the debug log.
+- Live measurement (2026-10-19, `RECORD=1 pnpm fixtures:record --source github`,
+  `__fixtures__/meta.json`): **1 point at 3 aliases, 1 point at 50 aliases**, and
+  1 point for the production `buildBatchQuery` snapshot batch — the ≈ 1
+  assumption holds, so no throttling constant changes were needed.
 
 ## Consequences
 
 - One extra root field per batch — negligible response growth, and the cost is
   visible per run without a separate probe call.
-- With a live token: run the recorder once. If cost scales with aliases, raise
-  the batch debit/cost in the adapter and reserve maths; the measurement
-  plumbing and fixtures exist so only the constant changes.
-- Until then the decision stays explicitly provisional; `meta.json` marks the
-  GAP evidence `provisional` so nobody mistakes fixtures for live captures.
+- The live run confirmed the documented ≈ 1 cost at both batch sizes, so the
+  bucket debit and reserve maths stay as implemented. If GitHub ever changes
+  the cost, `meta.json` and the `trendr_rate_limit_remaining` gauge surface it
+  on the next recording without a code change.

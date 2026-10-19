@@ -1,58 +1,187 @@
 {
   "data": {
     "r0": {
-      "id": "R_kgDOMYk3Xw",
-      "nameWithOwner": "acme/vector-forge",
-      "url": "https://github.com/acme/vector-forge",
-      "description": "Vector search toolkit for LLM agents",
-      "homepageUrl": "https://vectorforge.dev",
-      "createdAt": "2026-10-13T09:12:44Z",
-      "pushedAt": "2026-10-18T21:58:07Z",
+      "id": "MDEwOlJlcG9zaXRvcnk3MDEwNzc4Ng==",
+      "nameWithOwner": "vercel/next.js",
+      "url": "https://github.com/vercel/next.js",
+      "description": "The React Framework",
+      "homepageUrl": "https://nextjs.org",
+      "createdAt": "2016-10-05T23:32:51Z",
+      "pushedAt": "2026-10-19T16:49:54Z",
       "isArchived": false,
       "isFork": false,
-      "stargazerCount": 842,
-      "forkCount": 37,
-      "watchers": { "totalCount": 95 },
-      "issues": { "totalCount": 12 },
-      "primaryLanguage": { "name": "TypeScript" },
+      "stargazerCount": 143095,
+      "forkCount": 35267,
+      "watchers": {
+        "totalCount": 1628
+      },
+      "issues": {
+        "totalCount": 1115
+      },
+      "primaryLanguage": {
+        "name": "JavaScript"
+      },
       "repositoryTopics": {
         "nodes": [
-          { "topic": { "name": "mcp-server" } },
-          { "topic": { "name": "llm" } },
-          { "topic": { "name": "typescript" } },
-          { "topic": { "name": "vector-search" } }
+          {
+            "topic": {
+              "name": "react"
+            }
+          },
+          {
+            "topic": {
+              "name": "server-rendering"
+            }
+          },
+          {
+            "topic": {
+              "name": "universal"
+            }
+          },
+          {
+            "topic": {
+              "name": "node"
+            }
+          },
+          {
+            "topic": {
+              "name": "components"
+            }
+          },
+          {
+            "topic": {
+              "name": "browser"
+            }
+          },
+          {
+            "topic": {
+              "name": "nextjs"
+            }
+          },
+          {
+            "topic": {
+              "name": "vercel"
+            }
+          },
+          {
+            "topic": {
+              "name": "static-site-generator"
+            }
+          },
+          {
+            "topic": {
+              "name": "hybrid"
+            }
+          },
+          {
+            "topic": {
+              "name": "ssg"
+            }
+          },
+          {
+            "topic": {
+              "name": "static"
+            }
+          },
+          {
+            "topic": {
+              "name": "blog"
+            }
+          },
+          {
+            "topic": {
+              "name": "compiler"
+            }
+          }
         ]
       },
-      "licenseInfo": { "spdxId": "MIT" },
-      "owner": { "login": "acme" }
+      "licenseInfo": {
+        "spdxId": "MIT"
+      },
+      "owner": {
+        "login": "vercel"
+      }
     },
-    "r1": null,
-    "r2": {
-      "id": "R_kgDOAb1cde",
-      "nameWithOwner": "legacy-labs/old-forge",
-      "url": "https://github.com/legacy-labs/old-forge",
-      "description": null,
-      "homepageUrl": null,
-      "createdAt": "2021-04-02T08:00:00Z",
-      "pushedAt": "2023-11-14T10:22:41Z",
-      "isArchived": true,
-      "isFork": true,
-      "stargazerCount": 61,
-      "forkCount": 4,
-      "watchers": { "totalCount": 12 },
-      "issues": { "totalCount": 2 },
-      "primaryLanguage": { "name": "Python" },
-      "repositoryTopics": { "nodes": [{ "topic": { "name": "archived-experiment" } }] },
-      "licenseInfo": null,
-      "owner": { "login": "legacy-labs" }
+    "r1": {
+      "id": "MDEwOlJlcG9zaXRvcnkxODE5Mzk3OA==",
+      "nameWithOwner": "sindresorhus/got",
+      "url": "https://github.com/sindresorhus/got",
+      "description": "🌐 Human-friendly and powerful HTTP request library for Node.js",
+      "homepageUrl": "",
+      "createdAt": "2014-03-27T22:40:49Z",
+      "pushedAt": "2026-10-13T06:34:45Z",
+      "isArchived": false,
+      "isFork": false,
+      "stargazerCount": 14952,
+      "forkCount": 1004,
+      "watchers": {
+        "totalCount": 107
+      },
+      "issues": {
+        "totalCount": 0
+      },
+      "primaryLanguage": {
+        "name": "TypeScript"
+      },
+      "repositoryTopics": {
+        "nodes": [
+          {
+            "topic": {
+              "name": "http-client"
+            }
+          },
+          {
+            "topic": {
+              "name": "http-request"
+            }
+          },
+          {
+            "topic": {
+              "name": "http"
+            }
+          },
+          {
+            "topic": {
+              "name": "https"
+            }
+          },
+          {
+            "topic": {
+              "name": "nodejs"
+            }
+          },
+          {
+            "topic": {
+              "name": "npm-package"
+            }
+          }
+        ]
+      },
+      "licenseInfo": {
+        "spdxId": "MIT"
+      },
+      "owner": {
+        "login": "sindresorhus"
+      }
     },
-    "rateLimit": { "cost": 1, "remaining": 4987, "resetAt": "2026-10-19T01:00:00Z" }
+    "r2": null,
+    "rateLimit": {
+      "cost": 1,
+      "remaining": 4997,
+      "resetAt": "2026-10-19T17:42:13Z"
+    }
   },
   "errors": [
     {
       "type": "NOT_FOUND",
-      "path": ["r1"],
-      "message": "Could not resolve to a Repository with the name 'legacy-labs/gone-away'."
+      "path": ["r2"],
+      "locations": [
+        {
+          "line": 1,
+          "column": 713
+        }
+      ],
+      "message": "Could not resolve to a Repository with the name 'int-ingest/does-not-exist'."
     }
   ]
 }

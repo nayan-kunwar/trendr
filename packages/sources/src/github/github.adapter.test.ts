@@ -9,9 +9,9 @@ import { createGitHubAdapter, type BucketLike, type GitHubEtagStore } from './gi
 
 /**
  * Spec §18 task 4.3 — request-shape tests: GraphQL batch size (≤ 50 aliases),
- * `If-None-Match` conditional refresh (304), `Accept:
- * application/vnd.github.star+json` on the backfill walk, date slicing of
- * `created:` ranges and the §7.4 reserve pause behaviour.
+ * `If-None-Match` conditional refresh (304), `stargazers/history` paging plus
+ * `stargazers/count` on the backfill (ADR 0012), date slicing of `created:`
+ * ranges and the §7.4 reserve pause behaviour.
  */
 
 const NOW = new Date('2026-10-19T12:00:00Z');
@@ -462,49 +462,39 @@ describe('github adapter request shapes (spec §7.3.1)', () => {
     expect(queries).toEqual(['topic:mcp-server pushed:>2026-10-05 stars:>=10']);
   });
 
-  it('walks stargazers backward with the star+json accept header (spec §7.3.1)', async () => {
+  it('reads stargazers/history + count for the backfill window (ADR 0012)', async () => {
     const h = harness({ tokenCount: 1 });
-    const accepts: (string | undefined)[] = [];
-    const pages: string[] = [];
-    const record = (opts: { path: string; headers?: RequestHeaders }) => {
-      pages.push(opts.path);
-      accepts.push(header(opts.headers, 'accept'));
+    const paths: string[] = [];
+    const record = (opts: { path: string }) => {
+      paths.push(opts.path);
     };
 
     pool
-      .intercept({ path: '/repos/acme/vector-forge/stargazers?per_page=100&page=1', method: 'GET' })
+      .intercept({ path: '/repos/acme/vector-forge/stargazers/count', method: 'GET' })
       .reply((opts) => {
         record(opts);
         return {
           statusCode: 200,
-          data: JSON.stringify(readJson('stargazers-page-1.json')),
-          responseOptions: {
-            headers: {
-              'content-type': 'application/json',
-              link: `<${GITHUB}/repos/acme/vector-forge/stargazers?per_page=100&page=3>; rel="last"`,
-            },
-          },
-        };
-      });
-    pool
-      .intercept({ path: '/repos/acme/vector-forge/stargazers?per_page=100&page=3', method: 'GET' })
-      .reply((opts) => {
-        record(opts);
-        return {
-          statusCode: 200,
-          data: JSON.stringify(readJson('stargazers-last.json')),
+          data: JSON.stringify({ count: 200 }),
           responseOptions: { headers: { 'content-type': 'application/json' } },
         };
       });
     pool
-      .intercept({ path: '/repos/acme/vector-forge/stargazers?per_page=100&page=2', method: 'GET' })
+      .intercept({
+        path: '/repos/acme/vector-forge/stargazers/history?per_page=30&page=1',
+        method: 'GET',
+      })
       .reply((opts) => {
         record(opts);
         return {
           statusCode: 200,
           data: JSON.stringify([
-            { starred_at: '2026-09-14T11:00:00Z', user: { login: 'old' } },
-            { starred_at: '2026-09-20T08:00:00Z', user: { login: 'mid' } },
+            { week: 1792281600, total: 2, days: [1, 1, 0, 0, 0, 0, 0] },
+            { week: 1791676800, total: 4, days: [0, 0, 0, 1, 1, 1, 1] },
+            { week: 1791072000, total: 0, days: [0, 0, 0, 0, 0, 0, 0] },
+            { week: 1790467200, total: 1, days: [1, 0, 0, 0, 0, 0, 0] },
+            { week: 1789862400, total: 0, days: [0, 0, 0, 0, 0, 0, 0] },
+            { week: 1789257600, total: 2, days: [2, 0, 0, 0, 0, 0, 0] },
           ]),
           responseOptions: { headers: { 'content-type': 'application/json' } },
         };
@@ -512,59 +502,69 @@ describe('github adapter request shapes (spec §7.3.1)', () => {
 
     const daily = await h.adapter.backfill?.(context(), ref('acme/vector-forge'), 35);
 
-    // probe page 1 → last, walk 3 then 2 (page 2 crosses the 35-day cutoff, so it stops)
-    expect(pages).toEqual([
-      '/repos/acme/vector-forge/stargazers?per_page=100&page=1',
-      '/repos/acme/vector-forge/stargazers?per_page=100&page=3',
-      '/repos/acme/vector-forge/stargazers?per_page=100&page=2',
-    ]);
-    expect(accepts).toEqual([
-      'application/vnd.github.star+json',
-      'application/vnd.github.star+json',
-      'application/vnd.github.star+json',
+    // One history page covers 30 weeks, so it already reaches past the 35-day cutoff.
+    expect(paths).toEqual([
+      '/repos/acme/vector-forge/stargazers/count',
+      '/repos/acme/vector-forge/stargazers/history?per_page=30&page=1',
     ]);
     expect(daily).toHaveLength(35);
-    expect(daily?.[0]).toEqual({ metric: 'stars', day: '2026-09-14', value: 199 });
-    expect(daily?.at(-1)).toEqual({ metric: 'stars', day: '2026-10-18', value: 202 });
+    // 200 now, minus the 7 stars created after 2026-09-14 (today's partial day included).
+    expect(daily?.[0]).toEqual({ metric: 'stars', day: '2026-09-14', value: 193 });
+    expect(daily?.at(-1)).toEqual({ metric: 'stars', day: '2026-10-18', value: 199 });
   });
 
-  it('caps the stargazer walk at BACKFILL_GITHUB_MAX_PAGES and omits uncovered days (GAP-7)', async () => {
-    const h = harness({ tokenCount: 1, backfillMaxPages: 2 });
-    const pages: string[] = [];
+  it('caps history paging at BACKFILL_GITHUB_MAX_PAGES and omits uncovered days (GAP-7)', async () => {
+    const h = harness({ tokenCount: 1, backfillMaxPages: 1 });
+    const paths: string[] = [];
+    const record = (opts: { path: string }) => {
+      paths.push(opts.path);
+    };
+    pool.intercept({ path: '/repos/acme/big/stargazers/count', method: 'GET' }).reply((opts) => {
+      record(opts);
+      return {
+        statusCode: 200,
+        data: JSON.stringify({ count: 10 }),
+        responseOptions: { headers: { 'content-type': 'application/json' } },
+      };
+    });
     pool
-      .intercept({ path: '/repos/acme/big/stargazers?per_page=100&page=1', method: 'GET' })
+      .intercept({
+        path: '/repos/acme/big/stargazers/history?per_page=30&page=1',
+        method: 'GET',
+      })
       .reply((opts) => {
-        pages.push(opts.path);
+        record(opts);
         return {
           statusCode: 200,
-          data: JSON.stringify([]),
-          responseOptions: {
-            headers: {
-              'content-type': 'application/json',
-              link: `<${GITHUB}/repos/acme/big/stargazers?per_page=100&page=5>; rel="last"`,
-            },
-          },
-        };
-      });
-    pool
-      .intercept({ path: '/repos/acme/big/stargazers?per_page=100&page=5', method: 'GET' })
-      .reply((opts) => {
-        pages.push(opts.path);
-        return {
-          statusCode: 200,
-          data: JSON.stringify([{ starred_at: '2026-10-17T10:00:00Z', user: { login: 'recent' } }]),
+          data: JSON.stringify([
+            { week: 1792281600, total: 0, days: [0, 0, 0, 0, 0, 0, 0] },
+            { week: 1791676800, total: 1, days: [0, 0, 0, 0, 0, 0, 1] },
+            { week: 1791072000, total: 0, days: [0, 0, 0, 0, 0, 0, 0] },
+          ]),
           responseOptions: { headers: { 'content-type': 'application/json' } },
         };
       });
 
-    const daily = await h.adapter.backfill?.(context(), ref('acme/big'), 35);
+    const daily = await h.adapter.backfill?.(context(), ref('acme/big'), 365);
 
-    expect(pages).toHaveLength(2); // probe + one walk page, then the cap stops the walk
-    // only days whose post-boundary stars are fully covered are emitted
-    expect(daily).toEqual([
-      { metric: 'stars', day: '2026-10-17', value: 401 },
-      { metric: 'stars', day: '2026-10-18', value: 401 },
-    ]);
+    // count + one history page, then the cap stops paging; older days are omitted.
+    expect(paths).toHaveLength(2);
+    expect(daily).toHaveLength(15);
+    expect(daily?.[0]).toEqual({ metric: 'stars', day: '2026-10-04', value: 9 });
+    expect(daily?.at(-1)).toEqual({ metric: 'stars', day: '2026-10-18', value: 10 });
+  });
+
+  it('skips the history call for a repo with no stars', async () => {
+    const h = harness({ tokenCount: 1 });
+    pool
+      .intercept({ path: '/repos/acme/empty/stargazers/count', method: 'GET' })
+      .reply(200, JSON.stringify({ count: 0 }), {
+        headers: { 'content-type': 'application/json' },
+      });
+
+    const daily = await h.adapter.backfill?.(context(), ref('acme/empty'), 35);
+
+    expect(daily).toEqual([]);
   });
 
   it('marks per-alias NOT_FOUND results and keeps the rest of the batch', async () => {
@@ -575,15 +575,17 @@ describe('github adapter request shapes (spec §7.3.1)', () => {
         headers: { 'content-type': 'application/json' },
       });
 
+    // The recorder writes this fixture from exactly these three aliases
+    // (two live repos + one deliberate NOT_FOUND, spec §16).
     const fetched = await h.adapter.fetchMetrics(
       context(),
-      [ref('acme/vector-forge'), ref('legacy-labs/gone-away'), ref('legacy-labs/old-forge')],
+      [ref('vercel/next.js'), ref('sindresorhus/got'), ref('int-ingest/does-not-exist')],
       { tier: 'hot' },
     );
 
-    expect(fetched.map((item) => item.notFound === true)).toEqual([false, true, false]);
+    expect(fetched.map((item) => item.notFound === true)).toEqual([false, false, true]);
     expect(fetched[0]?.raw).not.toBeNull();
-    expect(fetched[2]?.raw).not.toBeNull();
+    expect(fetched[1]?.raw).not.toBeNull();
   });
 
   it('fails the batch on fatal GraphQL errors, keeping rate limits retryable', async () => {

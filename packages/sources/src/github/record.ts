@@ -3,11 +3,15 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import type { DiscoveredRef } from '../adapter.js';
+import { buildBatchQuery } from './graphql.js';
+
 /**
  * Spec §16 — `pnpm fixtures:record --source github` runs against the live API
  * with `RECORD=1`, writes JSON responses into `__fixtures__/` and strips every
- * token before writing. It also records the GAP-1/7/8 evidence used by the
- * ADRs (GraphQL point cost, stargazer pagination depth, PAT expiry header).
+ * token before writing. It also records the ADR evidence: the GAP-1 GraphQL
+ * point cost, the GAP-7 capture that the stargazers listing is retired for
+ * non-collaborators (ADR 0012) and the GAP-8 PAT expiry header.
  */
 
 const API = 'https://api.github.com';
@@ -231,61 +235,90 @@ async function main(): Promise<void> {
   if (restRepo.status !== 200) throw new Error(`rest repo failed with ${restRepo.status}`);
   await writeFixture('rest-repo.json', restRepo.body, tokens);
 
-  // ── GraphQL batch (fixture + GAP-1 cost at 3 and 50 aliases) ────────────
-  const batch3 = await graphql(
-    ['vercel/next.js', 'sindresorhus/got', 'int-ingest/does-not-exist'],
+  // ── GraphQL: production snapshot fixture + GAP-1 cost at 3 and 50 ───────
+  // The fixture must be the *adapter's* batch shape (tests feed it straight
+  // into `normalize`), so replay `buildBatchQuery` over a live repo, a small
+  // repo and a NOT_FOUND alias instead of the minimal cost probe.
+  const snapshotRefs: DiscoveredRef[] = [
+    { source: 'github', kind: 'repo', externalId: 'vercel/next.js' },
+    { source: 'github', kind: 'repo', externalId: 'sindresorhus/got' },
+    { source: 'github', kind: 'repo', externalId: 'int-ingest/does-not-exist' },
+  ];
+  const snapshotRequest = buildBatchQuery(snapshotRefs);
+  const snapshot = await request(
+    '/graphql',
+    {
+      method: 'POST',
+      body: JSON.stringify({ query: snapshotRequest.query, variables: snapshotRequest.variables }),
+    },
     headers,
   );
-  await writeFixture('graphql-batch.json', batch3.body, tokens);
+  if (snapshot.status !== 200) throw new Error(`graphql snapshot failed with ${snapshot.status}`);
+  await writeFixture('graphql-batch.json', snapshot.body, tokens);
+  const snapshotRateLimit =
+    (JSON.parse(snapshot.body) as { data?: { rateLimit?: { cost: number; remaining: number } } })
+      .data?.rateLimit ?? null;
+
+  const batch3 = await graphql(
+    snapshotRefs.map((ref) => ref.externalId),
+    headers,
+  );
   const batch50 = await graphql(GAP1_REPOS.slice(0, 50), headers);
 
-  // ── stargazers: page 1 + last page + GAP-7 depth probe ──────────────────
-  const starHeaders = { ...headers, accept: STAR_ACCEPT };
-  const page1 = await request(
-    '/repos/sindresorhus/got/stargazers?per_page=100&page=1',
+  // ── stargazers: history + count; the user listing is retired (ADR 0012) ──
+  const history = await request(
+    '/repos/sindresorhus/got/stargazers/history?per_page=30&page=1',
     {},
-    starHeaders,
+    headers,
   );
-  if (page1.status !== 200) throw new Error(`stargazers page 1 failed with ${page1.status}`);
-  await writeFixture('stargazers-page-1.json', page1.body, tokens);
-  const link = page1.headers.get('link');
-  const lastPage = link === null ? 1 : Number(/[?&]page=(\d+)>;\s*rel="last"/.exec(link)?.[1] ?? 1);
-  const last = await request(
-    `/repos/sindresorhus/got/stargazers?per_page=100&page=${lastPage}`,
-    {},
-    starHeaders,
-  );
-  if (last.status !== 200) throw new Error(`stargazers last page failed with ${last.status}`);
-  await writeFixture('stargazers-last.json', last.body, tokens);
+  if (history.status !== 200) throw new Error(`stargazers history failed with ${history.status}`);
+  await writeFixture('stargazers-history.json', history.body, tokens);
+  const historyWeeks = JSON.parse(history.body) as { week: number }[];
 
-  const depthProbe: { repo: string; page: number; status: number; message: string | null }[] = [];
-  for (const page of [398, 400, 401]) {
-    const probe = await request(
-      `/repos/torvalds/linux/stargazers?per_page=100&page=${page}`,
-      {},
-      starHeaders,
-    );
-    let message: string | null = null;
-    try {
-      message = (JSON.parse(probe.body) as { message?: string }).message ?? null;
-    } catch {
-      message = null;
-    }
-    depthProbe.push({ repo: 'torvalds/linux', page, status: probe.status, message });
+  const starsCount = await request('/repos/sindresorhus/got/stargazers/count', {}, headers);
+  if (starsCount.status !== 200) {
+    throw new Error(`stargazers count failed with ${starsCount.status}`);
+  }
+  await writeFixture('stargazers-count.json', starsCount.body, tokens);
+
+  // GAP-7 evidence: the listing is now limited to admins and collaborators
+  // (June 2026 changelog), so capture the refusal the backfill was designed
+  // around — it is why the endpoint swap exists at all.
+  const listing = await request(
+    '/repos/sindresorhus/got/stargazers?per_page=1&page=1',
+    {},
+    { ...headers, accept: STAR_ACCEPT },
+  );
+  await writeFixture('stargazers-listing.json', listing.body, tokens);
+  let listingMessage: string | null = null;
+  try {
+    listingMessage = (JSON.parse(listing.body) as { message?: string }).message ?? null;
+  } catch {
+    listingMessage = null;
   }
 
   const meta = {
     recordedAt: now.toISOString(),
     userAgent,
     graphql: [
-      { aliases: 3, ...(batch3.rateLimit ?? {}) },
-      { aliases: 50, ...(batch50.rateLimit ?? {}) },
+      { aliases: 3, probe: true, ...(batch3.rateLimit ?? {}) },
+      { aliases: 50, probe: true, ...(batch50.rateLimit ?? {}) },
+      { aliases: 3, probe: false, ...(snapshotRateLimit ?? {}) },
     ],
     tokenExpiryHeader: restRepo.headers.get('github-authentication-token-expiration'),
     restEtag: restRepo.headers.get('etag'),
     searchRateLimitRemaining: newHot.headers.get('x-ratelimit-remaining'),
-    stargazers: { repo: 'sindresorhus/got', lastPage, link },
-    stargazerDepthProbe: depthProbe,
+    stargazerHistory: {
+      repo: 'sindresorhus/got',
+      weeksPerPage: historyWeeks.length,
+      newestWeek: historyWeeks[0]?.week ?? null,
+      oldestWeek: historyWeeks.at(-1)?.week ?? null,
+    },
+    stargazerListing: {
+      repo: 'sindresorhus/got',
+      status: listing.status,
+      message: listingMessage,
+    },
   };
   await writeFile(
     join(FIXTURES_DIR, 'meta.json'),
@@ -298,11 +331,10 @@ async function main(): Promise<void> {
     `graphql cost: 3 aliases → ${batch3.rateLimit?.cost}, 50 aliases → ${batch50.rateLimit?.cost}`,
   );
   console.log(`pat expiry header: ${meta.tokenExpiryHeader ?? '(absent)'}`);
-  for (const probe of depthProbe) {
-    console.log(
-      `stargazers ${probe.repo} page ${probe.page}: ${probe.status} ${probe.message ?? ''}`,
-    );
-  }
+  console.log(`stargazers listing (retired): ${listing.status} ${listingMessage ?? ''}`);
+  console.log(
+    `stargazers history: ${historyWeeks.length} weeks recorded (newest ${meta.stargazerHistory.newestWeek})`,
+  );
 }
 
 main().catch((error: unknown) => {
