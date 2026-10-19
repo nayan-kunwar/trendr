@@ -421,6 +421,13 @@ be re-checked later. Decisions with alternatives get an ADR in [`docs/adr/`](./a
   + 404s, hour/day history (14 d hour limit 400), hourly score history and last-run-per-day,
   `days` clamped by an injected `dailyDays: 3`, 48 h hour limit 400, eligible/not_eligible
   explain, aliases in both directions. `apps/api/openapi.json` re-exported (10 paths).
+- **OpenAPI export formatting fix.** `openapi-export.ts` now resolves the repo Prettier config
+  explicitly (`resolveConfig`) before `format()`. Prettier 3's `format()` does **not** resolve a
+  config from `filepath` (verified: it silently formats at the default `printWidth: 80`), while
+  lint-staged rewrites `*.json` with `.prettierrc` (`printWidth: 100`) on every commit — so the
+  committed file and a fresh export disagreed and CI's `openapi:export && git diff --exit-code`
+  staleness check would have failed at the Phase 3 gate. The export is deterministic (stable
+  sha1 across runs) and is a lint-staged fixed point.
 
 ## Environment quirks worth knowing
 

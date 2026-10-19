@@ -13,15 +13,9 @@
     "schemas": {}
   },
   "paths": {
-    "/metrics": {
-      "get": { "responses": { "200": { "description": "Default Response" } } }
-    },
-    "/healthz": {
-      "get": { "responses": { "200": { "description": "Default Response" } } }
-    },
-    "/readyz": {
-      "get": { "responses": { "200": { "description": "Default Response" } } }
-    },
+    "/metrics": { "get": { "responses": { "200": { "description": "Default Response" } } } },
+    "/healthz": { "get": { "responses": { "200": { "description": "Default Response" } } } },
+    "/readyz": { "get": { "responses": { "200": { "description": "Default Response" } } } },
     "/v1/trending": {
       "get": {
         "parameters": [
@@ -36,11 +30,7 @@
             "required": false
           },
           {
-            "schema": {
-              "default": "24h",
-              "type": "string",
-              "enum": ["24h", "7d", "30d"]
-            },
+            "schema": { "default": "24h", "type": "string", "enum": ["24h", "7d", "30d"] },
             "in": "query",
             "name": "window",
             "required": false
@@ -52,10 +42,7 @@
             "required": false
           },
           {
-            "schema": {
-              "type": "string",
-              "pattern": "^[a-z0-9][a-z0-9-]{0,49}$"
-            },
+            "schema": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,49}$" },
             "in": "query",
             "name": "topic",
             "required": false
@@ -76,22 +63,13 @@
             "required": false
           },
           {
-            "schema": {
-              "type": "integer",
-              "minimum": 0,
-              "maximum": 9007199254740991
-            },
+            "schema": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
             "in": "query",
             "name": "minCurrent",
             "required": false
           },
           {
-            "schema": {
-              "default": 50,
-              "type": "integer",
-              "minimum": 1,
-              "maximum": 100
-            },
+            "schema": { "default": 50, "type": "integer", "minimum": 1, "maximum": 100 },
             "in": "query",
             "name": "limit",
             "required": false
@@ -115,10 +93,7 @@
                       "type": "string",
                       "enum": ["all", "github", "npm", "pypi", "huggingface", "arxiv", "mcp"]
                     },
-                    "window": {
-                      "type": "string",
-                      "enum": ["24h", "7d", "30d"]
-                    },
+                    "window": { "type": "string", "enum": ["24h", "7d", "30d"] },
                     "runId": { "type": "string" },
                     "computedAt": {
                       "type": "string",
@@ -160,10 +135,7 @@
                               "description": { "type": ["string", "null"] },
                               "url": { "type": "string", "format": "uri" },
                               "language": { "type": ["string", "null"] },
-                              "topics": {
-                                "type": "array",
-                                "items": { "type": "string" }
-                              },
+                              "topics": { "type": "array", "items": { "type": "string" } },
                               "primaryMetric": {
                                 "type": "string",
                                 "enum": [
@@ -194,10 +166,7 @@
                             ],
                             "additionalProperties": false
                           },
-                          "window": {
-                            "type": "string",
-                            "enum": ["24h", "7d", "30d"]
-                          },
+                          "window": { "type": "string", "enum": ["24h", "7d", "30d"] },
                           "delta": { "type": "number" },
                           "relGrowth": { "type": "number" },
                           "score": { "type": "number" },
@@ -326,10 +295,7 @@
                     "language": { "type": ["string", "null"] },
                     "license": { "type": ["string", "null"] },
                     "owner": { "type": ["string", "null"] },
-                    "topics": {
-                      "type": "array",
-                      "items": { "type": "string" }
-                    },
+                    "topics": { "type": "array", "items": { "type": "string" } },
                     "primaryMetric": {
                       "type": "string",
                       "enum": [
@@ -364,10 +330,7 @@
                       },
                       "additionalProperties": { "type": "number" }
                     },
-                    "tier": {
-                      "type": "string",
-                      "enum": ["hot", "warm", "cold", "archived"]
-                    },
+                    "tier": { "type": "string", "enum": ["hot", "warm", "cold", "archived"] },
                     "flags": { "type": "array", "items": { "type": "string" } },
                     "upstreamCreatedAt": {
                       "anyOf": [
@@ -396,10 +359,7 @@
                     },
                     "scores": {
                       "type": "object",
-                      "propertyNames": {
-                        "type": "string",
-                        "enum": ["24h", "7d", "30d"]
-                      },
+                      "propertyNames": { "type": "string", "enum": ["24h", "7d", "30d"] },
                       "additionalProperties": {
                         "anyOf": [
                           {
@@ -430,10 +390,7 @@
                               "finalScore": { "type": "number" },
                               "zScore": { "type": "number" },
                               "percentile": { "type": "number" },
-                              "flags": {
-                                "type": "array",
-                                "items": { "type": "string" }
-                              }
+                              "flags": { "type": "array", "items": { "type": "string" } }
                             },
                             "required": [
                               "rankSource",
@@ -553,11 +510,7 @@
             "required": false
           },
           {
-            "schema": {
-              "default": "day",
-              "type": "string",
-              "enum": ["hour", "day"]
-            },
+            "schema": { "default": "day", "type": "string", "enum": ["hour", "day"] },
             "in": "query",
             "name": "granularity",
             "required": false
@@ -593,22 +546,13 @@
                         "comments"
                       ]
                     },
-                    "kind": {
-                      "type": "string",
-                      "enum": ["cumulative", "daily_count", "gauge"]
-                    },
-                    "granularity": {
-                      "type": "string",
-                      "enum": ["hour", "day"]
-                    },
+                    "kind": { "type": "string", "enum": ["cumulative", "daily_count", "gauge"] },
+                    "granularity": { "type": "string", "enum": ["hour", "day"] },
                     "points": {
                       "type": "array",
                       "items": {
                         "type": "object",
-                        "properties": {
-                          "t": { "type": "string" },
-                          "v": { "type": "number" }
-                        },
+                        "properties": { "t": { "type": "string" }, "v": { "type": "number" } },
                         "required": ["t", "v"],
                         "additionalProperties": false
                       }
@@ -627,32 +571,19 @@
       "get": {
         "parameters": [
           {
-            "schema": {
-              "default": "7d",
-              "type": "string",
-              "enum": ["24h", "7d", "30d"]
-            },
+            "schema": { "default": "7d", "type": "string", "enum": ["24h", "7d", "30d"] },
             "in": "query",
             "name": "window",
             "required": false
           },
           {
-            "schema": {
-              "default": "day",
-              "type": "string",
-              "enum": ["hour", "day"]
-            },
+            "schema": { "default": "day", "type": "string", "enum": ["hour", "day"] },
             "in": "query",
             "name": "granularity",
             "required": false
           },
           {
-            "schema": {
-              "default": 30,
-              "type": "integer",
-              "minimum": 1,
-              "maximum": 365
-            },
+            "schema": { "default": 30, "type": "integer", "minimum": 1, "maximum": 365 },
             "in": "query",
             "name": "days",
             "required": false
@@ -673,14 +604,8 @@
                   "type": "object",
                   "properties": {
                     "itemId": { "type": "string" },
-                    "window": {
-                      "type": "string",
-                      "enum": ["24h", "7d", "30d"]
-                    },
-                    "granularity": {
-                      "type": "string",
-                      "enum": ["hour", "day"]
-                    },
+                    "window": { "type": "string", "enum": ["24h", "7d", "30d"] },
+                    "granularity": { "type": "string", "enum": ["hour", "day"] },
                     "points": {
                       "type": "array",
                       "items": {
@@ -733,11 +658,7 @@
       "get": {
         "parameters": [
           {
-            "schema": {
-              "default": "24h",
-              "type": "string",
-              "enum": ["24h", "7d", "30d"]
-            },
+            "schema": { "default": "24h", "type": "string", "enum": ["24h", "7d", "30d"] },
             "in": "query",
             "name": "window",
             "required": false
@@ -762,10 +683,7 @@
                       "type": "string",
                       "enum": ["github", "npm", "pypi", "huggingface", "arxiv", "mcp"]
                     },
-                    "window": {
-                      "type": "string",
-                      "enum": ["24h", "7d", "30d"]
-                    },
+                    "window": { "type": "string", "enum": ["24h", "7d", "30d"] },
                     "runId": { "type": ["string", "null"] },
                     "computedAt": {
                       "anyOf": [
@@ -853,10 +771,7 @@
                                 { "type": "null" }
                               ]
                             },
-                            "flags": {
-                              "type": "array",
-                              "items": { "type": "string" }
-                            }
+                            "flags": { "type": "array", "items": { "type": "string" } }
                           },
                           "required": [
                             "delta",
@@ -940,10 +855,7 @@
                           "externalId": { "type": "string" },
                           "url": { "type": "string", "format": "uri" },
                           "evidence": { "type": "string" },
-                          "direction": {
-                            "type": "string",
-                            "enum": ["outgoing", "incoming"]
-                          }
+                          "direction": { "type": "string", "enum": ["outgoing", "incoming"] }
                         },
                         "required": [
                           "id",
