@@ -22,3 +22,13 @@ regexes = ["HF_TOKEN=\n"]
 description = 'fixtures: fabricated int-test-* CLI env values in the scoring int test'
 regexTarget = "match"
 regexes = ['''int-test-[a-z0-9-]+''']
+
+# Verified false positives (Fingerprint 0c7de0b:…:generic-api-key): the API-key format
+# tests build `dt_live_<prefix>_<suffix>` fixtures whose suffix is the literal repeating
+# pattern `abcdef0123456789abcdef0123456789` (`packages/core/src/api-keys.test.ts` and
+# `apps/api/test/int/api-key.int.test.ts`). It is fabricated test data, never a credential;
+# allowlisting the literal keeps every other generic-api-key hit visible.
+[[allowlists]]
+description = 'fixtures: fabricated API-key suffix used by the api-key tests'
+regexTarget = "match"
+regexes = ['''abcdef0123456789abcdef0123456789''']
