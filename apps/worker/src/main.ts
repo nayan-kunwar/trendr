@@ -10,6 +10,7 @@ import { registerIngestAdapters } from './ingestion/adapters.js';
 import { startMetricsServer } from './metrics-server.js';
 import { registry } from './metrics.js';
 import { createIngestWorker } from './processors/ingest.processor.js';
+import { createMaintenanceWorker } from './processors/maintenance.processor.js';
 import { closeQueues, createQueues } from './queues.js';
 import { registerSchedulers } from './scheduler.js';
 import { createScoringWorker } from './scoring/processor.js';
@@ -51,6 +52,22 @@ if (roles.includes('scoring') || roles.includes('ingest')) {
       lastJobByQueue[QUEUE.scoring] = new Date().toISOString();
     });
     workers.push(scoringWorker);
+
+    // §3.2: the maintenance role reuses the scoring process (§7.8 retier-items).
+    const maintenanceWorker = createMaintenanceWorker({
+      db: db.db,
+      connection: redis,
+      deadLetter: queues.deadLetter,
+      logger,
+      hotMaxBySource: {
+        github: env.TRACKED_HOT_MAX_GITHUB,
+        huggingface: env.TRACKED_HOT_MAX_HUGGINGFACE,
+      },
+    });
+    maintenanceWorker.on('completed', () => {
+      lastJobByQueue[QUEUE.maintenance] = new Date().toISOString();
+    });
+    workers.push(maintenanceWorker);
   }
 
   if (roles.includes('ingest')) {

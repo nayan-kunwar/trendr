@@ -1,4 +1,4 @@
-import { SOURCES, WINDOWS, type IngestJob, type Source } from '@trendr/core';
+import { SOURCES, WINDOWS, type IngestJob, type MaintenanceJob, type Source } from '@trendr/core';
 import type { Logger } from '@trendr/logger';
 
 import { defaultJobOpts, type Queues } from './queues.js';
@@ -90,6 +90,26 @@ export const GITHUB_INGEST_SCHEDULES: readonly IngestSchedule[] = [
   },
 ];
 
+export interface MaintenanceSchedule {
+  /** §7.2 scheduler id. */
+  id: string;
+  /** BullMQ job name on the `maintenance` queue. */
+  name: string;
+  /** UTC cron pattern (§7.2 table). */
+  pattern: string;
+  data: MaintenanceJob;
+}
+
+/** Spec §7.2 maintenance rows implemented so far (retier-items, task 4.5). */
+export const MAINTENANCE_SCHEDULES: readonly MaintenanceSchedule[] = [
+  {
+    id: 'retier-items',
+    name: 'retier-items',
+    pattern: '0 5 * * *',
+    data: { type: 'retier-items' },
+  },
+];
+
 export async function registerSchedulers(queues: Queues, logger?: Logger): Promise<string[]> {
   const scoreIds: string[] = [];
   for (const source of SOURCES) {
@@ -130,5 +150,16 @@ export async function registerSchedulers(queues: Queues, logger?: Logger): Promi
     'github ingest schedulers registered',
   );
 
-  return [...scoreIds, ...githubIds];
+  const maintenanceIds: string[] = [];
+  for (const schedule of MAINTENANCE_SCHEDULES) {
+    await queues.maintenance.upsertJobScheduler(
+      schedule.id,
+      { pattern: schedule.pattern, tz: 'UTC' },
+      { name: schedule.name, data: schedule.data, opts: defaultJobOpts },
+    );
+    maintenanceIds.push(schedule.id);
+  }
+  logger?.info({ ids: maintenanceIds }, 'maintenance schedulers registered');
+
+  return [...scoreIds, ...githubIds, ...maintenanceIds];
 }

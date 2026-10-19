@@ -772,6 +772,53 @@ be re-checked later. Decisions with alternatives get an ADR in [`docs/adr/`](./a
   `trigger`, id-derived slot), every tracked item snapshotted, alias stub excluded, fan-out run
   `succeeded` with zero items seen, and children complete.
 
+### Task 4.5 notes
+
+- **Ordered rule engine, pure and testable.** `apps/worker/src/ingestion/tiering.ts` holds
+  `planRetierItems` (pure, order-deterministic) plus `runRetierItems` (one candidate query, one
+  transaction of tier updates). Rules run in §7.8's order: hot → warm → cold → archived.
+- **Hot cap.** Per-source, with the best-7d-percentile tie-break and id as final tie-break. Watched
+  items are exempt from the cap: §7.8 says "capped", but the same section promises an instant
+  promotion on watchlist add, and a nightly demotion of a just-watched item would contradict it.
+  Only `TRACKED_HOT_MAX_GITHUB` / `TRACKED_HOT_MAX_HUGGINGFACE` exist (env), so other sources are
+  uncapped.
+- **Admission minima** for "created ≤ 7 d with primary metric ≥ source admission minimum" come from
+  §7.3's discovery thresholds: GitHub new-hot `stars:>=20`, npm `NPM_MIN_WEEKLY_DOWNLOADS` (200),
+  PyPI `PYPI_MIN_WEEKLY_DOWNLOADS` (500), HF newest `likes>=5`. arXiv and MCP have no
+  metric-based minimum (arXiv uses the ≤ 30 d age rule). Constants live in `ADMISSION_MINIMUM`;
+  `RetierOptions.admissionMinimum` overrides for tests/future tuning.
+- **Growth and "seen" semantics.** Cold = seen in the last 90 d (`GREATEST(last_snapshot_at,
+  last_seen_at)`) or a positive 30 d delta. Cumulative metrics compare the newest snapshot value
+  with the newest value at/before the horizon; daily-count metrics (npm/PyPI downloads) sum
+  `daily_metrics` over the window, and "no rows" means unknown (`null`), never zero. Archived is
+  the fallback of the ordered evaluation (§7.8's "no positive delta for 60 d" cannot be checked
+  *before* "seen in the last 90 days" under the stated order, so the order wins), plus one extra
+  clause: an upstream-archived (`items.is_archived`) **unwatched** item stops polling even if seen
+  recently. Watched items still win the hot rule above.
+- **HF trending top 100 / arXiv.** arXiv is a plain source + age rule. HF trending reads
+  `metadata->>'trendingRank'` when it is a JSON number; the phase-5 HF adapter must record that key
+  (the rule is inert until then — noted in the deferred list).
+- **Instant promotion hook.** `promoteItemToHot(db, ingestQueue, itemId)` sets `tier='hot'` and
+  enqueues `refresh-item` with `jobId.refreshItem(source, itemId, utcDay)`: one refresh per item
+  per UTC day, so a repeated watchlist PUT dedupes the job and reports `already-hot`. Alias stubs
+  are `not-promotable` (their old slug 301s; redirects are never followed). The watchlist
+  endpoints arrive in phase 5; the hook takes its queue as a parameter, so today's integration
+  test exercises it end-to-end.
+- **Maintenance queue + processor.** `Queues` gains `maintenance: Queue<MaintenanceJob>`;
+  `createMaintenanceWorker` is hosted by the `scoring` role (§3.2 "reuses the process"), implements
+  `retier-items`, and throws `UnrecoverableError` for the other §7.10 jobs until their tasks land.
+  The scheduler registers `retier-items` at `0 5 * * *` UTC.
+- **Deferred.** `topics.item_count` maintenance (schema comment "maintained by retier-items job")
+  waits for `item_topics` persistence (already deferred in 4.2/4.3 notes); recomputing today would
+  zero every counter. `trendr_queue_depth` remains a 9.x item.
+- Acceptance coverage: unit — watched + cap exemption, cap tie-break, rank ≤ 200 / ≤ 2000 windows,
+  admission minima, arXiv/HF, warm (≤ 30 d, alias of hot), cold (seen 90 d / positive delta),
+  archived (no growth, upstream archived, watched exemption), no-op changes, input-order
+  determinism; int — promotion sets `hot` and enqueues the deduped refresh (stub refused, missing
+  item reported), and a full `maintenance:retier-items` job moves stale→archived, rank≤200→hot,
+  alias→warm, fresh→hot, live→cold while the watched item stays hot (the shared DB's tiers and
+  `score_runs_current` pointer are saved and restored around the run).
+
 ## Environment quirks worth knowing
 
 - `docker compose port <svc> <port>` exits **0** printing `invalid IP:0` when the port is only

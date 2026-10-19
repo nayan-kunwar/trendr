@@ -107,6 +107,8 @@ export const jobId = {
     `${s}.snapshot.${tier}.${hourIso}.${batch}`,
   daily: (s: string, day: string) => `${s}.daily.${day}`,
   discover: (s: string, strategy: string, slot: string) => `${s}.discover.${strategy}.${slot}`,
+  /** Watchlist instant promotion (§7.8): one refresh per item per UTC day. */
+  refreshItem: (s: string, itemId: string, day: string) => `refresh.${s}.${itemId}.${day}`,
   scoring: (s: string, slot: string) => `score.${s}.${slot}`, // slot = 10-min bucket
   sendDigest: (subId: string, week: string) => `digest.${subId}.${week}`,
   alertEmail: (eventId: string) => `alert.${eventId}`,

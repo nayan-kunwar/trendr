@@ -5,6 +5,7 @@ import { SOURCES } from '@trendr/core';
 import type { Queues } from './queues.js';
 import {
   GITHUB_INGEST_SCHEDULES,
+  MAINTENANCE_SCHEDULES,
   SCORE_SAFETY_PATTERN,
   registerSchedulers,
   scoreSafetySchedulerId,
@@ -40,7 +41,11 @@ function fakeQueues(): { queues: Queues; calls: SchedulerCall[] } {
   });
   const ingest = { github: recorder('ingest-github') };
   return {
-    queues: { ingest, scoring: recorder('scoring') } as unknown as Queues,
+    queues: {
+      ingest,
+      scoring: recorder('scoring'),
+      maintenance: recorder('maintenance'),
+    } as unknown as Queues,
     calls,
   };
 }
@@ -59,7 +64,22 @@ describe('registerSchedulers (spec §7.2)', () => {
       expect(call.tz).toBe('UTC');
       expect(call.name).toBe('compute-scores');
     }
-    expect(ids).toHaveLength(SOURCES.length + GITHUB_INGEST_SCHEDULES.length);
+    expect(ids).toHaveLength(
+      SOURCES.length + GITHUB_INGEST_SCHEDULES.length + MAINTENANCE_SCHEDULES.length,
+    );
+  });
+
+  it('registers the maintenance rows, including the §7.8 retier-items cron', async () => {
+    const { queues, calls } = fakeQueues();
+    await registerSchedulers(queues);
+
+    const maintenanceCalls = calls.filter((call) => call.queue === 'maintenance');
+    expect(maintenanceCalls.map((call) => [call.id, call.pattern])).toEqual([
+      ['retier-items', '0 5 * * *'],
+    ]);
+    expect(maintenanceCalls[0]?.tz).toBe('UTC');
+    expect(maintenanceCalls[0]?.name).toBe('retier-items');
+    expect(maintenanceCalls[0]?.data).toEqual({ type: 'retier-items' });
   });
 
   it('registers the six GitHub rows with their §7.2 crons and payloads', async () => {
