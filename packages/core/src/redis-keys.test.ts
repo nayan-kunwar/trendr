@@ -56,6 +56,11 @@ describe('redisKeys (spec §9.1)', () => {
     expect(redisKeys.apiKeyLastUsed('key-1')).toBe('apikey:last-used:key-1');
   });
 
+  it('builds the SSE concurrency counter key', () => {
+    expect(redisKeys.sseConnections('ip:127.0.0.1')).toBe('apirl:sse:ip:127.0.0.1');
+    expect(redisKeys.sseConnections('key:abc')).toBe('apirl:sse:key:abc');
+  });
+
   it('exports the inbound rate-limit prefix and the events channel', () => {
     expect(API_RATE_LIMIT_KEY_PREFIX).toBe('apirl:');
     expect(LEADERBOARD_EVENTS_CHANNEL).toBe('events:leaderboard');

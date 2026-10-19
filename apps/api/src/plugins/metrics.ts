@@ -1,4 +1,4 @@
-import { Counter, Histogram, Registry, collectDefaultMetrics } from 'prom-client';
+import { Counter, Gauge, Histogram, Registry, collectDefaultMetrics } from 'prom-client';
 import type { FastifyInstance } from 'fastify';
 
 import { UnauthorizedError } from '@trendr/core';
@@ -6,6 +6,13 @@ import { UnauthorizedError } from '@trendr/core';
 export interface MetricsOptions {
   /** Bearer token required by GET /metrics (env: METRICS_TOKEN). */
   metricsToken?: string;
+}
+
+declare module 'fastify' {
+  interface FastifyInstance {
+    /** Gauge `trendr_sse_clients{scope,window}` (spec §10.6). */
+    sseClients: Gauge;
+  }
 }
 
 /**
@@ -29,6 +36,14 @@ export function registerMetrics(app: FastifyInstance, options: MetricsOptions = 
     buckets: [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5],
     registers: [registry],
   });
+  // Spec §10.6 — open SSE streams per board, updated by the stream route.
+  const sseClients = new Gauge({
+    name: 'trendr_sse_clients',
+    help: 'Open leaderboard SSE streams by board.',
+    labelNames: ['scope', 'window'],
+    registers: [registry],
+  });
+  app.decorate('sseClients', sseClients);
 
   app.addHook('onResponse', (request, reply, done) => {
     const rawUrl: unknown = request.routeOptions.url;

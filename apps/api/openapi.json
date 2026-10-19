@@ -1432,6 +1432,29 @@
           }
         }
       }
+    },
+    "/v1/stream/leaderboard": {
+      "get": {
+        "parameters": [
+          {
+            "schema": {
+              "default": "all",
+              "type": "string",
+              "enum": ["all", "github", "npm", "pypi", "huggingface", "arxiv", "mcp"]
+            },
+            "in": "query",
+            "name": "scope",
+            "required": false
+          },
+          {
+            "schema": { "default": "24h", "type": "string", "enum": ["24h", "7d", "30d"] },
+            "in": "query",
+            "name": "window",
+            "required": false
+          }
+        ],
+        "responses": { "200": { "description": "Default Response" } }
+      }
     }
   }
 }

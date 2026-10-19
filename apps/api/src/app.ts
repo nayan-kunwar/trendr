@@ -20,6 +20,7 @@ import { registerItemRoutes } from './routes/items.js';
 import { registerNewRoutes } from './routes/new.js';
 import { registerSearchRoutes } from './routes/search.js';
 import { registerStatsRoutes } from './routes/stats.js';
+import { registerStreamRoutes } from './routes/stream.js';
 import { registerTopicRoutes } from './routes/topics.js';
 import { registerTrendingRoutes } from './routes/trending.js';
 
@@ -101,6 +102,7 @@ export async function buildApp(deps: BuildAppDeps = {}): Promise<FastifyInstance
   registerTopicRoutes(app);
   registerCompareRoutes(app);
   registerStatsRoutes(app);
+  registerStreamRoutes(app, { trustProxy: deps.trustProxy ?? false });
 
   return app;
 }

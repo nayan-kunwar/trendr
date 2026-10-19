@@ -7,6 +7,7 @@ import {
   NotFoundError,
   RateLimitedError,
   UnauthorizedError,
+  UnavailableError,
   UpstreamError,
   ValidationError,
 } from './errors.js';
@@ -18,6 +19,7 @@ const CASES = [
   { make: () => new ForbiddenError('x'), status: 403, type: 'forbidden' },
   { make: () => new ConflictError('x'), status: 409, type: 'conflict' },
   { make: () => new RateLimitedError('x'), status: 429, type: 'rate-limited' },
+  { make: () => new UnavailableError('x'), status: 503, type: 'unavailable' },
 ];
 
 describe('AppError', () => {

@@ -525,6 +525,49 @@ be re-checked later. Decisions with alternatives get an ADR in [`docs/adr/`](./a
   behavior (marker TTL ≤ 60 s, second request leaves `last_used_at` unchanged, re-write
   after the window lapses). `openapi.json` re-exported (still 16 paths — no wire changes).
 
+### Task 3.6 notes
+
+- **Route + contract.** `GET /v1/stream/leaderboard?scope&window` implements §10.6:
+  `retry: 5000`, then `id: {runId}` / `event: leaderboard.snapshot` with the top-25
+  (`lbmeta` + `ZREVRANGE WITHSCORES` + `card:{itemId}:{window}` deltas, missing/invalid
+  card → delta 0), `event: leaderboard.update` frames for every `events:leaderboard`
+  PUBLISH on the same board, 25 s `: ping` comments and `event: shutdown` on process exit.
+  `Last-Event-ID` equal to the current `runId` skips the snapshot frame entirely (§10.6).
+- **Update frame minus internals.** The wire payload keeps §10.6's example shape
+  (`scope`, `window`, `runId`, `movers`, `entered`, `exited`); the internal `type` and
+  `computedAt` from `LeaderboardUpdatedEventSchema` are dropped (the example does not
+  carry them, and `id:` already tracks the run).
+- **Registered even without Redis.** `registerStreamRoutes` always adds the path (so
+  `openapi:export` and no-Redis builds still collect it) and answers 503 `unavailable`
+  (new core `UnavailableError`) when `redis`/`redisSub` decorators are absent.
+- **Concurrency cap (§10.5 `sse` tier).** `redisKeys.sseConnections` →
+  `apirl:sse:{keyId|ip}` reuses the limiter's identity (key id ‖ user id ‖ IP) and
+  `TRUST_PROXY` handling. INCR → 6th concurrent stream is 429 `rate-limited` problem+json
+  (DECR before throwing); counters carry a 86 400 s safety TTL refreshed on connect and are
+  DECR'd + DEL'd at zero on socket close. Redis errors during cap accounting fail open
+  (warn + serve) and DECR failures never affect the client.
+- **ioredis subscribe race (library quirk).** `subscribe` is flagged `loading` in
+  `@ioredis/commands`, so calling it while the client is still connecting writes SUBSCRIBE
+  mid-handshake, races ioredis's own INFO/CLIENT commands, resolves without a real
+  subscription and emits a swallowed "Connection in subscriber mode" error. The broadcaster
+  waits for `ready` before SUBSCRIBE (and only UNSUBSCRIBEs on a ready client); without this
+  fix the stream served snapshots but never updates on a fresh app.
+- **Backpressure + cleanup.** If `raw.write` reports a full socket buffer, a 10 s drain
+  timer drops the connection when `drain` never arrives (§10.6). One `finalize` path
+  (socket close, once) stops the heartbeat, clears timers, removes the client from the
+  broadcaster, updates the gauge and releases the counter slot.
+- **Metrics.** `trendr_sse_clients{scope,window}` gauge lives in the existing registry and
+  is set on add/remove; the stream route is registered after `registerMetrics`.
+- Tests: unit `broadcaster.test.ts` (10 — subscribe gating, board routing, malformed
+  events, membership, shutdown frame, close) and `stream.test.ts` (3 — snapshot frame id /
+  Last-Event-ID skip, heartbeat fake timers); int `stream.int.test.ts` (2, real HTTP +
+  `fetch` streaming) — snapshot then update after a real PUBLISH (retry, runId id, deltas,
+  no `type` leak), Last-Event-ID skip, 5 concurrent + 6th → 429 problem, abort drains the
+  counter and a fresh stream is accepted. `openapi.json` re-exported (17 paths).
+- **Startup pub/sub race (accepted).** The broadcaster subscribes asynchronously at boot;
+  a PUBLISH in the first milliseconds can land before SUBSCRIBE. Reconnect/snapshot covers
+  state; int tests wait for `PUBSUB CHANNELS` to include the channel before publishing.
+
 ## Environment quirks worth knowing
 
 - `docker compose port <svc> <port>` exits **0** printing `invalid IP:0` when the port is only

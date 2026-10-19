@@ -53,6 +53,12 @@ export class RateLimitedError extends AppError {
   override readonly type = 'rate-limited';
 }
 
+/** Redis-backed surfaces (SSE) when their store is missing or down (spec §5.3). */
+export class UnavailableError extends AppError {
+  override readonly status = 503;
+  override readonly type = 'unavailable';
+}
+
 /** Upstream error with retry semantics, used by workers (not exposed via API). */
 export class UpstreamError extends Error {
   constructor(

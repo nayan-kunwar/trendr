@@ -55,6 +55,9 @@ export const redisKeys = {
 
   /** `apikey:last-used:{id}` — NX marker so `api_keys.last_used_at` writes at most once a minute (spec §10.5). */
   apiKeyLastUsed: (id: string): string => `apikey:last-used:${id}`,
+
+  /** `apirl:sse:{keyId|ip}` — concurrent SSE stream counter with INCR/DECR (spec §9.1, §10.5). */
+  sseConnections: (identity: string): string => `apirl:sse:${identity}`,
 } as const;
 
 /** Key prefix for inbound API rate limiting, owned by `@fastify/rate-limit` (spec §9.1). */
