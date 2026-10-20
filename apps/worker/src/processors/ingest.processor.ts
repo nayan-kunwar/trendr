@@ -77,6 +77,8 @@ export interface IngestResult {
   itemsSeen: number;
   itemsUpserted: number;
   itemsFailed: number;
+  /** Additive §7.3.2 signal: persisted items whose newest daily bucket is late. */
+  itemsIncomplete: number;
 }
 
 export interface IngestWorkerOptions {
@@ -174,7 +176,8 @@ export async function processIngestJob(
     throw asJobError(error);
   }
 
-  const status = recorder.itemsFailed === 0 ? 'succeeded' : 'partial';
+  const status =
+    recorder.itemsFailed === 0 && recorder.itemsIncomplete === 0 ? 'succeeded' : 'partial';
   await recorder.finish(status);
   deps.logger.info(
     {
@@ -185,6 +188,7 @@ export async function processIngestJob(
       seen: recorder.itemsSeen,
       upserted: recorder.itemsUpserted,
       failed: recorder.itemsFailed,
+      incomplete: recorder.itemsIncomplete,
     },
     'ingest run finished',
   );
@@ -195,6 +199,7 @@ export async function processIngestJob(
     itemsSeen: recorder.itemsSeen,
     itemsUpserted: recorder.itemsUpserted,
     itemsFailed: recorder.itemsFailed,
+    itemsIncomplete: recorder.itemsIncomplete,
   };
 }
 
@@ -383,7 +388,12 @@ async function runSnapshot(input: JobRunInput, data: SnapshotJob): Promise<void>
  * `FetchOptions.tier` hint accurate.
  */
 async function runDaily(input: JobRunInput, data: DailyJob): Promise<void> {
-  const rows = await listTrackedItems(input.deps.db, { source: data.source });
+  // §7.8: archived items get a weekly existence check only, so they are not
+  // part of the daily download sweep.
+  const rows = await listTrackedItems(input.deps.db, {
+    source: data.source,
+    excludeArchived: true,
+  });
 
   const byTier = new Map<Tier, DiscoveredRef[]>();
   for (const row of rows) {
@@ -441,7 +451,7 @@ async function fetchAndPersist(input: FetchAndPersistInput): Promise<void> {
 
   for (const chunk of chunked(refs, Math.max(1, adapter.batchSize))) {
     context.signal.throwIfAborted();
-    const fetched = await adapter.fetchMetrics(context, chunk, { tier });
+    const fetched = await adapter.fetchMetrics(context, chunk, { tier, mode });
 
     const toPersist: NormalizedItem[] = [];
     for (const item of fetched) {
@@ -454,6 +464,15 @@ async function fetchAndPersist(input: FetchAndPersistInput): Promise<void> {
         recorder.notModified += 1;
         notModified.push(item.ref);
         continue;
+      }
+      if (item.dailyIncomplete === true) {
+        // §7.3.2: the newest daily bucket has not landed; persist the days
+        // that did and close the run `partial` (the retry fills the gap).
+        recorder.itemsIncomplete += 1;
+        context.logger.warn(
+          { externalId: item.ref.externalId },
+          'daily series incomplete upstream — run will be partial',
+        );
       }
       const normalized = adapter.normalize(item);
       if (normalized === null) {
@@ -588,6 +607,7 @@ async function skipScheduledJob(
     itemsSeen: 0,
     itemsUpserted: 0,
     itemsFailed: 0,
+    itemsIncomplete: 0,
   };
 }
 

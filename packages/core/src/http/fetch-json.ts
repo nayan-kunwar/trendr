@@ -139,24 +139,31 @@ function isRateLimitResponse(response: Response): boolean {
   );
 }
 
-/** retry-after (s or HTTP-date) → x-ratelimit-reset (epoch s) → 60 s (§7.4). */
+/**
+ * retry-after (s or HTTP-date) → x-ratelimit-reset (epoch s) → 60 s (§7.4).
+ * A zero or already-past value means "retry now" to some upstreams — Cloudflare
+ * sends `Retry-After: 0` on a mitigation that actually lasts about a minute —
+ * and pausing for 1 ms lets the retry extend the block, so those fall back too.
+ */
 function rateLimitDelayMs(headers: Headers, now = Date.now()): number {
   const retryAfter = headers.get('retry-after');
   if (retryAfter !== null) {
     const seconds = Number(retryAfter);
-    if (Number.isFinite(seconds) && seconds >= 0) {
-      return Math.round(seconds * 1000);
+    if (Number.isFinite(seconds)) {
+      return seconds > 0 ? Math.round(seconds * 1000) : RATE_LIMIT_FALLBACK_MS;
     }
     const date = Date.parse(retryAfter);
     if (!Number.isNaN(date)) {
-      return Math.max(0, date - now);
+      const delay = date - now;
+      return delay > 0 ? delay : RATE_LIMIT_FALLBACK_MS;
     }
   }
   const reset = headers.get('x-ratelimit-reset');
   if (reset !== null) {
     const epochSeconds = Number(reset);
     if (Number.isFinite(epochSeconds) && epochSeconds > 0) {
-      return Math.max(0, epochSeconds * 1000 - now);
+      const delay = epochSeconds * 1000 - now;
+      return delay > 0 ? delay : RATE_LIMIT_FALLBACK_MS;
     }
   }
   return RATE_LIMIT_FALLBACK_MS;

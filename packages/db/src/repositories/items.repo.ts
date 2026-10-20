@@ -46,6 +46,13 @@ export interface UpsertItemsOptions {
    * tiering owns it after the first write.
    */
   newItemTier?: Tier;
+  /**
+   * Keep the existing descriptive columns when the incoming value is null.
+   * Daily jobs (§7.1 step 4: "only the daily series") carry no metadata for
+   * npm/PyPI, so without this a download refresh would blank descriptions,
+   * homepages, languages, licenses and owners.
+   */
+  preserveMetadata?: boolean;
 }
 
 /**
@@ -53,8 +60,10 @@ export interface UpsertItemsOptions {
  * conflict the upstream-owned columns are replaced by the new values while
  * `tier`, `is_deleted`, `first_seen_at`, `last_snapshot_at` and
  * `latest_metrics` are preserved. `flags` merge as a union so system flags
- * (`burst_suspected`, `manual_hidden`) survive adapter writes. Returns the ids
- * so callers can write snapshots in the same transaction.
+ * (`burst_suspected`, `manual_hidden`) survive adapter writes. With
+ * `preserveMetadata`, a null descriptive column keeps the stored value
+ * (daily jobs carry only the download series). Returns the ids so callers can
+ * write snapshots in the same transaction.
  */
 export async function upsertItems(
   db: DbExecutor,
@@ -62,6 +71,21 @@ export async function upsertItems(
   options: UpsertItemsOptions = {},
 ): Promise<UpsertedItem[]> {
   if (rows.length === 0) return [];
+  const description = options.preserveMetadata
+    ? sql`coalesce(excluded.description, ${items.description})`
+    : sql`excluded.description`;
+  const homepage = options.preserveMetadata
+    ? sql`coalesce(excluded.homepage, ${items.homepage})`
+    : sql`excluded.homepage`;
+  const language = options.preserveMetadata
+    ? sql`coalesce(excluded.language, ${items.language})`
+    : sql`excluded.language`;
+  const license = options.preserveMetadata
+    ? sql`coalesce(excluded.license, ${items.license})`
+    : sql`excluded.license`;
+  const owner = options.preserveMetadata
+    ? sql`coalesce(excluded.owner, ${items.owner})`
+    : sql`excluded.owner`;
 
   return db
     .insert(items)
@@ -78,12 +102,12 @@ export async function upsertItems(
         upstreamId: sql`coalesce(excluded.upstream_id, ${items.upstreamId})`,
         name: sql`excluded.name`,
         displayName: sql`excluded.display_name`,
-        description: sql`excluded.description`,
+        description,
         url: sql`excluded.url`,
-        homepage: sql`excluded.homepage`,
-        language: sql`excluded.language`,
-        license: sql`excluded.license`,
-        owner: sql`excluded.owner`,
+        homepage,
+        language,
+        license,
+        owner,
         primaryMetric: sql`excluded.primary_metric`,
         upstreamCreatedAt: sql`coalesce(excluded.upstream_created_at, ${items.upstreamCreatedAt})`,
         isArchived: sql`excluded.is_archived`,
@@ -267,6 +291,8 @@ export interface TrackedItemsQuery {
   /** `id % batchCount = batch` — the deterministic fan-out slice (spec §7.1). */
   batch?: number;
   batchCount?: number;
+  /** Spec §7.8: archived items get a weekly existence check only, never a daily fetch. */
+  excludeArchived?: boolean;
 }
 
 /**
@@ -310,6 +336,9 @@ function trackedItemFilters(query: TrackedItemsQuery) {
   ];
   if (query.tier !== undefined) {
     filters.push(eq(items.tier, query.tier));
+  }
+  if (query.excludeArchived === true) {
+    filters.push(sql`${items.tier} <> 'archived'`);
   }
   if (query.batch !== undefined && query.batchCount !== undefined) {
     filters.push(sql`${items.id} % ${query.batchCount} = ${query.batch}`);

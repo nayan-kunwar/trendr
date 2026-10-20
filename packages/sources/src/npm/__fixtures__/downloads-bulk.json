@@ -1,0 +1,59 @@
+{
+  "react": {
+    "downloads": [
+      {
+        "downloads": 36331234,
+        "day": "2026-10-16"
+      },
+      {
+        "downloads": 22474334,
+        "day": "2026-10-17"
+      },
+      {
+        "downloads": 22430010,
+        "day": "2026-10-18"
+      }
+    ],
+    "package": "react",
+    "start": "2026-10-16",
+    "end": "2026-10-18"
+  },
+  "vue": {
+    "downloads": [
+      {
+        "downloads": 3461847,
+        "day": "2026-10-16"
+      },
+      {
+        "downloads": 1641336,
+        "day": "2026-10-17"
+      },
+      {
+        "downloads": 1699859,
+        "day": "2026-10-18"
+      }
+    ],
+    "package": "vue",
+    "start": "2026-10-16",
+    "end": "2026-10-18"
+  },
+  "typescript": {
+    "downloads": [
+      {
+        "downloads": 58943628,
+        "day": "2026-10-16"
+      },
+      {
+        "downloads": 33607749,
+        "day": "2026-10-17"
+      },
+      {
+        "downloads": 34717778,
+        "day": "2026-10-18"
+      }
+    ],
+    "package": "typescript",
+    "start": "2026-10-16",
+    "end": "2026-10-18"
+  }
+}

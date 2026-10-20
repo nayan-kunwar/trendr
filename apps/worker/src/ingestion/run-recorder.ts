@@ -21,6 +21,8 @@ export class RunRecorder {
   itemsSeen = 0;
   itemsUpserted = 0;
   itemsFailed = 0;
+  /** Additive §7.3.2 signal: items persisted with a lagging daily series. */
+  itemsIncomplete = 0;
   apiCalls = 0;
   notModified = 0;
   rateLimitRemaining: number | null = null;

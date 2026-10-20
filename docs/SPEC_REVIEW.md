@@ -914,6 +914,90 @@ be re-checked later. Decisions with alternatives get an ADR in [`docs/adr/`](./a
   contract (sign defaults `iss=trendr`/`aud=trendr-api`/15 min, foreign issuer or audience rejected,
   guard returns a promise and yields the 401/403/200 matrix).
 
+### Task 5.1 notes
+
+- **Adapter surface.** `packages/sources/src/npm` implements keyword discovery (`text=keywords:{k}`,
+  `size=250`, `from ≤ 1000`), the full packument on snapshot/refresh, bulk/scoped download ranges and
+  the 60-day backfill. Discovery rotates the 19 spec keywords by 6-hour UTC slot so a fixed
+  `maxItems=1000` budget does not starve the tail; admission is `downloads.weekly ≥
+  NPM_MIN_WEEKLY_DOWNLOADS` (200) **or** latest publish ≤ 30 days (the spec's rule).
+- **Daily anchor (deviation, observed live).** The spec says `range/{D-2}:{D}` and treats a missing
+  D as late. In practice npm echoes the requested `end` and fills a day it has not computed yet
+  with `0`: on 2026-10-20 at 03:09Z, `point/last-day/react` returned `2026-10-18`, while
+  `range/2026-10-17:2026-10-19/react` returned `2026-10-19` with `0`. Anchoring on "UTC yesterday"
+  would therefore persist a false zero (and a collapsed latest metric). The adapter probes
+  `GET /downloads/point/last-day/{watermarkPackage}` (default `react`, cached 10 min per process)
+  and builds the 3-day window ending at that day. `dailyIncomplete` is still set — and the run still
+  closes `partial` — when a package's response lacks the watermark day, so the 06:00 retry can fill
+  it. The recorder stores `point-last-day.json` and `meta.lastDay/window` as evidence.
+- **Metadata cadence.** Search results carry `description`, `keywords`, `license`, `publisher`,
+  `links.homepage` and `links.repository`, so discovery normalizes full rows and emits the
+  `package_of` GitHub alias without a packument (`links.repository` → GitHub; 0.9 confidence,
+  evidence `npm.repository.url`). `upstream_created_at` is deliberately **null** from search: the
+  API's `package.date` is the latest *publish* date (verified: `react`'s is 2026, its creation is
+  2011). The full packument's `time.created` fills it on refresh/backfill; the weekly metadata
+  cadence and alias persistence land in task 5.6. Only the latest version manifest is inspected for
+  `types`/`typings`/license fallbacks.
+- **Contract extensions (additive).** `FetchedItem.dailyIncomplete?` (§7.3.2 partial signal),
+  `FetchOptions.mode?: 'snapshot' | 'daily'` (daily may skip metadata calls), and `DailyJob.day?`
+  (BullMQ scheduler templates are static; the scheduled rows omit it and adapters anchor on
+  `ctx.now()`; manual jobs may still carry a day). The run result/log gain `itemsIncomplete`;
+  `ingestion_runs` is unchanged because the spec's table has no such column.
+- **Persistence.** Daily payloads carry only the series, so `upsertItems({preserveMetadata:true})`
+  coalesces null description/homepage/language/license/owner; `upsertDailyMetrics({
+  refreshAggregates:true})` mirrors the newest stored day into `items.latest_metrics` (the spec's
+  daily-count model otherwise leaves the item row at `{}`; the seed models this too). Backfill uses
+  the same refresh. `listTrackedItems({excludeArchived:true})` keeps `archived` items out of the
+  daily sweep (§7.8).
+- **Scoped/bulk limits.** Scoped names are encoded `@scope%2Fname`; the bulk endpoint rejects them
+  with HTTP 400 (captured in `meta.scopedBulk`), so each scoped package gets its own range request.
+  Unscoped names are chunked at 128. Bulk `null` entries (unknown package, HTTP 200) map to
+  `notFound`; a 404 on a single request does too. Response search `.../react,vue,typescript` order
+  is irrelevant to mapping.
+- **Schedules.** `npm-discover` `0 */6 * * *` (`maxItems=1000`), `npm-daily` `30 2 * * *`,
+  `npm-daily-retry` `0 6 * * *` (§7.2/§7.3.2). The retry is a second scheduler id for the same
+  static payload; re-running the moving 3-day window at 06:00 repairs a `partial` 02:30 run and
+  picks up late corrections if npm's `last-day` advanced in the meantime.
+- **Downloads rate (deviation, observed live).** §7.4 lists `npm:downloads` at 5 burst / 2 req/s
+  but marks the number "verify" because npm publishes no limit. Live 2026-10-20: a 240-package
+  daily sweep (143 scoped, hence 143 one-package range requests) hit a Cloudflare **429** at
+  `api.npmjs.org` on the 25th unique range request in ~12 s. The response was an HTML mitigation
+  page with `Retry-After: 0`, not JSON. Because `fetchJson` honored the zero literally, the bucket
+  paused for 1 ms and BullMQ's quick retries kept extending the block, exhausting all five
+  attempts. Two fixes: `fetchJson` now treats `Retry-After: 0` (and already-past reset values) as
+  the 60 s fallback, and the bucket is capacity 2 / **0.2 req/s** (12/min). The spec asks for a
+  conservative bucket where the limit is undocumented; a 15-package probe at ~9/min was clean.
+  A full 240-item sweep at 12/min is projected at ~12 minutes, which fits the 02:30→06:00 window;
+  if the tracked set grows, scoped packages will need a weekly-range or partial-sweep strategy.
+  The full 240-item run was not exercised end-to-end: after the rate fix the worker container's
+  `api.npmjs.org` connections intermittently timed out (host requests were 200), so live
+  acceptance used the subset recorded below. The timeouts were network errors, not 429s.
+- **Fixtures.** `RECORD=1 pnpm fixtures:record --source npm` captures the live search, an
+  `is-number` full packument, a 3-package bulk range, a scoped range, the `last-day` point and the
+  scoped-bulk 400 evidence. No credentials; the token/header scan still applies to the packument
+  README text.
+- **Deferred.** Alias persistence + `item_topics` (as in 4.2/4.3), weekly packument refresh,
+  discovery→backfill fan-out (backfill is callable and accepted live via the admin endpoint, but no
+  automatic enqueue yet), and `TRACKED_MAX_NPM` enforcement (the cap-check task remains open).
+- Acceptance coverage: unit — day/encoding/chunk/URL-parser maths, keyword rotation, search
+  admission, bulk/scoped request shapes, `last-day` anchoring, packument 404, backfill clamp,
+  fixture normalization and the no-secret scan. Int (real Postgres + Redis + BullMQ) — a daily run
+  persists available days, preserves discovery metadata, mirrors `latest_metrics`, closes
+  `partial` with `itemsIncomplete=1`, skips archived items; a backfill job writes its series and
+  refreshes the aggregate. The int test parks foreign seeded npm items in `archived` for its run
+  and restores them (shared DB).
+- **Live acceptance (2026-10-20).** Discovery `keywords` with `maxItems=200`: 200 seen / 200
+  upserted / 0 failed (240 npm items total after the 40 seeded). The daily sweep ran on a 49-item
+  subset: 40 seeded + 10 discovered (5 scoped), with the other 190 discovered items temporarily
+  parked in `archived` and restored afterwards because the container's npm egress kept timing out.
+  It failed attempts 1–2 on the `last-day` probe (`fetch failed`) and succeeded on attempt 3:
+  49 seen / **49 upserted / 0 failed**. All 10 discovered samples have three days
+  (`2026-10-16..2026-10-18`), including scoped packages, and `latest_metrics.downloads` mirrors
+  the 10-18 value (e.g. `agentdb` 16080/19092/16293, latest 16293). The parked
+  `jina-ai-provider` has no rows for the window (archived exclusion). A 60-day backfill of
+  `agentdb` (id 3335) succeeded: **61 rows `2026-08-19..2026-10-18`**, 8 valid zero days, latest
+  still 16293. The 190 restored items will be swept by the next scheduled daily.
+
 ## Environment quirks worth knowing
 
 - `docker compose port <svc> <port>` exits **0** printing `invalid IP:0` when the port is only
@@ -937,4 +1021,7 @@ be re-checked later. Decisions with alternatives get an ADR in [`docs/adr/`](./a
   while the same request from the host (or a later container request) succeeds. The 17:30Z
   2026-10-19 discover job hit this on its first four attempts (in-process retries included) and
   succeeded on the fifth; treat such flakes as environmental and let §7.5 retries absorb them
-  before suspecting the adapter.
+  before suspecting the adapter. The same container→`api.npmjs.org` path flaked on 2026-10-20
+  (host `curl` returned 200 while container `fetch` gave `ETIMEDOUT`); the npm live daily passed
+  on a reduced set on attempt 3. Explicit `429` HTML responses with `Retry-After: 0` are a
+  different, rate-limit issue handled above.

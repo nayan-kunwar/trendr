@@ -1,0 +1,30 @@
+{
+  "recordedAt": "2026-10-20T03:11:14.914Z",
+  "userAgent": "Trendr/1.0 (+https://github.com/nayankunwar/trendr)",
+  "window": {
+    "start": "2026-10-16",
+    "end": "2026-10-18",
+    "days": ["2026-10-16", "2026-10-17", "2026-10-18"]
+  },
+  "lastDay": {
+    "downloads": 22430010,
+    "start": "2026-10-18",
+    "end": "2026-10-18",
+    "package": "react"
+  },
+  "bulkPackages": ["react", "vue", "typescript"],
+  "scopedPackage": "@modelcontextprotocol/sdk",
+  "search": {
+    "cacheControl": "max-age=300",
+    "repository": "git+https://github.com/modelcontextprotocol/typescript-sdk.git"
+  },
+  "packument": {
+    "package": "is-number",
+    "repository": "git+https://github.com/jonschlinkert/is-number.git",
+    "cacheControl": "public, max-age=300"
+  },
+  "scopedBulk": {
+    "status": 400,
+    "body": "{\"error\":\"scoped packages are not currently supported in bulk lookups\"}"
+  }
+}

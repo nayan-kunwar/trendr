@@ -52,7 +52,16 @@ export const IngestJobSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('daily'),
     source: SourceSchema,
-    day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    /**
+     * Additive relaxation of the §5.2 shape: BullMQ `upsertJobScheduler`
+     * templates are static, so a per-tick UTC day cannot be supplied. The
+     * scheduled job omits it; adapters anchor the window on `ctx.now()`.
+     * Manual/backfill-style jobs may still carry the day for reproducibility.
+     */
+    day: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/)
+      .optional(),
     trigger: IngestTriggerSchema.optional(),
   }),
   z.object({

@@ -19,7 +19,7 @@ export function scoreSafetySchedulerId(source: Source): string {
 export interface IngestSchedule {
   /** §7.2 scheduler id (`gh-…`). */
   id: string;
-  /** BullMQ job name on the `ingest-github` queue. */
+  /** BullMQ job name on the source's `ingest-{source}` queue. */
   name: string;
   /** UTC cron pattern (§7.2 table). */
   pattern: string;
@@ -90,6 +90,48 @@ export const GITHUB_INGEST_SCHEDULES: readonly IngestSchedule[] = [
   },
 ];
 
+/**
+ * Spec §7.2 npm rows. `npm-daily-retry` is a second scheduler id for the same
+ * daily job: BullMQ stores one cron per scheduler id, and the 06:00 retry is
+ * the documented gap-filler for a `partial` 02:30 run (§7.3.2).
+ */
+export const NPM_INGEST_SCHEDULES: readonly IngestSchedule[] = [
+  {
+    id: 'npm-discover',
+    name: 'discover',
+    pattern: '0 */6 * * *',
+    data: {
+      type: 'discover',
+      source: 'npm',
+      strategy: 'keywords',
+      maxItems: 1000,
+      trigger: 'schedule',
+    },
+  },
+  {
+    id: 'npm-daily',
+    name: 'daily',
+    pattern: '30 2 * * *',
+    data: { type: 'daily', source: 'npm', trigger: 'schedule' },
+  },
+  {
+    id: 'npm-daily-retry',
+    name: 'daily',
+    pattern: '0 6 * * *',
+    data: { type: 'daily', source: 'npm', trigger: 'schedule' },
+  },
+];
+
+/** Every implemented ingest row, by source (spec §7.2). */
+export const INGEST_SCHEDULES: Readonly<Record<Source, readonly IngestSchedule[]>> = {
+  github: GITHUB_INGEST_SCHEDULES,
+  npm: NPM_INGEST_SCHEDULES,
+  pypi: [],
+  huggingface: [],
+  arxiv: [],
+  mcp: [],
+};
+
 export interface MaintenanceSchedule {
   /** §7.2 scheduler id. */
   id: string;
@@ -130,24 +172,29 @@ export async function registerSchedulers(queues: Queues, logger?: Logger): Promi
     'score-safety schedulers registered',
   );
 
-  const githubIds: string[] = [];
-  for (const schedule of GITHUB_INGEST_SCHEDULES) {
-    await queues.ingest.github.upsertJobScheduler(
-      schedule.id,
-      { pattern: schedule.pattern, tz: 'UTC' },
-      { name: schedule.name, data: schedule.data, opts: defaultJobOpts },
-    );
-    githubIds.push(schedule.id);
+  const ingestIds: string[] = [];
+  for (const source of SOURCES) {
+    for (const schedule of INGEST_SCHEDULES[source]) {
+      await queues.ingest[source].upsertJobScheduler(
+        schedule.id,
+        { pattern: schedule.pattern, tz: 'UTC' },
+        { name: schedule.name, data: schedule.data, opts: defaultJobOpts },
+      );
+      ingestIds.push(schedule.id);
+    }
   }
   logger?.info(
     {
-      ids: githubIds,
-      schedules: GITHUB_INGEST_SCHEDULES.map((entry) => ({
-        id: entry.id,
-        pattern: entry.pattern,
-      })),
+      ids: ingestIds,
+      schedules: SOURCES.flatMap((source) =>
+        INGEST_SCHEDULES[source].map((entry) => ({
+          source,
+          id: entry.id,
+          pattern: entry.pattern,
+        })),
+      ),
     },
-    'github ingest schedulers registered',
+    'ingest schedulers registered',
   );
 
   const maintenanceIds: string[] = [];
@@ -161,5 +208,5 @@ export async function registerSchedulers(queues: Queues, logger?: Logger): Promi
   }
   logger?.info({ ids: maintenanceIds }, 'maintenance schedulers registered');
 
-  return [...scoreIds, ...githubIds, ...maintenanceIds];
+  return [...scoreIds, ...ingestIds, ...maintenanceIds];
 }

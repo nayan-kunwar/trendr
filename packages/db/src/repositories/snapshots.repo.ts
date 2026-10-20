@@ -3,6 +3,7 @@ import { and, asc, eq, gte, lte, sql } from 'drizzle-orm';
 import type { Metric } from '@trendr/core';
 
 import type { DbExecutor } from '../client.js';
+import { items } from '../schema/items.js';
 import { dailyMetrics } from '../schema/metrics.js';
 import { snapshots } from '../schema/snapshots.js';
 
@@ -117,8 +118,22 @@ export interface DailyMetricUpsert {
   value: number;
 }
 
+export interface UpsertDailyMetricsOptions {
+  /**
+   * Mirror the newest stored day of each touched `(item, metric)` into
+   * `items.latest_metrics`. Daily-count sources keep only `daily_metrics`
+   * rows, so the item row would otherwise never show a current download
+   * count (the seed models this too). Disable for historical-only writes.
+   */
+  refreshAggregates?: boolean;
+}
+
 /** Idempotent per-day aggregate upsert (spec §6.3). */
-export async function upsertDailyMetrics(db: DbExecutor, rows: DailyMetricUpsert[]): Promise<void> {
+export async function upsertDailyMetrics(
+  db: DbExecutor,
+  rows: DailyMetricUpsert[],
+  options: UpsertDailyMetricsOptions = {},
+): Promise<void> {
   for (let offset = 0; offset < rows.length; offset += UPSERT_CHUNK) {
     const chunk = rows.slice(offset, offset + UPSERT_CHUNK);
 
@@ -129,6 +144,52 @@ export async function upsertDailyMetrics(db: DbExecutor, rows: DailyMetricUpsert
         target: [dailyMetrics.itemId, dailyMetrics.metric, dailyMetrics.day],
         set: { value: sql`excluded.value` },
       });
+  }
+  if (options.refreshAggregates === true && rows.length > 0) {
+    await refreshLatestMetricsFromDaily(db, rows);
+  }
+}
+
+/**
+ * `items.latest_metrics[metric] = value of the newest day` for every touched
+ * pair. One statement per 500 pairs keeps the parameter count bounded; the
+ * `DISTINCT ON` mirrors the per-pair "latest row wins" semantics.
+ */
+async function refreshLatestMetricsFromDaily(
+  db: DbExecutor,
+  rows: readonly DailyMetricUpsert[],
+): Promise<void> {
+  const seen = new Set<string>();
+  const pairs: { itemId: bigint; metric: Metric }[] = [];
+  for (const row of rows) {
+    const key = `${row.itemId.toString()}:${row.metric}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    pairs.push({ itemId: row.itemId, metric: row.metric });
+  }
+
+  for (let offset = 0; offset < pairs.length; offset += REFRESH_PAIRS_CHUNK) {
+    const chunk = pairs.slice(offset, offset + REFRESH_PAIRS_CHUNK);
+    const tuple = sql.join(
+      chunk.map((pair) => sql`(${pair.itemId}, ${pair.metric})`),
+      sql`, `,
+    );
+    await db.execute(sql`
+      UPDATE ${items}
+      SET latest_metrics = ${items.latestMetrics} || newest.value,
+          updated_at = now()
+      FROM (
+        SELECT item_id, jsonb_object_agg(metric::text, value) AS value
+        FROM (
+          SELECT DISTINCT ON (item_id, metric) item_id, metric, value
+          FROM ${dailyMetrics}
+          WHERE (item_id, metric) IN (${tuple})
+          ORDER BY item_id, metric, day DESC
+        ) AS newest_day
+        GROUP BY item_id
+      ) AS newest
+      WHERE ${items.id} = newest.item_id
+    `);
   }
 }
 

@@ -68,6 +68,9 @@ export async function persistNormalizedItems(
     await applySourceRenames(tx, normalized, options.logger);
     const upserted = await upsertItems(tx, normalized.map(toItemUpsert), {
       ...(options.newItemTier === undefined ? {} : { newItemTier: options.newItemTier }),
+      // Daily jobs carry only the download series (npm/PyPI): keep the
+      // metadata written by discovery/refresh instead of nulling it.
+      preserveMetadata: options.mode === 'daily',
     });
     const idByExternalId = new Map(upserted.map((row) => [row.externalId, row.id]));
 
@@ -99,7 +102,7 @@ export async function persistNormalizedItems(
       await upsertSnapshots(tx, snapshots, { refreshAggregates: true });
     }
     if (daily.length > 0) {
-      await upsertDailyMetrics(tx, daily);
+      await upsertDailyMetrics(tx, daily, { refreshAggregates: true });
     }
     return upserted.length;
   });
@@ -115,6 +118,7 @@ export async function persistDailySeries(
   await upsertDailyMetrics(
     db,
     rows.map((row) => ({ itemId, metric: row.metric, day: row.day, value: row.value })),
+    { refreshAggregates: true },
   );
 }
 

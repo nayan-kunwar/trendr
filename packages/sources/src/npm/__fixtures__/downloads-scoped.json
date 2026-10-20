@@ -1,0 +1,19 @@
+{
+  "start": "2026-10-16",
+  "end": "2026-10-18",
+  "package": "@modelcontextprotocol/sdk",
+  "downloads": [
+    {
+      "downloads": 13111453,
+      "day": "2026-10-16"
+    },
+    {
+      "downloads": 7269449,
+      "day": "2026-10-17"
+    },
+    {
+      "downloads": 7141380,
+      "day": "2026-10-18"
+    }
+  ]
+}

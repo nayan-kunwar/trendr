@@ -14,7 +14,7 @@
   "scripts": {
     "build": "tsup src/index.ts --format esm --dts --sourcemap --clean",
     "dev": "tsup src/index.ts --format esm --dts --watch",
-    "fixtures:record": "tsx src/github/record.ts",
+    "fixtures:record": "tsx src/record.ts",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit"
   },

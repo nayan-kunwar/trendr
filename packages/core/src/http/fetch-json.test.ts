@@ -249,6 +249,21 @@ describe('fetchJson (spec §7.5)', () => {
     expect(bucket.pauseUntil).toHaveBeenCalledWith(Date.now() + 60_000);
   });
 
+  it('treats retry-after: 0 as the 60 s fallback', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-10-19T10:00:00.000Z'));
+    const bucket = bucketSpy();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(respondWith({ message: 'slow down' }, 429, { 'retry-after': '0' })),
+    );
+
+    const error = await failure(fetchJson(options({ bucket })));
+
+    expect((error as UpstreamError).retryAfterMs).toBe(60_000);
+    expect(bucket.pauseUntil).toHaveBeenCalledWith(Date.now() + 60_000);
+  });
+
   it('treats a plain 403 as a non-retryable client error', async () => {
     const bucket = bucketSpy();
     const metrics = metricsSpy();

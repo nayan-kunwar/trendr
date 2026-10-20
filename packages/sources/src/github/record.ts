@@ -85,12 +85,6 @@ interface ProbeResult {
   headers: Headers;
 }
 
-function argValue(name: string): string | null {
-  const index = process.argv.indexOf(name);
-  if (index === -1) return null;
-  return process.argv[index + 1] ?? null;
-}
-
 /** The dev tool reads `.env` itself: `@trendr/config` validates the full schema. */
 async function loadDotenv(): Promise<void> {
   let dir = process.cwd();
@@ -177,18 +171,9 @@ async function writeFixture(name: string, body: string, secrets: readonly string
   );
 }
 
-async function main(): Promise<void> {
-  const source = argValue('--source');
-  if (source !== 'github') {
-    console.error('usage: RECORD=1 pnpm fixtures:record --source github');
-    process.exitCode = 1;
-    return;
-  }
+export async function recordGitHubFixtures(): Promise<void> {
   if (process.env.RECORD !== '1') {
-    console.error('fixtures:record calls the live GitHub API; set RECORD=1 to confirm.');
-    console.error('usage: RECORD=1 pnpm fixtures:record --source github');
-    process.exitCode = 1;
-    return;
+    throw new Error('fixtures:record calls the live GitHub API; set RECORD=1 to confirm.');
   }
   await loadDotenv();
   const tokens = (process.env.GITHUB_TOKENS ?? '')
@@ -197,9 +182,7 @@ async function main(): Promise<void> {
     .filter(Boolean);
   const token = tokens[0];
   if (token === undefined) {
-    console.error('GITHUB_TOKENS is not set (shell env or .env).');
-    process.exitCode = 1;
-    return;
+    throw new Error('GITHUB_TOKENS is not set (shell env or .env).');
   }
   const userAgent =
     process.env.HTTP_USER_AGENT ?? 'Trendr/1.0 (+https://github.com/nayankunwar/trendr)';
@@ -336,8 +319,3 @@ async function main(): Promise<void> {
     `stargazers history: ${historyWeeks.length} weeks recorded (newest ${meta.stargazerHistory.newestWeek})`,
   );
 }
-
-main().catch((error: unknown) => {
-  console.error(error instanceof Error ? error.message : error);
-  process.exitCode = 1;
-});

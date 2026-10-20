@@ -30,6 +30,13 @@ export interface FetchedItem<TRaw = unknown> {
   fetchedAt: Date;
   notModified?: boolean; // conditional request returned 304
   notFound?: boolean; // 404/410: mark item deleted/archived
+  /**
+   * Additive extension of the spec shape (§7.3.2): the latest expected daily
+   * bucket has not landed upstream yet. The item is still persisted with the
+   * days that did land, and the run closes `partial` so the 06:00 retry can
+   * fill the gap (spec §7.3.2 npm daily).
+   */
+  dailyIncomplete?: boolean;
 }
 
 export interface NormalizedItem {
@@ -102,6 +109,12 @@ export interface DiscoverOptions {
 export interface FetchOptions {
   tier: Tier;
   includeDailyHistoryDays?: number;
+  /**
+   * Additive extension of the spec shape: the pipeline stage that requested
+   * the fetch. Daily jobs only refresh the per-day series, so adapters may
+   * skip metadata calls; snapshot/refresh jobs fetch metadata (§7.1 step 4).
+   */
+  mode?: 'snapshot' | 'daily';
 }
 
 export interface SourceAdapter<TRaw = unknown> {

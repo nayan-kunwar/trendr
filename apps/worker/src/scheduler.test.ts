@@ -4,7 +4,7 @@ import { SOURCES } from '@trendr/core';
 
 import type { Queues } from './queues.js';
 import {
-  GITHUB_INGEST_SCHEDULES,
+  INGEST_SCHEDULES,
   MAINTENANCE_SCHEDULES,
   SCORE_SAFETY_PATTERN,
   registerSchedulers,
@@ -39,7 +39,14 @@ function fakeQueues(): { queues: Queues; calls: SchedulerCall[] } {
       return Promise.resolve({});
     },
   });
-  const ingest = { github: recorder('ingest-github') };
+  const ingest = {
+    github: recorder('ingest-github'),
+    npm: recorder('ingest-npm'),
+    pypi: recorder('ingest-pypi'),
+    huggingface: recorder('ingest-huggingface'),
+    arxiv: recorder('ingest-arxiv'),
+    mcp: recorder('ingest-mcp'),
+  };
   return {
     queues: {
       ingest,
@@ -51,7 +58,7 @@ function fakeQueues(): { queues: Queues; calls: SchedulerCall[] } {
 }
 
 describe('registerSchedulers (spec §7.2)', () => {
-  it('registers the score safety net for every source plus the GitHub rows', async () => {
+  it('registers the score safety net for every source plus the ingest rows', async () => {
     const { queues, calls } = fakeQueues();
     const ids = await registerSchedulers(queues);
 
@@ -64,9 +71,11 @@ describe('registerSchedulers (spec §7.2)', () => {
       expect(call.tz).toBe('UTC');
       expect(call.name).toBe('compute-scores');
     }
-    expect(ids).toHaveLength(
-      SOURCES.length + GITHUB_INGEST_SCHEDULES.length + MAINTENANCE_SCHEDULES.length,
+    const ingestCount = SOURCES.reduce(
+      (total, source) => total + INGEST_SCHEDULES[source].length,
+      0,
     );
+    expect(ids).toHaveLength(SOURCES.length + ingestCount + MAINTENANCE_SCHEDULES.length);
   });
 
   it('registers the maintenance rows, including the §7.8 retier-items cron', async () => {
@@ -109,5 +118,37 @@ describe('registerSchedulers (spec §7.2)', () => {
     expect(byId['gh-snapshot-hot']?.name).toBe('snapshot-fanout');
     expect(byId['gh-snapshot-hot']?.data).toMatchObject({ type: 'snapshot-fanout', tier: 'hot' });
     expect(byId['gh-snapshot-cold']?.data).toMatchObject({ tier: 'cold' });
+  });
+
+  it('registers the three npm rows with their §7.3.2 crons and payloads', async () => {
+    const { queues, calls } = fakeQueues();
+    await registerSchedulers(queues);
+
+    const npmCalls = calls.filter((call) => call.queue === 'ingest-npm');
+    expect(npmCalls).toHaveLength(3);
+    expect(Object.fromEntries(npmCalls.map((call) => [call.id, call.pattern]))).toEqual({
+      'npm-discover': '0 */6 * * *',
+      'npm-daily': '30 2 * * *',
+      'npm-daily-retry': '0 6 * * *',
+    });
+    for (const call of npmCalls) {
+      expect(call.tz).toBe('UTC');
+      expect(call.data).toMatchObject({ source: 'npm', trigger: 'schedule' });
+    }
+
+    const byId = Object.fromEntries(npmCalls.map((call) => [call.id, call]));
+    expect(byId['npm-discover']?.name).toBe('discover');
+    expect(byId['npm-discover']?.data).toMatchObject({
+      strategy: 'keywords',
+      maxItems: 1000,
+    });
+    expect(byId['npm-daily']?.name).toBe('daily');
+    expect(byId['npm-daily']?.data).toEqual({
+      type: 'daily',
+      source: 'npm',
+      trigger: 'schedule',
+    });
+    expect(byId['npm-daily-retry']?.name).toBe('daily');
+    expect(byId['npm-daily-retry']?.data).toMatchObject({ type: 'daily' });
   });
 });

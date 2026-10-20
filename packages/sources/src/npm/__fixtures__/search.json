@@ -1,0 +1,352 @@
+{
+  "objects": [
+    {
+      "downloads": {
+        "monthly": 38637913,
+        "weekly": 8202973
+      },
+      "dependents": "2856",
+      "updated": "2026-10-19T12:43:56.193Z",
+      "searchScore": 37.83148,
+      "package": {
+        "name": "@modelcontextprotocol/server",
+        "keywords": ["modelcontextprotocol", "mcp", "server"],
+        "version": "2.3.1",
+        "description": "Model Context Protocol implementation for TypeScript - Server package",
+        "sanitized_name": "@modelcontextprotocol/server",
+        "publisher": {
+          "email": "npm-oidc-no-reply@github.com",
+          "trustedPublisher": {
+            "oidcConfigId": "66932263-1458-43ad-9662-741c1a99f475",
+            "id": "github"
+          },
+          "username": "GitHub Actions"
+        },
+        "maintainers": [
+          {
+            "email": "justin@jspahrsummers.com",
+            "username": "jspahrsummers"
+          },
+          {
+            "email": "paul@modelcontextprotocol.io",
+            "username": "pcarleton"
+          },
+          {
+            "email": "fweinberger@anthropic.com",
+            "username": "fweinberger"
+          },
+          {
+            "email": "david@modelcontextprotocol.io",
+            "username": "thedsp"
+          },
+          {
+            "email": "ochafik@anthropic.com",
+            "username": "ochafik-ant"
+          },
+          {
+            "email": "cliff@futurescale.com",
+            "username": "cliffhall"
+          }
+        ],
+        "license": "Apache-2.0",
+        "date": "2026-10-05T11:52:39.322Z",
+        "links": {
+          "homepage": "https://modelcontextprotocol.io",
+          "repository": "git+https://github.com/modelcontextprotocol/typescript-sdk.git",
+          "bugs": "https://github.com/modelcontextprotocol/typescript-sdk/issues",
+          "npm": "https://www.npmjs.com/package/@modelcontextprotocol/server"
+        }
+      },
+      "score": {
+        "final": 37.83148,
+        "detail": {
+          "popularity": 1,
+          "quality": 1,
+          "maintenance": 1
+        }
+      },
+      "flags": {
+        "insecure": 0
+      }
+    },
+    {
+      "downloads": {
+        "monthly": 118618237,
+        "weekly": 18352661
+      },
+      "dependents": "5627",
+      "updated": "2026-10-19T19:21:01.919Z",
+      "searchScore": 37.775032,
+      "package": {
+        "name": "ai",
+        "keywords": [
+          "ai",
+          "vercel",
+          "sdk",
+          "llm",
+          "mcp",
+          "tool-calling",
+          "tools",
+          "structured-output",
+          "agent",
+          "agentic",
+          "generative",
+          "genai",
+          "chatbot",
+          "prompt",
+          "inference",
+          "language-model",
+          "streaming",
+          "openai",
+          "anthropic",
+          "claude",
+          "gemini",
+          "xai",
+          "grok"
+        ],
+        "version": "7.0.145",
+        "description": "AI SDK by Vercel - build apps like ChatGPT, Claude, Gemini, and more with a single interface for any model using the Vercel AI Gateway or go direct to OpenAI, Anthropic, Google, or any other model provider.",
+        "sanitized_name": "ai",
+        "publisher": {
+          "email": "npm-oidc-no-reply@github.com",
+          "actor": {
+            "name": "vercel-release-bot",
+            "type": "user",
+            "email": "infra+release@vercel.com"
+          },
+          "trustedPublisher": {
+            "oidcConfigId": "258097e4-2862-4225-9246-93d0f356367d",
+            "id": "github"
+          },
+          "username": "GitHub Actions"
+        },
+        "maintainers": [
+          {
+            "email": "matheus.frndes@gmail.com",
+            "username": "matheuss"
+          },
+          {
+            "email": "rauchg@gmail.com",
+            "username": "rauchg"
+          },
+          {
+            "email": "matt.j.straka@gmail.com",
+            "username": "matt.straka"
+          },
+          {
+            "email": "infra+release@vercel.com",
+            "username": "vercel-release-bot"
+          },
+          {
+            "email": "team@zeit.co",
+            "username": "zeit-bot"
+          }
+        ],
+        "license": "Apache-2.0",
+        "date": "2026-10-19T19:20:28.531Z",
+        "links": {
+          "homepage": "https://ai-sdk.dev/docs",
+          "repository": "https://github.com/vercel/ai",
+          "bugs": "https://github.com/vercel/ai/issues",
+          "npm": "https://www.npmjs.com/package/ai"
+        }
+      },
+      "score": {
+        "final": 37.775032,
+        "detail": {
+          "popularity": 1,
+          "quality": 1,
+          "maintenance": 1
+        }
+      },
+      "flags": {
+        "insecure": 0
+      }
+    },
+    {
+      "downloads": {
+        "monthly": 25560808,
+        "weekly": 13559125
+      },
+      "dependents": 0,
+      "updated": "2026-10-19T12:39:24.412Z",
+      "searchScore": 36.899765,
+      "package": {
+        "name": "claude-cup",
+        "keywords": [
+          "claude",
+          "claude-code",
+          "usage",
+          "rate-limit",
+          "meter",
+          "jar",
+          "claude-cup",
+          "tokens",
+          "tauri",
+          "mcp"
+        ],
+        "version": "0.9.12",
+        "description": "Claude Cup — worldwide building contest. Track your Value/Token Ratio, climb the real-time leaderboard, and fill a live trophy in your terminal.",
+        "sanitized_name": "claude-cup",
+        "publisher": {
+          "email": "leo@claude-cup.com",
+          "username": "claude-cup"
+        },
+        "maintainers": [
+          {
+            "email": "leo@claude-cup.com",
+            "username": "claude-cup"
+          }
+        ],
+        "license": "MIT",
+        "date": "2026-07-19T14:29:05.169Z",
+        "links": {
+          "homepage": "https://claude-cup.com/",
+          "repository": "git+https://github.com/Itaib24/Claude-.git",
+          "bugs": "https://github.com/Itaib24/Claude-/issues",
+          "npm": "https://www.npmjs.com/package/claude-cup"
+        }
+      },
+      "score": {
+        "final": 36.899765,
+        "detail": {
+          "popularity": 1,
+          "quality": 1,
+          "maintenance": 1
+        }
+      },
+      "flags": {
+        "insecure": 0
+      }
+    },
+    {
+      "downloads": {
+        "monthly": 256832284,
+        "weekly": 39432481
+      },
+      "dependents": "76771",
+      "updated": "2026-10-19T12:41:33.338Z",
+      "searchScore": 36.645496,
+      "package": {
+        "name": "@modelcontextprotocol/sdk",
+        "keywords": ["modelcontextprotocol", "mcp"],
+        "version": "1.32.1",
+        "description": "Model Context Protocol implementation for TypeScript",
+        "sanitized_name": "@modelcontextprotocol/sdk",
+        "publisher": {
+          "email": "npm-oidc-no-reply@github.com",
+          "actor": {
+            "name": "jspahrsummers",
+            "type": "user",
+            "email": "justin@jspahrsummers.com"
+          },
+          "trustedPublisher": {
+            "oidcConfigId": "dbb65bf6-af49-4757-88a7-122fb1877ae5",
+            "id": "github"
+          },
+          "username": "GitHub Actions"
+        },
+        "maintainers": [
+          {
+            "email": "justin@jspahrsummers.com",
+            "username": "jspahrsummers"
+          },
+          {
+            "email": "paul@modelcontextprotocol.io",
+            "username": "pcarleton"
+          },
+          {
+            "email": "fweinberger@anthropic.com",
+            "username": "fweinberger"
+          },
+          {
+            "email": "david@modelcontextprotocol.io",
+            "username": "thedsp"
+          },
+          {
+            "email": "ochafik@anthropic.com",
+            "username": "ochafik-ant"
+          }
+        ],
+        "license": "MIT",
+        "date": "2026-10-05T11:47:50.208Z",
+        "links": {
+          "homepage": "https://modelcontextprotocol.io",
+          "repository": "git+https://github.com/modelcontextprotocol/typescript-sdk.git",
+          "bugs": "https://github.com/modelcontextprotocol/typescript-sdk/issues",
+          "npm": "https://www.npmjs.com/package/@modelcontextprotocol/sdk"
+        }
+      },
+      "score": {
+        "final": 36.645496,
+        "detail": {
+          "popularity": 1,
+          "quality": 1,
+          "maintenance": 1
+        }
+      },
+      "flags": {
+        "insecure": 0
+      }
+    },
+    {
+      "downloads": {
+        "monthly": 19415899,
+        "weekly": 3134474
+      },
+      "dependents": "184",
+      "updated": "2026-10-19T17:56:06.353Z",
+      "searchScore": 36.27971,
+      "package": {
+        "name": "@ai-sdk/mcp",
+        "keywords": ["ai", "mcp"],
+        "version": "2.0.79",
+        "description": "The **Model Context Protocol (MCP) client** for the [AI SDK](https://ai-sdk.dev/docs) lets you connect to MCP servers and use their tools with AI SDK functions like `generateText` and `streamText`.",
+        "sanitized_name": "@ai-sdk/mcp",
+        "publisher": {
+          "email": "npm-oidc-no-reply@github.com",
+          "trustedPublisher": {
+            "oidcConfigId": "f54ba994-4951-4247-8d06-59680158fd55",
+            "id": "github"
+          },
+          "username": "GitHub Actions"
+        },
+        "maintainers": [
+          {
+            "email": "infra+release@vercel.com",
+            "username": "vercel-release-bot"
+          },
+          {
+            "email": "matheus.frndes@gmail.com",
+            "username": "matheuss"
+          },
+          {
+            "email": "matt.j.straka@gmail.com",
+            "username": "matt.straka"
+          }
+        ],
+        "license": "Apache-2.0",
+        "date": "2026-10-19T17:55:34.146Z",
+        "links": {
+          "homepage": "https://ai-sdk.dev/docs",
+          "repository": "https://github.com/vercel/ai",
+          "bugs": "https://github.com/vercel/ai/issues",
+          "npm": "https://www.npmjs.com/package/@ai-sdk/mcp"
+        }
+      },
+      "score": {
+        "final": 36.27971,
+        "detail": {
+          "popularity": 1,
+          "quality": 1,
+          "maintenance": 1
+        }
+      },
+      "flags": {
+        "insecure": 0
+      }
+    }
+  ],
+  "total": 81439,
+  "time": "2026-10-20T03:11:15.951Z"
+}

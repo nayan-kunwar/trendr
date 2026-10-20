@@ -31,7 +31,11 @@ const BUCKETS: Record<Exclude<BucketName, 'huggingface:api'>, BucketDefinition> 
   'github:search': { capacity: 25, refillPerSec: 25 / 60 }, // 30/min documented
   'github:graphql': { capacity: 300, refillPerSec: 4_500 / 3_600 }, // 5,000 pts/h documented
   'npm:registry': { capacity: 10, refillPerSec: 5 }, // undocumented (verify)
-  'npm:downloads': { capacity: 5, refillPerSec: 2 }, // undocumented (verify)
+  // §7.4 says 2/s and labels it "verify". Live 2026-10-20: api.npmjs.org sits
+  // behind a Cloudflare edge rule that returned 429 (HTML, Retry-After: 0) on
+  // the 25th unique range request in ~12 s. A 15-package probe at ~9/min was
+  // clean, so a 240-package daily sweep (143 scoped) runs at 12/min.
+  'npm:downloads': { capacity: 2, refillPerSec: 0.2 },
   'pypi:json': { capacity: 20, refillPerSec: 10 }, // no documented edge limit
   'pypi:stats': { capacity: 1, refillPerSec: 0.5 }, // IP rate limit, unpublished
   'arxiv:api': { capacity: 1, refillPerSec: 1 / 3 }, // ToS: one request per 3 s
