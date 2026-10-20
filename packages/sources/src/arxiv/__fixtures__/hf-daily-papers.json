@@ -1,0 +1,578 @@
+[
+  {
+    "paper": {
+      "id": "2610.22471",
+      "authors": [
+        {
+          "_id": "6ad57eac60556d9547d94e5c",
+          "name": "SenseNova",
+          "hidden": false
+        },
+        {
+          "_id": "6ad57eac60556d9547d94e5d",
+          "name": "Joint Research Team",
+          "hidden": false
+        },
+        {
+          "_id": "6ad57eac60556d9547d94e5f",
+          "user": {
+            "_id": "652d06833b5997ed71ce5c46",
+            "avatarUrl": "https://cdn-avatars.huggingface.co/v1/production/uploads/652d06833b5997ed71ce5c46/O_D6bpa5mGxLA7uCjmVCG.jpeg",
+            "isPro": false,
+            "fullname": "Zhongang Cai",
+            "user": "caizhongang",
+            "type": "user",
+            "name": "caizhongang"
+          },
+          "name": "Zhongang Cai",
+          "status": "claimed_verified",
+          "statusLastChangedAt": "2026-10-20T08:45:05.346Z",
+          "hidden": false
+        },
+        {
+          "_id": "6ad57eac60556d9547d94e60",
+          "name": "Ziang Cao",
+          "hidden": false
+        },
+        {
+          "_id": "6ad57eac60556d9547d94e61",
+          "name": "Tailai Chen",
+          "hidden": false
+        },
+        {
+          "_id": "6ad57eac60556d9547d94e62",
+          "name": "Han Chong Chua",
+          "hidden": false
+        },
+        {
+          "_id": "6ad57eac60556d9547d94e63",
+          "name": "Linjun Dai",
+          "hidden": false
+        },
+        {
+          "_id": "6ad57eac60556d9547d94e64",
+          "name": "Hanming Deng",
+          "hidden": false
+        },
+        {
+          "_id": "6ad57eac60556d9547d94e65",
+          "name": "Hokin Deng",
+          "hidden": false
+        },
+        {
+          "_id": "6ad57eac60556d9547d94e66",
+          "user": {
+            "_id": "64b4a717aa03b6520839e9b8",
+            "avatarUrl": "https://cdn-avatars.huggingface.co/v1/production/uploads/64b4a717aa03b6520839e9b8/Rt3ERG-6BVEA4hAwOz0_I.jpeg",
+            "isPro": false,
+            "fullname": "Haiwen Diao",
+            "user": "Paranioar",
+            "type": "user",
+            "name": "Paranioar"
+          },
+          "name": "Haiwen Diao",
+          "status": "claimed_verified",
+          "statusLastChangedAt": "2026-10-19T16:45:04.992Z",
+          "hidden": false
+        },
+        {
+          "_id": "6ad57eac60556d9547d94e67",
+          "name": "Chenjing Ding",
+          "hidden": false
+        },
+        {
+          "_id": "6ad57eac60556d9547d94e68",
+          "name": "Weichen Fan",
+          "hidden": false
+        },
+        {
+          "_id": "6ad57eac60556d9547d94e69",
+          "name": "Xiao Fu",
+          "hidden": false
+        },
+        {
+          "_id": "6ad57eac60556d9547d94e6a",
+          "user": {
+            "_id": "68216ef82c40f64d03fd9a9f",
+            "avatarUrl": "https://cdn-avatars.huggingface.co/v1/production/uploads/68216ef82c40f64d03fd9a9f/24QcertEHnGfCfLYCur-J.jpeg",
+            "isPro": true,
+            "fullname": "Gong Zerui",
+            "user": "zrgong",
+            "type": "user",
+            "name": "zrgong"
+          },
+          "name": "Zerui Gong",
+          "status": "claimed_verified",
+          "statusLastChangedAt": "2026-10-19T16:45:04.986Z",
+          "hidden": false
+        },
+        {
+          "_id": "6ad57eac60556d9547d94e6b",
+          "name": "Chenyang Gu",
+          "hidden": false
+        },
+        {
+          "_id": "6ad57eac60556d9547d94e6c",
+          "user": {
+            "_id": "63a5d18a8fb23d08bb30094c",
+            "avatarUrl": "https://cdn-avatars.huggingface.co/v1/production/uploads/1671811420431-noauth.png",
+            "isPro": false,
+            "fullname": "Zexin He",
+            "user": "zxhezexin",
+            "type": "user",
+            "name": "zxhezexin"
+          },
+          "name": "Zexin He",
+          "status": "claimed_verified",
+          "statusLastChangedAt": "2026-10-19T08:45:05.405Z",
+          "hidden": false
+        },
+        {
+          "_id": "6ad57eac60556d9547d94e6d",
+          "name": "Zhi Hou",
+          "hidden": false
+        },
+        {
+          "_id": "6ad57eac60556d9547d94e6e",
+          "name": "Bo Li",
+          "hidden": false
+        },
+        {
+          "_id": "6ad57eac60556d9547d94e6f",
+          "name": "Qinyue Li",
+          "hidden": false
+        },
+        {
+          "_id": "6ad57eac60556d9547d94e70",
+          "name": "Quanzhou Li",
+          "hidden": false
+        },
+        {
+          "_id": "6ad57eac60556d9547d94e71",
+          "name": "Xiaowan Li",
+          "hidden": false
+        },
+        {
+          "_id": "6ad57eac60556d9547d94e72",
+          "name": "Zhichao Liao",
+          "hidden": false
+        },
+        {
+          "_id": "6ad57eac60556d9547d94e73",
+          "name": "Dahua Lin",
+          "hidden": false
+        },
+        {
+          "_id": "6ad57eac60556d9547d94e74",
+          "name": "Zilong Lin",
+          "hidden": false
+        },
+        {
+          "_id": "6ad57eac60556d9547d94e75",
+          "name": "Bo Liu",
+          "hidden": false
+        },
+        {
+          "_id": "6ad57eac60556d9547d94e76",
+          "name": "Chunxiao Liu",
+          "hidden": false
+        },
+        {
+          "_id": "6ad57eac60556d9547d94e77",
+          "name": "Pengfei Liu",
+          "hidden": false
+        },
+        {
+          "_id": "6ad57eac60556d9547d94e78",
+          "name": "Tianqi Liu",
+          "hidden": false
+        },
+        {
+          "_id": "6ad57eac60556d9547d94e79",
+          "name": "Ziwei Liu",
+          "hidden": false
+        },
+        {
+          "_id": "6ad57eac60556d9547d94e7a",
+          "name": "Chen Change Loy",
+          "hidden": false
+        },
+        {
+          "_id": "6ad57eac60556d9547d94e7b",
+          "name": "Lewei Lu",
+          "hidden": false
+        },
+        {
+          "_id": "6ad57eac60556d9547d94e7c",
+          "name": "Jiapeng Luo",
+          "hidden": false
+        },
+        {
+          "_id": "6ad57eac60556d9547d94e7d",
+          "name": "Yuexiao Ma",
+          "hidden": false
+        },
+        {
+          "_id": "6ad57eac60556d9547d94e7e",
+          "name": "Liang Pan",
+          "hidden": false
+        },
+        {
+          "_id": "6ad57eac60556d9547d94e7f",
+          "name": "Xingang Pan",
+          "hidden": false
+        },
+        {
+          "_id": "6ad57eac60556d9547d94e80",
+          "user": {
+            "_id": "647ae5462d27d3541deb70ff",
+            "avatarUrl": "https://cdn-avatars.huggingface.co/v1/production/uploads/no-auth/BK7z2jhmKq3asDuiGmT3L.png",
+            "isPro": false,
+            "fullname": "Oscar J Qian",
+            "user": "oscarqjh",
+            "type": "user",
+            "name": "oscarqjh"
+          },
+          "name": "Oscar Qian",
+          "status": "claimed_verified",
+          "statusLastChangedAt": "2026-10-19T08:45:05.397Z",
+          "hidden": false
+        },
+        {
+          "_id": "6ad57eac60556d9547d94e81",
+          "name": "Ziyi Shang",
+          "hidden": false
+        },
+        {
+          "_id": "6ad57eac60556d9547d94e82",
+          "name": "Yuyao Shao",
+          "hidden": false
+        },
+        {
+          "_id": "6ad57eac60556d9547d94e83",
+          "name": "Dawei Su",
+          "hidden": false
+        },
+        {
+          "_id": "6ad57eac60556d9547d94e84",
+          "name": "Dacheng Tao",
+          "hidden": false
+        },
+        {
+          "_id": "6ad57eac60556d9547d94e85",
+          "name": "Qingyi Tao",
+          "hidden": false
+        },
+        {
+          "_id": "6ad57eac60556d9547d94e86",
+          "name": "Quan Wang",
+          "hidden": false
+        },
+        {
+          "_id": "6ad57eac60556d9547d94e87",
+          "name": "Ruisi Wang",
+          "hidden": false
+        },
+        {
+          "_id": "6ad57eac60556d9547d94e88",
+          "name": "Xiaogang Wang",
+          "hidden": false
+        },
+        {
+          "_id": "6ad57eac60556d9547d94e89",
+          "name": "Ziyi Wang",
+          "hidden": false
+        },
+        {
+          "_id": "6ad57eac60556d9547d94e8a",
+          "name": "Beichen Wen",
+          "hidden": false
+        },
+        {
+          "_id": "6ad57eac60556d9547d94e8b",
+          "name": "Donghao Wu",
+          "hidden": false
+        },
+        {
+          "_id": "6ad57eac60556d9547d94e8c",
+          "name": "Jiaxu Wu",
+          "hidden": false
+        },
+        {
+          "_id": "6ad57eac60556d9547d94e8d",
+          "name": "Silei Wu",
+          "hidden": false
+        },
+        {
+          "_id": "6ad57eac60556d9547d94e8e",
+          "name": "Xiaoming Wu",
+          "hidden": false
+        },
+        {
+          "_id": "6ad57eac60556d9547d94e8f",
+          "name": "Zhonghua Wu",
+          "hidden": false
+        },
+        {
+          "_id": "6ad57eac60556d9547d94e90",
+          "name": "Hongcan Xiao",
+          "hidden": false
+        },
+        {
+          "_id": "6ad57eac60556d9547d94e91",
+          "name": "Weiye Xu",
+          "hidden": false
+        },
+        {
+          "_id": "6ad57eac60556d9547d94e92",
+          "name": "Atsushi Yamashita",
+          "hidden": false
+        },
+        {
+          "_id": "6ad57eac60556d9547d94e93",
+          "name": "Lei Yang",
+          "hidden": false
+        },
+        {
+          "_id": "6ad57eac60556d9547d94e94",
+          "user": {
+            "_id": "66c7e8d021fc3eab824eab70",
+            "avatarUrl": "https://cdn-avatars.huggingface.co/v1/production/uploads/66c7e8d021fc3eab824eab70/WbU1ILNEOoLNMYWhsHtG5.jpeg",
+            "isPro": false,
+            "fullname": "YANG Zhe",
+            "user": "Savannah-yz",
+            "type": "user",
+            "name": "Savannah-yz"
+          },
+          "name": "Zhe Yang",
+          "status": "claimed_verified",
+          "statusLastChangedAt": "2026-10-19T08:45:05.389Z",
+          "hidden": false
+        },
+        {
+          "_id": "6ad57eac60556d9547d94e95",
+          "name": "Baiqiao Yin",
+          "hidden": false
+        },
+        {
+          "_id": "6ad57eac60556d9547d94e96",
+          "name": "Wanqi Yin",
+          "hidden": false
+        },
+        {
+          "_id": "6ad57eac60556d9547d94e97",
+          "name": "Hanfei Zhao",
+          "hidden": false
+        },
+        {
+          "_id": "6ad57eac60556d9547d94e98",
+          "name": "Tianbo Zhong",
+          "hidden": false
+        },
+        {
+          "_id": "6ad57eac60556d9547d94e99",
+          "name": "Long Zhuo",
+          "hidden": false
+        },
+        {
+          "_id": "6ad57eac60556d9547d94e9a",
+          "name": "Jing Zuo",
+          "hidden": false
+        }
+      ],
+      "mediaUrls": [
+        "https://cdn-uploads.huggingface.co/production/uploads/652d06833b5997ed71ce5c46/3Hk2ArDZVOMs0HNqMG5QG.mp4"
+      ],
+      "publishedAt": "2026-10-15T00:00:00.000Z",
+      "submittedOnDailyAt": "2026-10-19T00:00:00.000Z",
+      "title": "Has GPT-6-Astra Achieved Embodied Intelligence?",
+      "submittedOnDailyBy": {
+        "_id": "652d06833b5997ed71ce5c46",
+        "avatarUrl": "https://cdn-avatars.huggingface.co/v1/production/uploads/652d06833b5997ed71ce5c46/O_D6bpa5mGxLA7uCjmVCG.jpeg",
+        "isPro": false,
+        "fullname": "Zhongang Cai",
+        "user": "caizhongang",
+        "type": "user",
+        "name": "caizhongang"
+      },
+      "summary": "GPT-6-Astra demonstrates a level of competence in robotic manipulation and navigation that challenges the conventional paradigm of building specialized models for individual tasks and embodiments. In this report, we ask not only how capable GPT-6-Astra is, but what its capabilities imply for the field. First, we probe the limits of standalone GPT-6-Astra. We conduct a large-scale evaluation across 12 representative benchmarks spanning tabletop manipulation, humanoids, mobile platforms, and dexterous hands. Under a unified protocol that allows in-context learning (ICL) from training-set demonstrations and substantially increases the number of execution steps, GPT-6-Astra achieves unprecedented performance (Fig. 1). Future research may focus on improving 1) the generality of ICL 2) cost and execution time, 3) physical-state verification, 4) recovery from irreversible failures, and 5) long-horizon preservation of progress. Second, we study the agentic harness for embodied control. We identify that close-loop coordination between a high-level \"System 2\" reasoner (i.e., GPT-6-Astra) and a low-level \"System 1\" controller (e.g., π0.5) is costly but effective. Third, we examine GPT-6-Astra on real-world deployment. Our experiments on 8 robot configurations reveal substantial gaps: 1) robot demonstrations required for ICL are expensive to collect, and 2) it is implausible to trade longer execution for higher success rates with physical constraints. Fourth, we envision the next generation of embodied benchmarks. We develop a prototype that 1) derives tasks from real-world needs, 2) provides no in-domain demonstrations, and 3) judges agents on a world clock that keeps running while they deliberate. Taken together, our results suggest that GPT-6-Astra has largely crossed the threshold of embodied competence, but not yet that of practical embodied intelligence.",
+      "upvotes": 419,
+      "discussionId": "6ad57eac60556d9547d94e9b",
+      "projectPage": "https://sensenova.ai/has-gpt-6-astra-achieved-embodied-intelligence",
+      "githubRepo": "https://github.com/OpenSenseNova/SenseNova-RoboRSI",
+      "githubRepoAddedBy": "user",
+      "ai_summary": "GPT-6-Astra achieves high performance across diverse robotic tasks via in-context learning, yet real-world deployment reveals gaps in demonstration cost, execution time, and practical embodied intelligence.",
+      "ai_keywords": [
+        "in-context learning",
+        "System 2 reasoner",
+        "System 1 controller",
+        "close-loop coordination",
+        "embodied control",
+        "long-horizon preservation",
+        "physical-state verification"
+      ],
+      "ai_summary_model": "thinkingmachines/Inkling-Small",
+      "githubStars": 151,
+      "organization": {
+        "_id": "64f0405f8a4cf3e5e6b38f9c",
+        "name": "sensenova",
+        "fullname": "SenseNova",
+        "avatar": "https://cdn-avatars.huggingface.co/v1/production/uploads/652d06833b5997ed71ce5c46/k66xcOMf4NVbMSFulUjHY.png"
+      }
+    },
+    "publishedAt": "2026-10-14T20:00:00.000Z",
+    "title": "Has GPT-6-Astra Achieved Embodied Intelligence?",
+    "summary": "GPT-6-Astra demonstrates a level of competence in robotic manipulation and navigation that challenges the conventional paradigm of building specialized models for individual tasks and embodiments. In this report, we ask not only how capable GPT-6-Astra is, but what its capabilities imply for the field. First, we probe the limits of standalone GPT-6-Astra. We conduct a large-scale evaluation across 12 representative benchmarks spanning tabletop manipulation, humanoids, mobile platforms, and dexterous hands. Under a unified protocol that allows in-context learning (ICL) from training-set demonstrations and substantially increases the number of execution steps, GPT-6-Astra achieves unprecedented performance (Fig. 1). Future research may focus on improving 1) the generality of ICL 2) cost and execution time, 3) physical-state verification, 4) recovery from irreversible failures, and 5) long-horizon preservation of progress. Second, we study the agentic harness for embodied control. We identify that close-loop coordination between a high-level \"System 2\" reasoner (i.e., GPT-6-Astra) and a low-level \"System 1\" controller (e.g., π0.5) is costly but effective. Third, we examine GPT-6-Astra on real-world deployment. Our experiments on 8 robot configurations reveal substantial gaps: 1) robot demonstrations required for ICL are expensive to collect, and 2) it is implausible to trade longer execution for higher success rates with physical constraints. Fourth, we envision the next generation of embodied benchmarks. We develop a prototype that 1) derives tasks from real-world needs, 2) provides no in-domain demonstrations, and 3) judges agents on a world clock that keeps running while they deliberate. Taken together, our results suggest that GPT-6-Astra has largely crossed the threshold of embodied competence, but not yet that of practical embodied intelligence.",
+    "mediaUrls": [
+      "https://cdn-uploads.huggingface.co/production/uploads/652d06833b5997ed71ce5c46/3Hk2ArDZVOMs0HNqMG5QG.mp4"
+    ],
+    "thumbnail": "https://cdn-thumbnails.huggingface.co/social-thumbnails/papers/2610.22471.png",
+    "numComments": 2,
+    "submittedBy": {
+      "_id": "652d06833b5997ed71ce5c46",
+      "avatarUrl": "https://cdn-avatars.huggingface.co/v1/production/uploads/652d06833b5997ed71ce5c46/O_D6bpa5mGxLA7uCjmVCG.jpeg",
+      "fullname": "Zhongang Cai",
+      "name": "caizhongang",
+      "type": "user",
+      "isPro": false,
+      "isHf": false,
+      "isHfAdmin": false,
+      "isMod": false,
+      "followerCount": 45,
+      "isUserFollowing": false
+    },
+    "organization": {
+      "_id": "64f0405f8a4cf3e5e6b38f9c",
+      "name": "sensenova",
+      "fullname": "SenseNova",
+      "avatar": "https://cdn-avatars.huggingface.co/v1/production/uploads/652d06833b5997ed71ce5c46/k66xcOMf4NVbMSFulUjHY.png"
+    },
+    "isAuthorParticipating": true
+  },
+  {
+    "paper": {
+      "id": "2610.20424",
+      "authors": [
+        {
+          "_id": "6ad2e75d60556d9547d946fe",
+          "name": "Enhan Zhao",
+          "hidden": false
+        },
+        {
+          "_id": "6ad2e75d60556d9547d946ff",
+          "name": "Yongqi Tong",
+          "hidden": false
+        },
+        {
+          "_id": "6ad2e75d60556d9547d94700",
+          "name": "Xuejun Yu",
+          "hidden": false
+        },
+        {
+          "_id": "6ad2e75d60556d9547d94701",
+          "name": "Hang Wang",
+          "hidden": false
+        },
+        {
+          "_id": "6ad2e75d60556d9547d94702",
+          "user": {
+            "_id": "69fda02b5094601dfeebe3bc",
+            "avatarUrl": "/avatars/7a97c954fa1c95269efd5b99681991e2.svg",
+            "isPro": false,
+            "fullname": "Pan Wang",
+            "user": "wangpan-ustc",
+            "type": "user",
+            "name": "wangpan-ustc"
+          },
+          "name": "Pan Wang",
+          "status": "claimed_verified",
+          "statusLastChangedAt": "2026-10-19T08:45:05.288Z",
+          "hidden": false
+        },
+        {
+          "_id": "6ad2e75d60556d9547d94703",
+          "name": "Yichao Wang",
+          "hidden": false
+        },
+        {
+          "_id": "6ad2e75d60556d9547d94704",
+          "name": "Di He",
+          "hidden": false
+        },
+        {
+          "_id": "6ad2e75d60556d9547d94705",
+          "name": "Jianshe Li",
+          "hidden": false
+        },
+        {
+          "_id": "6ad2e75d60556d9547d94706",
+          "name": "Wei Wu",
+          "hidden": false
+        }
+      ],
+      "publishedAt": "2026-10-14T00:00:00.000Z",
+      "submittedOnDailyAt": "2026-10-19T00:00:00.000Z",
+      "title": "BizBench: Unveiling Hidden Challenges in Deploying Long-Horizon Agents for Real-World Business",
+      "submittedOnDailyBy": {
+        "_id": "64c1856bc3b5e0a9760e37f2",
+        "avatarUrl": "/avatars/a67c3f95f83b2be3a14f71c6faf3b995.svg",
+        "isPro": false,
+        "fullname": "Yongqi Tong",
+        "user": "Yooki",
+        "type": "user",
+        "name": "Yooki"
+      },
+      "summary": "Existing long-horizon agent benchmarks often emphasize final task success while providing limited assessment of intermediate execution validity. Yet real-world business operations require agents to navigate extensive, potentially outdated or conflicting policies while satisfying critical constraints throughout execution. These requirements are particularly consequential in high-stakes domains such as payments, where intermediate violations can incur financial losses or regulatory consequences regardless of the final outcome. To bridge this evaluation gap, we introduce BizBench, a multi-turn benchmark grounded in real-world procedures from a leading payments company. Its executable environment integrates 789 knowledge documents and 601 discoverable business tools, with consistent policies, states, and tool behavior. The benchmark comprises 50 tasks involving resource constraints, temporal dependencies, prior commitments, and conflicting or outdated guidance. Each task is validated through reference execution, while deterministic checks assess both goal attainment and execution validity without prescribing a single solution path. Experiments reveal substantial limitations even among frontier models: Claude Opus 5 and GPT-6 Sol achieve strict success rates of only 64.0% and 61.3%, respectively. For Qwen3.8-27B, goal attainment reaches 42.0%, but strict success drops to 32.7%, demonstrating how outcome-based evaluation can mask invalid execution. Beyond success rates, DeepSeek-V4.1-Flash averages 191.3 tool calls per run, approximately 70% more than reference executions, revealing substantial execution overhead. Overall, BizBench establishes a testbed for evaluating and advancing long-horizon agents beyond task completion, toward reliable and constraint-compliant execution in complex business environments.",
+      "upvotes": 349,
+      "discussionId": "6ad2e75e60556d9547d94707",
+      "githubRepo": "https://github.com/ant-intl/BizAgentBench",
+      "githubRepoAddedBy": "user",
+      "ai_summary": "BizBench evaluates long-horizon business agents on intermediate execution validity using real-world payment procedures, revealing that frontier models frequently violate constraints despite achieving partial goal success.",
+      "ai_keywords": [
+        "BizBench",
+        "long-horizon agents",
+        "multi-turn benchmark",
+        "executable environment",
+        "business tools",
+        "resource constraints",
+        "temporal dependencies",
+        "strict success",
+        "execution validity",
+        "tool calls"
+      ],
+      "ai_summary_model": "thinkingmachines/Inkling-Small",
+      "githubStars": 17,
+      "organization": {
+        "_id": "68d4ae9941614425f8aa7490",
+        "name": "ant-intl",
+        "fullname": "ant-international",
+        "avatar": "https://cdn-avatars.huggingface.co/v1/production/uploads/68e9c86d2551cb38000fa77c/qG2KcieHqYFuWXi2-weuP.jpeg"
+      }
+    },
+    "publishedAt": "2026-10-13T20:00:00.000Z",
+    "title": "BizBench: Unveiling Hidden Challenges in Deploying Long-Horizon Agents for Real-World Business",
+    "summary": "Existing long-horizon agent benchmarks often emphasize final task success while providing limited assessment of intermediate execution validity. Yet real-world business operations require agents to navigate extensive, potentially outdated or conflicting policies while satisfying critical constraints throughout execution. These requirements are particularly consequential in high-stakes domains such as payments, where intermediate violations can incur financial losses or regulatory consequences regardless of the final outcome. To bridge this evaluation gap, we introduce BizBench, a multi-turn benchmark grounded in real-world procedures from a leading payments company. Its executable environment integrates 789 knowledge documents and 601 discoverable business tools, with consistent policies, states, and tool behavior. The benchmark comprises 50 tasks involving resource constraints, temporal dependencies, prior commitments, and conflicting or outdated guidance. Each task is validated through reference execution, while deterministic checks assess both goal attainment and execution validity without prescribing a single solution path. Experiments reveal substantial limitations even among frontier models: Claude Opus 5 and GPT-6 Sol achieve strict success rates of only 64.0% and 61.3%, respectively. For Qwen3.8-27B, goal attainment reaches 42.0%, but strict success drops to 32.7%, demonstrating how outcome-based evaluation can mask invalid execution. Beyond success rates, DeepSeek-V4.1-Flash averages 191.3 tool calls per run, approximately 70% more than reference executions, revealing substantial execution overhead. Overall, BizBench establishes a testbed for evaluating and advancing long-horizon agents beyond task completion, toward reliable and constraint-compliant execution in complex business environments.",
+    "thumbnail": "https://cdn-thumbnails.huggingface.co/social-thumbnails/papers/2610.20424.png",
+    "numComments": 3,
+    "submittedBy": {
+      "_id": "64c1856bc3b5e0a9760e37f2",
+      "avatarUrl": "/avatars/a67c3f95f83b2be3a14f71c6faf3b995.svg",
+      "fullname": "Yongqi Tong",
+      "name": "Yooki",
+      "type": "user",
+      "isPro": false,
+      "isHf": false,
+      "isHfAdmin": false,
+      "isMod": false,
+      "followerCount": 3,
+      "isUserFollowing": false
+    },
+    "organization": {
+      "_id": "68d4ae9941614425f8aa7490",
+      "name": "ant-intl",
+      "fullname": "ant-international",
+      "avatar": "https://cdn-avatars.huggingface.co/v1/production/uploads/68e9c86d2551cb38000fa77c/qG2KcieHqYFuWXi2-weuP.jpeg"
+    },
+    "isAuthorParticipating": false
+  }
+]

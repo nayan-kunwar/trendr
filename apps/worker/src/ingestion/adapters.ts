@@ -3,14 +3,17 @@ import type { Redis } from 'ioredis';
 import { env } from '@trendr/config';
 import type { Logger } from '@trendr/logger';
 import {
+  createArxivAdapter,
   createBucket,
   createGitHubAdapter,
   createGitHubBuckets,
   createHuggingFaceAdapter,
   createNpmAdapter,
   createPypiAdapter,
+  createRedisArxivConnectionLock,
   createRedisEtagStore,
   createRedisPypiEtagStore,
+  effectiveHfRatePer5Min,
   registerAdapter,
 } from '@trendr/sources';
 
@@ -54,6 +57,17 @@ export function registerIngestAdapters(redis: Redis, logger: Logger): void {
     { includeDatasets: env.HF_INCLUDE_DATASETS, includeSpaces: env.HF_INCLUDE_SPACES },
     'huggingface adapter registered',
   );
+
+  const hfRatePer5Min = effectiveHfRatePer5Min(env.HF_RATE_PER_5MIN, hfToken !== '');
+  registerAdapter(
+    createArxivAdapter({
+      userAgent: env.HTTP_USER_AGENT,
+      hfBucket: createBucket(redis, 'huggingface:api', { hfRatePer5Min }),
+      ...(hfToken === '' ? {} : { hfToken }),
+      connectionLock: createRedisArxivConnectionLock(redis),
+    }),
+  );
+  logger.info({ hfRatePer5Min }, 'arxiv adapter registered');
 
   const tokens = env.GITHUB_TOKENS ?? [];
   if (tokens.length === 0) {

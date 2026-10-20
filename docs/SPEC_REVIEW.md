@@ -1190,6 +1190,88 @@ be re-checked later. Decisions with alternatives get an ADR in [`docs/adr/`](./a
   it instead of rerunning. This is the documented hourly job-id idempotency; use `refresh-item`, wait
   for the next hourly slot, or replay the DLQ job when a failed child must be retried immediately.
 
+### Task 5.4 notes
+
+- **Adapter surface.** `packages/sources/src/arxiv` implements Atom 1.0 discovery, canonical
+  version-stripped ids, the four §7.3.5 categories (`cs.AI`, `cs.CL`, `cs.LG`, `cs.CV`), a
+  200-item page loop that stops at `published < now − 3 days`, a defensive 3,000-item/15-page cap,
+  and a non-retryable error for the API's single-entry `<title>Error</title>` feed. Discovery is
+  daily at `03:00` UTC; the hot snapshot is hourly at `:20` UTC. Both schedule rows are registered
+  under `ingest-arxiv` and are visible in the BullMQ repeat keys at worker boot.
+- **Politeness.** Every Atom request is wrapped in `lock:arxiv:conn` (`SET NX PX 30000`) and uses the
+  existing `rl:arxiv:api` bucket (capacity 1, refill one per 3 s). The lock is released only when the
+  caller's random token still matches, in a `finally` block. `fetchJson` is called with
+  `maxAttempts: 1` inside the lock so a bucket wait plus the request timeout stays under the 30 s
+  TTL; BullMQ retries the whole job after releasing the mutex. The lock is shared through Redis, so
+  additional workers cannot create a second in-flight arXiv connection. A fake-timer unit test
+  proves three sequential requests advance the clock by at least 6 s.
+- **HF enrichment.** Each snapshot job first reads the HF daily-paper feed for today and yesterday
+  (`limit=100`; `limit=1000` returns HTTP 400) and caches both maps in-process for one hour. Tracked
+  papers absent from both feeds fall back to `GET /api/papers/{id}`, charged to the shared
+  `rl:huggingface:api` bucket. A `404` means the paper is simply absent from HF: the ref is omitted
+  from `fetchMetrics` rather than written as an item or marked failed/deleted. Fallback calls are
+  capped at 300 per UTC hour by default. When the cap is reached the ref is returned as
+  `notModified`, so the processor writes continuity rows from the last stored upvotes rather than a
+  false zero; this is an additive use of the existing continuity path, not a second upstream state.
+  Known HF 404s are cached in-process for 24 hours so they do not consume the fallback budget on
+  every hourly pass. The cap and caches are process-local because the adapter has no dedicated
+  Redis counter (same limitation as other in-process caches); a single ingest worker matches the
+  §7.3.5 budget, and this must be revisited if ingest is scaled horizontally.
+- **Normalization.** Paper `url` is always the canonical `https://arxiv.org/abs/{id}` page. Metadata
+  keeps the authors, primary category, full category list, full abstract, comment/DOI/journal-ref,
+  and the abstract/PDF URLs; the PDF is never downloaded or served. Topics map
+  `cs.AI → ai`, `cs.CL → nlp`, `cs.CV → computer-vision`, `cs.LG → machine-learning`; other category
+  terms become normalized slugs. The primary metric is `upvotes`; no arXiv `stars` scoring entry
+  exists (`paramsFor('arxiv', 'stars', …)` throws). HF `githubRepo` becomes a `paper_code` GitHub
+  alias with confidence `0.9` and evidence `hf.paper.githubRepo`.
+- **Fixtures.** A live 3-entry Atom page and the live error feed were recorded under
+  `packages/sources/src/arxiv/__fixtures__` (multi-category entry `2610.26860`, versions, links,
+  authors, comments). The live HF daily feed (2 papers) and `2610.22471` paper detail provide the
+  upvotes/GitHub-repo fixture; `2610.22471` had `upvotes: 419`, `githubStars: 151` and
+  `githubRepo: https://github.com/OpenSenseNova/SenseNova-RoboRSI` on 2026-10-20.
+- **Deferred.** Alias and `item_topics` persistence remain in task 5.6; the arXiv cap-check is
+  shared with the tracked-limit task. The error-feed parser is exercised through a 200 response in
+  unit tests; live arXiv error feeds currently arrive as HTTP 400, which `fetchJson` already turns
+  into a non-retryable `UpstreamError` before the parser sees the body.
+- Acceptance coverage: unit — Atom fixture parsing, version dedupe, multi-category order, error-feed
+  rejection, empty page, 3-request fake-timer spacing, cutoff/maxItems, unsupported strategy,
+  Redis mutex acquire/release/error paths, Atom normalization, HF daily/detail/404/budget/cache
+  paths, and the `paper_code` alias. Live — documented below.
+
+### Task 5.4 live acceptance (2026-10-20)
+
+- **Worker.** Rebuilt and recreated on the compose stack. Startup logged
+  `arxiv adapter registered` and the scheduler ids `arxiv-discover` (`0 3 * * *`) and
+  `arxiv-snapshot` (`20 * * * *`) under `ingest-arxiv`; the BullMQ repeat keys are present. No
+  `HF_TOKEN` is configured, so the HF enrichment used the anonymous budget. Local acceptance used a
+  temporary compose override mapping Redis to `127.0.0.1:16379` because the unrelated
+  `smriti-redis-test` container already owns host port 6379; the in-network `redis:6379` URL was
+  unchanged and no compose file was modified.
+- **Discovery (`arxiv.discover.new-listings.2026-10-20T14-00`, run 209).** Manual
+  `POST /v1/admin/ingest {source:"arxiv",type:"discover",strategy:"new-listings",maxItems:400}`:
+  400 items seen, 400 upserted, 0 failed, 2 API calls, 10.6 s (two 200-item pages, including the
+  3 s bucket spacing). The first page immediately produced canonical items such as
+  `2610.26863` → `https://arxiv.org/abs/2610.26863` with `cs.LG`, 8 authors, the full abstract,
+  and the PDF URL only in metadata. arXiv inventory rose from the 26 seeded rows to 426; the
+  scheduled cap is 3,000 (15 pages), so the full three-day window still needs a production-timed run.
+- **Hot snapshot (`arxiv.snapshot-fanout.hot.2026-10-20T14-00`, fan-out run 214 → child run 215).**
+  Three discovered items were promoted to `hot` for the acceptance (`2610.26863`, `2610.26802`,
+  `2610.26825`). The child saw and upserted 3/3, 0 failed, 2 HF daily-feed API calls, 3.1 s, and 0
+  detail calls: all three were in the live 2026-10-20 daily feed. Snapshots captured
+  `upvotes = 2`, `128`, `97` respectively at the 14:00 bucket. `2610.26825` persisted
+  `homepage` (the HF project page), `metadata.githubRepo = https://github.com/MemTensor/MemT-1.0`,
+  and `metadata.githubStars = 146`; its normalized `paper_code` GitHub alias
+  is produced by the adapter and will be persisted by task 5.6. The daily feed was cached in the
+  process, so a second snapshot in the same hour would add no HF calls.
+- **HF 404 (`refresh.arxiv.151.2026-10-20`, run 217).** Refreshing seeded item 151
+  (`2604.10000`, absent from HF) completed `succeeded` with 1 item seen, 0 upserted, 0 failed,
+  0 not-modified, and 1 HF detail call in 2.1 s. The 404 ref was omitted exactly as required: the
+  item stayed tracked and untouched rather than becoming a failure or a deleted item.
+- **Politeness evidence.** Redis retained `rl:arxiv:api` state and no `lock:arxiv:conn` after the
+  runs (the mutex releases in `finally`); discovery took 10.6 s for two pages, consistent with the
+  3 s spacing. The full 300-detail/h fallback cap and the 3,000-item scheduled discovery were not
+  forced in live acceptance; both are covered by unit tests and the scheduled cap.
+
 ## Environment quirks worth knowing
 
 - `docker compose port <svc> <port>` exits **0** printing `invalid IP:0` when the port is only

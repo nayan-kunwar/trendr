@@ -1,5 +1,5 @@
 import { SOURCES, WINDOWS, type IngestJob, type MaintenanceJob, type Source } from '@trendr/core';
-import { HUGGINGFACE_DISCOVERY_MAX_ITEMS } from '@trendr/sources';
+import { ARXIV_DISCOVERY_MAX_ITEMS, HUGGINGFACE_DISCOVERY_MAX_ITEMS } from '@trendr/sources';
 import type { Logger } from '@trendr/logger';
 
 import { defaultJobOpts, type Queues } from './queues.js';
@@ -195,13 +195,39 @@ export const HUGGINGFACE_INGEST_SCHEDULES: readonly IngestSchedule[] = [
   },
 ];
 
+/**
+ * Spec §7.2 arXiv rows. Discovery runs once a day because arXiv publishes new
+ * listings once a day; the hourly hot snapshot enriches papers with HF
+ * upvotes and linked-code aliases.
+ */
+export const ARXIV_INGEST_SCHEDULES: readonly IngestSchedule[] = [
+  {
+    id: 'arxiv-discover',
+    name: 'discover',
+    pattern: '0 3 * * *',
+    data: {
+      type: 'discover',
+      source: 'arxiv',
+      strategy: 'new-listings',
+      maxItems: ARXIV_DISCOVERY_MAX_ITEMS,
+      trigger: 'schedule',
+    },
+  },
+  {
+    id: 'arxiv-snapshot',
+    name: 'snapshot-fanout',
+    pattern: '20 * * * *',
+    data: { type: 'snapshot-fanout', source: 'arxiv', tier: 'hot', trigger: 'schedule' },
+  },
+];
+
 /** Every implemented ingest row, by source (spec §7.2). */
 export const INGEST_SCHEDULES: Readonly<Record<Source, readonly IngestSchedule[]>> = {
   github: GITHUB_INGEST_SCHEDULES,
   npm: NPM_INGEST_SCHEDULES,
   pypi: PYPI_INGEST_SCHEDULES,
   huggingface: HUGGINGFACE_INGEST_SCHEDULES,
-  arxiv: [],
+  arxiv: ARXIV_INGEST_SCHEDULES,
   mcp: [],
 };
 

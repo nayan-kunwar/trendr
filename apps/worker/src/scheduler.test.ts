@@ -178,6 +178,34 @@ describe('registerSchedulers (spec §7.2)', () => {
     expect(byId['hf-snapshot-cold']?.data).toMatchObject({ tier: 'cold' });
   });
 
+  it('registers the two arXiv rows with their §7.3.5 crons and payloads', async () => {
+    const { queues, calls } = fakeQueues();
+    await registerSchedulers(queues);
+
+    const arxivCalls = calls.filter((call) => call.queue === 'ingest-arxiv');
+    expect(arxivCalls).toHaveLength(2);
+    expect(Object.fromEntries(arxivCalls.map((call) => [call.id, call.pattern]))).toEqual({
+      'arxiv-discover': '0 3 * * *',
+      'arxiv-snapshot': '20 * * * *',
+    });
+    for (const call of arxivCalls) {
+      expect(call.tz).toBe('UTC');
+      expect(call.data).toMatchObject({ source: 'arxiv', trigger: 'schedule' });
+    }
+
+    const byId = Object.fromEntries(arxivCalls.map((call) => [call.id, call]));
+    expect(byId['arxiv-discover']?.name).toBe('discover');
+    expect(byId['arxiv-discover']?.data).toMatchObject({
+      strategy: 'new-listings',
+      maxItems: 3_000,
+    });
+    expect(byId['arxiv-snapshot']?.name).toBe('snapshot-fanout');
+    expect(byId['arxiv-snapshot']?.data).toMatchObject({
+      type: 'snapshot-fanout',
+      tier: 'hot',
+    });
+  });
+
   it('registers the three PyPI rows with their §7.3.3 crons and payloads', async () => {
     const { queues, calls } = fakeQueues();
     await registerSchedulers(queues);

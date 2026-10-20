@@ -1,5 +1,10 @@
 // @trendr/sources — SourceAdapter interface + per-source adapters (spec §5.1, §7; Phases 4–5).
 export * from './adapter.js';
+export * from './arxiv/arxiv.adapter.js';
+export * from './arxiv/atom.js';
+export * from './arxiv/normalize.js';
+export * from './arxiv/schemas.js';
+export * from './arxiv/urls.js';
 export * from './buckets.js';
 export * from './github/github.adapter.js';
 export * from './github/schemas.js';

@@ -1,0 +1,24 @@
+{
+  "recordedAt": "2026-10-20T13:26:16Z",
+  "userAgent": "Trendr/1.0 (+https://github.com/nayankunwar/trendr)",
+  "query": "cat:cs.AI OR cat:cs.CL OR cat:cs.LG OR cat:cs.CV",
+  "atom": {
+    "entries": 3,
+    "ids": ["2610.26863v1", "2610.26860v1", "2610.26861v1"],
+    "multiCategoryEntry": "2610.26860v1",
+    "categories": ["cs.CL", "cs.AI", "cs.CV", "cs.LG", "cs.MM"]
+  },
+  "errorFeed": {
+    "status": 400,
+    "entryTitle": "Error",
+    "entryId": "https://arxiv.org/api/errors#start_must_be_non-negative",
+    "summary": "start must be non-negative"
+  },
+  "hfPaper": {
+    "id": "2610.22471",
+    "upvotes": 419,
+    "githubRepo": "https://github.com/OpenSenseNova/SenseNova-RoboRSI",
+    "githubStars": 151,
+    "dailyPapersDate": "2026-10-19"
+  }
+}
