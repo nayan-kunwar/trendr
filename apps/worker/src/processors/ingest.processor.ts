@@ -37,6 +37,7 @@ import {
   planSnapshotBatches,
   snapshotHourSlot,
 } from '../ingestion/fanout.js';
+import { findLinkedMcpAliasTargets, loadMcpDerivedMetrics } from '../ingestion/mcp-derived.js';
 import { RunRecorder } from '../ingestion/run-recorder.js';
 import { persistRateLimitState } from '../ingestion/rate-limit-state.js';
 import {
@@ -166,6 +167,13 @@ export async function processIngestJob(
           );
         }
       },
+      ...(data.source === 'mcp'
+        ? {
+            loadDerivedMetrics: (refs: readonly DiscoveredRef[], options?: { days?: number }) =>
+              loadMcpDerivedMetrics(deps.db, refs, options),
+            filterLinkedAliasTargets: (targets) => findLinkedMcpAliasTargets(deps.db, targets),
+          }
+        : {}),
     };
     await runJob({ deps, data, adapter, context, recorder, tick: job.timestamp });
   } catch (error) {
@@ -445,7 +453,7 @@ interface FetchAndPersistInput extends JobRunInput {
  * logged; more than 50% failures fail the job (spec §7.1).
  */
 async function fetchAndPersist(input: FetchAndPersistInput): Promise<void> {
-  const { deps, adapter, context, recorder, refs, tier, mode } = input;
+  const { deps, data, adapter, context, recorder, refs, tier, mode } = input;
   recorder.itemsSeen += refs.length;
   const notModified: DiscoveredRef[] = [];
 
@@ -493,6 +501,9 @@ async function fetchAndPersist(input: FetchAndPersistInput): Promise<void> {
         capturedAt: context.now(),
         runId: recorder.runId,
         logger: context.logger,
+        // §7.3.6: MCP snapshots carry only alias metrics, not the registry
+        // metadata discovered earlier. Daily jobs already preserve it.
+        ...(data.source === 'mcp' ? { preserveMetadata: true } : {}),
       });
     }
   }

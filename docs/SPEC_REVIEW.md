@@ -942,8 +942,8 @@ be re-checked later. Decisions with alternatives get an ADR in [`docs/adr/`](./a
   evidence `npm.repository.url`). `upstream_created_at` is deliberately **null** from search: the
   API's `package.date` is the latest *publish* date (verified: `react`'s is 2026, its creation is
   2011). The full packument's `time.created` fills it on refresh/backfill; the weekly metadata
-  cadence and alias persistence land in task 5.6. Only the latest version manifest is inspected for
-  `types`/`typings`/license fallbacks.
+  cadence lands in task 5.6, while alias persistence shipped in task 5.5. Only the latest version
+  manifest is inspected for `types`/`typings`/license fallbacks.
 - **Contract extensions (additive).** `FetchedItem.dailyIncomplete?` (§7.3.2 partial signal),
   `FetchOptions.mode?: 'snapshot' | 'daily'` (daily may skip metadata calls), and `DailyJob.day?`
   (BullMQ scheduler templates are static; the scheduled rows omit it and adapters anchor on
@@ -1044,7 +1044,8 @@ be re-checked later. Decisions with alternatives get an ADR in [`docs/adr/`](./a
   with the shared topic slugger. Every GitHub URL in `project_urls` (Repository, Issues,
   Changelog, …) is parsed with the npm URL helper, deduplicated, and emitted as
   `relation=package_of`, confidence `0.9`, evidence `pypi.project_urls`; the first one is also
-  stored as `metadata.repository`. Alias persistence + `item_topics` remain in task 5.6.
+  stored as `metadata.repository`. Alias persistence shipped in task 5.5; `item_topics` remains in
+  task 5.6.
 - **Contract extension (additive).** `FetchJsonOptions.responseType?: 'json' | 'text'` lets the
   RSS fetcher read XML through the same retry/bucket/allowlist path; the default remains JSON.
   The adapter uses the primary `pypi:json` bucket for RSS/project JSON and the separate
@@ -1151,8 +1152,9 @@ be re-checked later. Decisions with alternatives get an ADR in [`docs/adr/`](./a
   `arxiv:1810.04805` and `license:apache-2.0`), one trending dataset and one trending space, plus
   `meta.json` with the observed `RateLimit`/`RateLimit-Policy`, cursor and field evidence. The
   recorder trims dataset descriptions to 1,000 characters and redacts token-shaped strings.
-- **Deferred.** Alias persistence + `item_topics` (shared task 5.6), `TRACKED_MAX_HUGGINGFACE`
-  enforcement (shared cap-check task), and a §7.2 row for the daily likes sweep. The list cache is
+- **Deferred.** `item_topics` (shared task 5.6; alias persistence shipped in task 5.5),
+  `TRACKED_MAX_HUGGINGFACE` enforcement (shared cap-check task), and a §7.2 row for the daily likes
+  sweep. The list cache is
   process-local by design; a worker restart between discovery and snapshot is correct but turns
   cached items into detail calls.
 - Acceptance coverage: unit — fixture normalization for model/dataset/space, list-as-snapshot,
@@ -1229,8 +1231,9 @@ be re-checked later. Decisions with alternatives get an ADR in [`docs/adr/`](./a
   authors, comments). The live HF daily feed (2 papers) and `2610.22471` paper detail provide the
   upvotes/GitHub-repo fixture; `2610.22471` had `upvotes: 419`, `githubStars: 151` and
   `githubRepo: https://github.com/OpenSenseNova/SenseNova-RoboRSI` on 2026-10-20.
-- **Deferred.** Alias and `item_topics` persistence remain in task 5.6; the arXiv cap-check is
-  shared with the tracked-limit task. The error-feed parser is exercised through a 200 response in
+- **Deferred.** `item_topics` persistence remains in task 5.6 (alias persistence shipped in task
+  5.5); the arXiv cap-check is shared with the tracked-limit task. The error-feed parser is
+  exercised through a 200 response in
   unit tests; live arXiv error feeds currently arrive as HTTP 400, which `fetchJson` already turns
   into a non-retryable `UpstreamError` before the parser sees the body.
 - Acceptance coverage: unit — Atom fixture parsing, version dedupe, multi-category order, error-feed
@@ -1260,9 +1263,9 @@ be re-checked later. Decisions with alternatives get an ADR in [`docs/adr/`](./a
   detail calls: all three were in the live 2026-10-20 daily feed. Snapshots captured
   `upvotes = 2`, `128`, `97` respectively at the 14:00 bucket. `2610.26825` persisted
   `homepage` (the HF project page), `metadata.githubRepo = https://github.com/MemTensor/MemT-1.0`,
-  and `metadata.githubStars = 146`; its normalized `paper_code` GitHub alias
-  is produced by the adapter and will be persisted by task 5.6. The daily feed was cached in the
-  process, so a second snapshot in the same hour would add no HF calls.
+  and `metadata.githubStars = 146`; its normalized `paper_code` GitHub alias is now persisted by
+  task 5.5's generic alias path. The daily feed was cached in the process, so a second snapshot in
+  the same hour would add no HF calls.
 - **HF 404 (`refresh.arxiv.151.2026-10-20`, run 217).** Refreshing seeded item 151
   (`2604.10000`, absent from HF) completed `succeeded` with 1 item seen, 0 upserted, 0 failed,
   0 not-modified, and 1 HF detail call in 2.1 s. The 404 ref was omitted exactly as required: the
@@ -1271,6 +1274,82 @@ be re-checked later. Decisions with alternatives get an ADR in [`docs/adr/`](./a
   runs (the mutex releases in `finally`); discovery took 10.6 s for two pages, consistent with the
   3 s spacing. The full 300-detail/h fallback cap and the 3,000-item scheduled discovery were not
   forced in live acceptance; both are covered by unit tests and the scheduled cap.
+
+### Task 5.5 notes
+
+- **Adapter surface.** `packages/sources/src/mcp` implements the §7.3.6 registry walk, the
+  GitHub-topic/npm-keyword fallback, normalization, and the Redis cursor. List calls use `/v0.1`
+  with a single fallback to `/v0` on the first page's 404; detail URLs are
+  `/v0.1/servers/{encoded-name}/versions/latest`. Every page sends `version=latest` and
+  `include_deleted=true`. A `$schema` mismatch logs a warning and continues rather than failing
+  the run.
+- **Cursor and bounds.** Incremental runs pass `updated_since` from `mcp:registry:cursor_ts` and
+  store the maximum `updatedAt` only after a complete walk. `strategy=full` ignores the cursor and
+  advances it only on completion. The defensive bound is 50,000 items / 500 pages: live discovery
+  proved the registry is already larger than the original 10,000/100 bound. A truncated pass logs
+  the bound and leaves the cursor unchanged.
+- **Fallback dedupe.** GitHub search uses `topic:mcp-server` and `topic:mcp stars:>=5` with the
+  shared search bucket; npm uses `keywords:mcp-server` and `keywords:mcp`. Hits below 5 stars or 50
+  weekly downloads are dropped. The adapter collects the fallback batch, asks the worker
+  `filterLinkedAliasTargets`, and only then emits refs, so a repository/package already represented
+  by a registry item does not become a second MCP item.
+- **Alias persistence.** `persistAliases` is now in the generic worker upsert path, so every source
+  can persist its `NormalizedItem.aliases` (task 5.6 keeps `item_topics`). Alias targets are created
+  as minimal **warm** rows without the `stub` flag, exactly so their own source adapters will
+  snapshot them; existing `cold`/`archived` targets are promoted to warm. Deleted targets are
+  skipped. This is how registry servers acquire GitHub stars and npm/PyPI downloads.
+- **Derived snapshots.** `apps/worker/src/ingestion/mcp-derived.ts` reads the MCP item's alias
+  targets from Postgres: the largest GitHub `latest_metrics.stars` and the best npm/PyPI
+  `latest_metrics.downloads`, plus the chosen package's daily download series. The processor injects
+  these queries into `AdapterContext.loadDerivedMetrics`; `fetchMetrics` makes no registry call.
+  MCP snapshots persist with `preserveMetadata` and the expanded identity preservation, so a
+  metrics-only payload does not blank the discovery title/description/url/name.
+- **Deletes and schedules.** Registry `status=deleted` sets `NormalizedItem.deleted`, persisted as
+  `is_deleted=true`; the upsert ORs the flag so an active payload never resurrects a deleted row.
+  The §7.2 rows are `mcp-discover` (`0 */2 * * *`), `mcp-discover-full` (`30 0 * * 0`),
+  `mcp-discover-gh-npm` (`50 */6 * * *`), and `mcp-snapshot` (`25 * * * *`). An additive
+  `mcp-snapshot-warm` (`35 */6 * * *`) is required because new registry items start warm and would
+  otherwise never receive derived metrics (ADR-0015).
+- **Fixtures.** `packages/sources/src/mcp/__fixtures__` contains four live registry entries
+  (GitHub+npm, npm-only, remote-only, and a `status=deleted` entry), a live GitHub search page, a
+  live npm search page, and the observed registry schema/cursor metadata. The schema URL is pinned
+  to `2025-12-11/server.schema.json`.
+- **Deferred.** `item_topics` and any alias-confidence updates remain task 5.6. The inactive
+  registry `search` query is not used; discovery relies on cursor paging. The 50k/500-page bound and
+  the warm snapshot row are documented in ADR-0015.
+- Acceptance coverage: unit — registry normalization (GitHub/npm/remote/deleted), GitHub and npm
+  fallback normalization/admission, cursor pagination and watermark rules, v0.1→v0 fallback,
+  truncation, fallback filtering, no-token npm-only fallback, derived snapshot/backfill paths, and
+  the five scheduler rows; integration — alias target creation/promotion, derived stars/downloads,
+  metadata preservation, linked-target filtering, and sticky deletes. Live evidence is below.
+
+### Task 5.5 live acceptance (2026-10-20)
+
+- **Full registry sync.** The earlier 10k-bound passes stopped at exactly 100 pages and correctly
+  left the cursor unset. After raising the bound to 50k/500 pages, run 295 completed with
+  **48,379 seen / 48,379 upserted / 0 failed / 484 list calls**, and set
+  `mcp:registry:cursor_ts=2026-10-20T17:48:12.344Z`. Postgres then held 48,400 MCP rows including
+  1,324 deleted (48,379 registry servers plus the fallback rows).
+- **Incremental pass.** Run 296 used the stored cursor: **6 seen / 6 upserted / 1 list call** and
+  advanced the cursor to `2026-10-20T17:51:56.581Z`. A run without `updated_since` would have
+  repeated the full 48k walk, so this is direct evidence the watermark was sent.
+- **Derived metrics, no upstream calls.** Run 297 refreshed GitHub target 94143
+  (`asklokesh/loki-mode`, created as an alias stub) to 1,100 stars. Run 298 then refreshed registry
+  item 93995 (`io.github.asklokesh/loki-mode`) with **1 item / 0 API calls**: latest metrics became
+  `{stars: 1100, downloads: 3127}`, the `stars` snapshot was 1,100 at 17:00Z, and the daily
+  `downloads` rows were 3,127 (2026-10-18) and 9,484 (2026-10-17). The item kept its discovery
+  `name`, `display_name`, registry `url`, and `primary_metric=stars`.
+- **Alias targets and deletes.** Before the fallback pass, 48,632 registry MCP→target aliases all
+  pointed at `warm`/`hot` targets (zero cold), confirming warm creation/promotion. Sampled deleted
+  registry rows have
+  `is_deleted=true`, `is_archived=true`, `metadata.registryStatus=deleted`, and no aliases.
+- **Fallback discovery.** Run 300 (`strategy=github-npm`) completed with **782 seen / 782 upserted /
+  0 failed / 11 search calls**, creating 717 `github:{owner/name}` and 67 `npm:{pkg}` items. Every
+  created fallback item is warm and has its alias; a join found **zero** fallback items sharing a
+  target with a registry owner, so the linked-target filter excluded the already-represented hits.
+- **Schema drift.** The full pass logged one warning for older entries carrying
+  `2025-09-29/server.schema.json` while the pinned expectation is `2025-12-11`; all 48,379 entries
+  still normalized with zero failures, which is the intended warn-and-continue behavior.
 
 ## Environment quirks worth knowing
 

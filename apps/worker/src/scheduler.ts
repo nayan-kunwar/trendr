@@ -1,5 +1,10 @@
 import { SOURCES, WINDOWS, type IngestJob, type MaintenanceJob, type Source } from '@trendr/core';
-import { ARXIV_DISCOVERY_MAX_ITEMS, HUGGINGFACE_DISCOVERY_MAX_ITEMS } from '@trendr/sources';
+import {
+  ARXIV_DISCOVERY_MAX_ITEMS,
+  HUGGINGFACE_DISCOVERY_MAX_ITEMS,
+  MCP_DISCOVERY_MAX_ITEMS,
+  MCP_FALLBACK_MAX_ITEMS,
+} from '@trendr/sources';
 import type { Logger } from '@trendr/logger';
 
 import { defaultJobOpts, type Queues } from './queues.js';
@@ -221,6 +226,66 @@ export const ARXIV_INGEST_SCHEDULES: readonly IngestSchedule[] = [
   },
 ];
 
+/**
+ * Spec §7.2/§7.3.6 MCP rows. Registry sync is incremental every two hours and
+ * fully rescanned on Sunday (the registry reports `status=deleted` entries when
+ * `include_deleted` is set). The fallback pass shares GitHub's search budget;
+ * the hourly snapshot copies alias metrics and makes no upstream calls.
+ */
+export const MCP_INGEST_SCHEDULES: readonly IngestSchedule[] = [
+  {
+    id: 'mcp-discover',
+    name: 'discover',
+    pattern: '0 */2 * * *',
+    data: {
+      type: 'discover',
+      source: 'mcp',
+      strategy: 'registry',
+      maxItems: MCP_DISCOVERY_MAX_ITEMS,
+      trigger: 'schedule',
+    },
+  },
+  {
+    id: 'mcp-discover-full',
+    name: 'discover',
+    pattern: '30 0 * * 0',
+    data: {
+      type: 'discover',
+      source: 'mcp',
+      strategy: 'full',
+      maxItems: MCP_DISCOVERY_MAX_ITEMS,
+      trigger: 'schedule',
+    },
+  },
+  {
+    id: 'mcp-discover-gh-npm',
+    name: 'discover',
+    pattern: '50 */6 * * *',
+    data: {
+      type: 'discover',
+      source: 'mcp',
+      strategy: 'github-npm',
+      maxItems: MCP_FALLBACK_MAX_ITEMS,
+      trigger: 'schedule',
+    },
+  },
+  {
+    id: 'mcp-snapshot',
+    name: 'snapshot-fanout',
+    pattern: '25 * * * *',
+    data: { type: 'snapshot-fanout', source: 'mcp', tier: 'hot', trigger: 'schedule' },
+  },
+  {
+    // §7.2 only lists the hot snapshot, but discovery starts items `warm` and
+    // registry entries have no discovery metric. Without a warm pass their
+    // derived snapshots would never be written and they could never score.
+    id: 'mcp-snapshot-warm',
+    name: 'snapshot-fanout',
+    pattern: '35 */6 * * *',
+    data: { type: 'snapshot-fanout', source: 'mcp', tier: 'warm', trigger: 'schedule' },
+  },
+];
+
 /** Every implemented ingest row, by source (spec §7.2). */
 export const INGEST_SCHEDULES: Readonly<Record<Source, readonly IngestSchedule[]>> = {
   github: GITHUB_INGEST_SCHEDULES,
@@ -228,7 +293,7 @@ export const INGEST_SCHEDULES: Readonly<Record<Source, readonly IngestSchedule[]
   pypi: PYPI_INGEST_SCHEDULES,
   huggingface: HUGGINGFACE_INGEST_SCHEDULES,
   arxiv: ARXIV_INGEST_SCHEDULES,
-  mcp: [],
+  mcp: MCP_INGEST_SCHEDULES,
 };
 
 export interface MaintenanceSchedule {

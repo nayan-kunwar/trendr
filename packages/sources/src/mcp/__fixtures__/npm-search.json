@@ -1,0 +1,130 @@
+{
+  "objects": [
+    {
+      "package": {
+        "name": "yahoo-finance2",
+        "version": "4.0.4",
+        "description": "JS API for Yahoo Finance",
+        "keywords": [
+          "yahoo",
+          "finance",
+          "financial",
+          "data",
+          "stock",
+          "price",
+          "quote",
+          "historical",
+          "eod",
+          "end-of-day",
+          "client",
+          "library",
+          "agent-skill",
+          "mcp-server"
+        ],
+        "date": "2026-10-15T10:13:15.272Z",
+        "links": {
+          "npm": "https://www.npmjs.com/package/yahoo-finance2",
+          "homepage": "https://github.com/gadicc/yahoo-finance2#readme",
+          "repository": "git+https://github.com/gadicc/yahoo-finance2.git"
+        },
+        "publisher": {
+          "username": "GitHub Actions"
+        },
+        "license": "MIT"
+      },
+      "downloads": {
+        "monthly": 2186691,
+        "weekly": 130353
+      },
+      "updated": "2026-10-19T12:39:27.798Z"
+    },
+    {
+      "package": {
+        "name": "agentic-flow",
+        "version": "2.1.4",
+        "description": "The agentic meta-harness — freeze the model, evolve the harness. An open runtime that routes each query to the cost-optimal model, evolves its own harness (planner/context/reviewer/retry/tool/memory/score policy) and autonomously repairs code, then orches",
+        "keywords": [
+          "meta-harness",
+          "metaharness",
+          "agent-harness",
+          "harness-evolution",
+          "model-routing",
+          "cost-optimal-routing",
+          "self-improving",
+          "darwin",
+          "ai",
+          "ai-agents",
+          "ai-orchestration",
+          "agentic",
+          "agents",
+          "agent-swarm",
+          "anthropic",
+          "anthropic-claude",
+          "automation",
+          "autonomous-agents",
+          "byzantine-consensus",
+          "claude"
+        ],
+        "date": "2026-10-09T12:53:40.433Z",
+        "links": {
+          "npm": "https://www.npmjs.com/package/agentic-flow",
+          "homepage": "https://github.com/ruvnet/agentic-flow#readme",
+          "repository": "git+https://github.com/ruvnet/agentic-flow.git"
+        },
+        "publisher": {
+          "username": "ruvnet"
+        },
+        "license": "MIT"
+      },
+      "downloads": {
+        "monthly": 483666,
+        "weekly": 61766
+      },
+      "updated": "2026-10-19T12:42:12.513Z"
+    },
+    {
+      "package": {
+        "name": "agent-device",
+        "version": "0.21.28",
+        "description": "Mobile app automation and verification for AI coding agents. CLI, MCP server, and typed Node.js API for iOS, Android, HarmonyOS, TV, web, macOS, and Linux.",
+        "keywords": [
+          "agent",
+          "device",
+          "cli",
+          "automation",
+          "adb",
+          "simctl",
+          "devicectl",
+          "ios",
+          "android",
+          "tvos",
+          "macos",
+          "web",
+          "browser",
+          "react-native",
+          "observability",
+          "diagnostics",
+          "network",
+          "profiling",
+          "performance",
+          "mcp"
+        ],
+        "date": "2026-10-15T08:19:18.700Z",
+        "links": {
+          "npm": "https://www.npmjs.com/package/agent-device",
+          "homepage": "https://agent-device.dev/",
+          "repository": "git+https://github.com/callstack/agent-device.git"
+        },
+        "publisher": {
+          "username": "GitHub Actions"
+        },
+        "license": "MIT"
+      },
+      "downloads": {
+        "monthly": 1016875,
+        "weekly": 191116
+      },
+      "updated": "2026-10-20T01:49:40.275Z"
+    }
+  ]
+}

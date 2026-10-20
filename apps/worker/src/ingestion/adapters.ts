@@ -8,10 +8,12 @@ import {
   createGitHubAdapter,
   createGitHubBuckets,
   createHuggingFaceAdapter,
+  createMcpAdapter,
   createNpmAdapter,
   createPypiAdapter,
   createRedisArxivConnectionLock,
   createRedisEtagStore,
+  createRedisMcpCursor,
   createRedisPypiEtagStore,
   effectiveHfRatePer5Min,
   registerAdapter,
@@ -70,6 +72,24 @@ export function registerIngestAdapters(redis: Redis, logger: Logger): void {
   logger.info({ hfRatePer5Min }, 'arxiv adapter registered');
 
   const tokens = env.GITHUB_TOKENS ?? [];
+  registerAdapter(
+    createMcpAdapter({
+      userAgent: env.HTTP_USER_AGENT,
+      cursorStore: createRedisMcpCursor(redis),
+      npmBucket: createBucket(redis, 'npm:registry'),
+      ...(tokens.length === 0
+        ? {}
+        : {
+            github: {
+              tokens,
+              searchBucket: createBucket(redis, 'github:search'),
+              reserve: env.GITHUB_RESERVE,
+            },
+          }),
+    }),
+  );
+  logger.info({ githubFallback: tokens.length > 0 }, 'mcp adapter registered');
+
   if (tokens.length === 0) {
     logger.warn('GITHUB_TOKENS is empty — the github adapter is not registered');
     return;

@@ -1,0 +1,19 @@
+{
+  "recordedAt": "2026-10-20T14:52:19Z",
+  "registry": {
+    "v0_1": "https://registry.modelcontextprotocol.io/v0.1/servers",
+    "v0": "https://registry.modelcontextprotocol.io/v0/servers",
+    "schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+    "firstPageNextCursor": "com.easymcpai/easy-mcp-ai-wordpress:2.2.2",
+    "deletedFixture": "ac.inference.sh/inference",
+    "deletedStatus": "deleted"
+  },
+  "github": {
+    "query": "topic:mcp-server",
+    "totalCount": 46421
+  },
+  "npm": {
+    "query": "keywords:mcp-server",
+    "maxPageSize": 250
+  }
+}

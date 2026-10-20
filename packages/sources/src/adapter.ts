@@ -64,6 +64,24 @@ export interface NormalizedItem {
     confidence: number;
     evidence: string;
   }[];
+  /**
+   * Additive extension of the §5.1 shape: the upstream item is gone. The
+   * processor persists `items.is_deleted = true` instead of dropping the row,
+   * so history and watchlists keep resolving (spec §7.3.6 registry deletes).
+   */
+  deleted?: boolean;
+}
+
+/** Values derived from a source item's aliases, used by MCP snapshots (§7.3.6). */
+export interface DerivedMetrics {
+  latest: Partial<Record<Metric, number>>;
+  daily: { metric: Metric; day: string; value: number }[];
+}
+
+/** The alias target an MCP fallback hit would duplicate (§7.3.6). */
+export interface AliasTargetKey {
+  source: Source;
+  externalId: string;
 }
 
 export type AliasRelation =
@@ -104,6 +122,21 @@ export interface AdapterContext {
   onRateLimit?: (info: RateLimitInfo) => void;
   /** GAP-8: PAT expiry reported by GitHub responses. */
   onTokenExpiry?: (info: TokenExpiryInfo) => void;
+  /**
+   * Spec §7.3.6 — MCP snapshots copy the latest metrics of their alias
+   * targets from Postgres, so they make no upstream calls. The worker injects
+   * the query; adapters stay independent of `@trendr/db`.
+   */
+  loadDerivedMetrics?: (
+    refs: readonly DiscoveredRef[],
+    options?: { days?: number },
+  ) => Promise<Map<string, DerivedMetrics>>;
+  /**
+   * Spec §7.3.6 — returns `source:externalId` keys that already belong to a
+   * tracked registry MCP item, so GitHub/npm fallback discovery does not
+   * create a second MCP item for a linked repository or package.
+   */
+  filterLinkedAliasTargets?: (targets: readonly AliasTargetKey[]) => Promise<Set<string>>;
 }
 
 export interface DiscoverOptions {

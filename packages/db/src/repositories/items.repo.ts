@@ -29,6 +29,12 @@ export interface ItemUpsert {
   primaryMetric: Metric;
   upstreamCreatedAt: Date | null;
   isArchived: boolean;
+  /**
+   * Additive extension of the §5.1 shape: upstream deletion. A true value
+   * sets `is_deleted`; a false/absent value never resurrects a soft-deleted
+   * row (deletion is monotonic until an explicit admin restore).
+   */
+  isDeleted?: boolean;
   metadata: Record<string, unknown>;
   flags?: ItemFlag[];
   /**
@@ -52,12 +58,19 @@ export interface UpsertItemsOptions {
    */
   newItemTier?: Tier;
   /**
-   * Keep the existing descriptive columns when the incoming value is null.
-   * Daily jobs (§7.1 step 4: "only the daily series") carry no metadata for
-   * npm/PyPI, so without this a download refresh would blank descriptions,
-   * homepages, languages, licenses and owners.
+   * Keep the existing descriptive columns and identity (name, display_name,
+   * url) when the incoming payload is metadata-less. Daily jobs (§7.1 step 4:
+   * "only the daily series") carry no metadata for npm/PyPI, and MCP derived
+   * snapshots carry only alias metrics (§7.3.6); without this either refresh
+   * would blank stored metadata.
    */
   preserveMetadata?: boolean;
+  /**
+   * Keep `primary_metric` from the existing row. Metrics-only payloads (MCP
+   * derived snapshots) must not downgrade a GitHub-linked item to downloads
+   * merely because the alias target has no snapshot yet.
+   */
+  preservePrimaryMetric?: boolean;
 }
 
 /**
@@ -91,6 +104,14 @@ export async function upsertItems(
   const owner = options.preserveMetadata
     ? sql`coalesce(excluded.owner, ${items.owner})`
     : sql`excluded.owner`;
+  const name = options.preserveMetadata ? sql`${items.name}` : sql`excluded.name`;
+  const displayName = options.preserveMetadata
+    ? sql`${items.displayName}`
+    : sql`excluded.display_name`;
+  const url = options.preserveMetadata ? sql`${items.url}` : sql`excluded.url`;
+  const primaryMetric = options.preservePrimaryMetric
+    ? sql`${items.primaryMetric}`
+    : sql`excluded.primary_metric`;
 
   return db
     .insert(items)
@@ -99,6 +120,7 @@ export async function upsertItems(
         ...row,
         flags: row.flags ?? [],
         latestMetrics: row.latestMetrics ?? {},
+        isDeleted: row.isDeleted ?? false,
         ...(options.newItemTier === undefined ? {} : { tier: options.newItemTier }),
       })),
     )
@@ -106,17 +128,20 @@ export async function upsertItems(
       target: [items.source, items.externalId],
       set: {
         upstreamId: sql`coalesce(excluded.upstream_id, ${items.upstreamId})`,
-        name: sql`excluded.name`,
-        displayName: sql`excluded.display_name`,
+        name,
+        displayName,
         description,
-        url: sql`excluded.url`,
+        url,
         homepage,
         language,
         license,
         owner,
-        primaryMetric: sql`excluded.primary_metric`,
+        primaryMetric,
         upstreamCreatedAt: sql`coalesce(excluded.upstream_created_at, ${items.upstreamCreatedAt})`,
         isArchived: sql`excluded.is_archived`,
+        // §7.3.6: an upstream delete is sticky; a later active payload does
+        // not silently resurrect the row (an admin restore is explicit).
+        isDeleted: sql`${items.isDeleted} OR excluded.is_deleted`,
         metadata: sql`${items.metadata} || excluded.metadata`,
         latestMetrics: sql`${items.latestMetrics} || excluded.latest_metrics`,
         flags: sql`(select coalesce(array_agg(distinct f), '{}'::text[]) from unnest(${items.flags} || excluded.flags) as t(f))`,

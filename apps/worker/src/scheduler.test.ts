@@ -206,6 +206,49 @@ describe('registerSchedulers (spec §7.2)', () => {
     });
   });
 
+  it('registers the five MCP rows with their §7.2/§7.3.6 crons and payloads', async () => {
+    const { queues, calls } = fakeQueues();
+    await registerSchedulers(queues);
+
+    const mcpCalls = calls.filter((call) => call.queue === 'ingest-mcp');
+    expect(mcpCalls).toHaveLength(5);
+    expect(Object.fromEntries(mcpCalls.map((call) => [call.id, call.pattern]))).toEqual({
+      'mcp-discover': '0 */2 * * *',
+      'mcp-discover-full': '30 0 * * 0',
+      'mcp-discover-gh-npm': '50 */6 * * *',
+      'mcp-snapshot': '25 * * * *',
+      'mcp-snapshot-warm': '35 */6 * * *',
+    });
+    for (const call of mcpCalls) {
+      expect(call.tz).toBe('UTC');
+      expect(call.data).toMatchObject({ source: 'mcp', trigger: 'schedule' });
+    }
+
+    const byId = Object.fromEntries(mcpCalls.map((call) => [call.id, call]));
+    expect(byId['mcp-discover']?.name).toBe('discover');
+    expect(byId['mcp-discover']?.data).toMatchObject({
+      strategy: 'registry',
+      maxItems: 50_000,
+    });
+    expect(byId['mcp-discover-full']?.data).toMatchObject({
+      strategy: 'full',
+      maxItems: 50_000,
+    });
+    expect(byId['mcp-discover-gh-npm']?.data).toMatchObject({
+      strategy: 'github-npm',
+      maxItems: 1_000,
+    });
+    expect(byId['mcp-snapshot']?.name).toBe('snapshot-fanout');
+    expect(byId['mcp-snapshot']?.data).toMatchObject({
+      type: 'snapshot-fanout',
+      tier: 'hot',
+    });
+    expect(byId['mcp-snapshot-warm']?.data).toMatchObject({
+      type: 'snapshot-fanout',
+      tier: 'warm',
+    });
+  });
+
   it('registers the three PyPI rows with their §7.3.3 crons and payloads', async () => {
     const { queues, calls } = fakeQueues();
     await registerSchedulers(queues);
