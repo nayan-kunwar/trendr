@@ -7,7 +7,9 @@ import {
   createGitHubAdapter,
   createGitHubBuckets,
   createNpmAdapter,
+  createPypiAdapter,
   createRedisEtagStore,
+  createRedisPypiEtagStore,
   registerAdapter,
 } from '@trendr/sources';
 
@@ -15,7 +17,8 @@ import {
  * Spec §3.3 — boot-time adapter registration for ingest workers. Sources
  * without credentials stay unregistered: their jobs fail non-retryably
  * (`AdapterNotRegisteredError` → DLQ) instead of hammering upstream API hosts.
- * npm is credential-free, so it registers regardless of the GitHub token set.
+ * npm and PyPI are credential-free, so they register regardless of the GitHub
+ * token set.
  */
 export function registerIngestAdapters(redis: Redis, logger: Logger): void {
   registerAdapter(
@@ -26,6 +29,16 @@ export function registerIngestAdapters(redis: Redis, logger: Logger): void {
     }),
   );
   logger.info('npm adapter registered');
+
+  registerAdapter(
+    createPypiAdapter({
+      userAgent: env.HTTP_USER_AGENT,
+      minWeeklyDownloads: env.PYPI_MIN_WEEKLY_DOWNLOADS,
+      statsBucket: createBucket(redis, 'pypi:stats'),
+      etags: createRedisPypiEtagStore(redis),
+    }),
+  );
+  logger.info('pypi adapter registered');
 
   const tokens = env.GITHUB_TOKENS ?? [];
   if (tokens.length === 0) {

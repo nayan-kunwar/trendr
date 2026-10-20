@@ -1,0 +1,38 @@
+{
+  "recordedAt": "2026-10-20T04:41:21.116Z",
+  "userAgent": "Trendr/1.0 (+https://github.com/nayankunwar/trendr)",
+  "package": "mcp",
+  "project": {
+    "etag": "\"Opwgy85QHdhw9h38/BVOzA\"",
+    "cacheControl": "max-age=900, public",
+    "lastSerial": "41751579",
+    "projectUrls": {
+      "Documentation": "https://py.sdk.modelcontextprotocol.io/",
+      "Homepage": "https://modelcontextprotocol.io",
+      "Issues": "https://github.com/modelcontextprotocol/python-sdk/issues",
+      "Repository": "https://github.com/modelcontextprotocol/python-sdk"
+    }
+  },
+  "rss": {
+    "newest": {
+      "items": 40,
+      "cacheControl": null
+    },
+    "updates": {
+      "items": 100,
+      "cacheControl": null
+    }
+  },
+  "stats": {
+    "overall": {
+      "points": 195,
+      "first": "2026-04-08",
+      "last": "2026-10-19"
+    },
+    "recent": {
+      "last_day": 9981845,
+      "last_week": 65372845,
+      "last_month": 235193557
+    }
+  }
+}

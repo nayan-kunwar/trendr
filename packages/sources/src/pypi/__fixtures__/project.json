@@ -1,0 +1,912 @@
+{
+  "info": {
+    "name": "mcp",
+    "version": "2.3.0",
+    "summary": "Model Context Protocol SDK",
+    "description": "# MCP Python SDK\n\n<div align=\"center\">\n\n<strong>Python implementation of the Model Context Protocol (MCP)</strong>\n\n[![PyPI][pypi-badge]][pypi-url]\n[![MIT licensed][mit-badge]][mit-url]\n[![Python Version][python-badge]][python-url]\n[![Documentation][docs-badge]][docs-url]\n[![Protocol][protocol-badge]][protocol-url]\n[![Specification][spec-badge]][spec-url]\n\n</div>\n\n## Documentation\n\n**The documentation lives at <https://py.sdk.modelcontextprotocol.io/>.**\n\nIt has a [Get started guide](https://py.sdk.modelcontextprotocol.io/get-started/), [What's new in v2](https://py.sdk.modelcontextprotocol.io/whats-new/), the [API reference](https://py.sdk.modelcontextprotocol.io/api/mcp/), and the [migration guide](https://py.sdk.modelcontextprotocol.io/migration/).\n\n## What is MCP?\n\nThe [Model Context Protocol](https://modelcontextprotocol.io) lets you build servers that expose data and functionality to LLM applications in a secure, standardized way. Think of it like a web API, but designed for LLM interactions. With this SDK you can:\n\n- **Build MCP servers** that expose tools, resources, and prompts to any MCP host\n- **Build MCP clients** that connect to any MCP server\n- Speak every standard transport: stdio, Streamable HTTP, and SSE\n\n## Requirements\n\nPython 3.10+.\n\n## Installation\n\n```bash\nuv add \"mcp[cli]\"      # or: pip install \"mcp[cli]\"\n```\n\nThe `cli` extra adds the `mcp` command-line tool (`mcp dev`, `mcp run`, `mcp install`) on top of the SDK; install plain `mcp` if you don't need it. For one-off commands, `uv run --with \"mcp[cli]\" mcp ...` works without a project.\n\n## A server in 15 lines\n\nCreate a `server.py`:\n\n<!-- snippet-source docs_src/index/tutorial001.py -->\n```python\nfrom mcp.server import MCPServer\n\nmcp = MCPServer(\"Demo\")\n\n\n@mcp.tool()\ndef add(a: int, b: int) -> int:\n    \"\"\"Add two numbers.\"\"\"\n    return a + b\n\n\n@mcp.resource(\"greeting://{name}\")\ndef greeting(name: str) -> str:\n    \"\"\"Greet someone by name.\"\"\"\n    return f\"Hello, {name}!\"\n```\n\n_Full example: [docs_src/index/tutorial001.py](https://github.com/modelcontextprotocol/python-sdk/blob/main/docs_src/index/tutorial001.py)_\n<!-- /snippet-source -->\n\nThat's a complete MCP server: one tool, one templated resource. Open it in the [MCP Inspector](https://github.com/modelcontextprotocol/inspector):\n\n```bash\nuv run mcp dev server.py\n```\n\nCall `add` with `a=1`, `b=2` and you get `3` back.\n\nNotice what you did **not** write: no JSON Schema (`a: int, b: int` _is_ the schema), no request parsing, no validation code, no protocol handling. Two type-hinted Python functions and a docstring.\n\n[Get started](https://py.sdk.modelcontextprotocol.io/get-started/) takes it from here.\n\n## A client in 10 lines\n\nThe same package is a full MCP **client**. Serve `server.py` over HTTP:\n\n```bash\nuv run mcp run server.py --transport streamable-http\n```\n\nthen point a `Client` at it:\n\n```python\nimport asyncio\n\nfrom mcp import Client\n\n\nasync def main() -> None:\n    async with Client(\"http://localhost:8000/mcp\") as client:\n        result = await client.call_tool(\"add\", {\"a\": 1, \"b\": 2})\n        print(result.structured_content)  # {'result': 3}\n\n\nasyncio.run(main())\n```\n\nA URL means Streamable HTTP, the transport you deploy. `Client` can also launch a local server as a stdio subprocess or take any custom transport; [Clients](https://py.sdk.modelcontextprotocol.io/client/) has the rest.\n\n## Contributing\n\nWe are passionate about supporting contributors of all levels of experience and would love to see you get involved in the project. See the [contributing guide](https://github.com/modelcontextprotocol/python-sdk/blob/main/CONTRIBUTING.md) to get started.\n\n## License\n\nThis project is licensed under the MIT License. See the [LICENSE](https://github.com/modelcontextprotocol/python-sdk/blob/main/LICENSE) file for details.\n\n[pypi-badge]: https://img.shields.io/pypi/v/mcp.svg\n[pypi-url]: https://pypi.org/project/mcp/\n[mit-badge]: https://img.shields.io/pypi/l/mcp.svg\n[mit-url]: https://github.com/modelcontextprotocol/python-sdk/blob/main/LICENSE\n[python-badge]: https://img.shields.io/pypi/pyversions/mcp.svg\n[python-url]: https://www.python.org/downloads/\n[docs-badge]: https://img.shields.io/badge/docs-python--sdk-blue.svg\n[docs-url]: https://py.sdk.modelcontextprotocol.io/\n[protocol-badge]: https://img.shields.io/badge/protocol-modelcontextprotocol.io-blue.svg\n[protocol-url]: https://modelcontextprotocol.io\n[spec-badge]: https://img.shields.io/badge/spec-spec.modelcontextprotocol.io-blue.svg\n[spec-url]: https://modelcontextprotocol.io/specification/latest\n",
+    "author": "Model Context Protocol a Series of LF Projects, LLC.",
+    "maintainer": null,
+    "home_page": null,
+    "project_url": "https://pypi.org/project/mcp/",
+    "project_urls": {
+      "Documentation": "https://py.sdk.modelcontextprotocol.io/",
+      "Homepage": "https://modelcontextprotocol.io",
+      "Issues": "https://github.com/modelcontextprotocol/python-sdk/issues",
+      "Repository": "https://github.com/modelcontextprotocol/python-sdk"
+    },
+    "license": "MIT",
+    "license_expression": null,
+    "keywords": "automation, llm, mcp",
+    "classifiers": [
+      "Development Status :: 5 - Production/Stable",
+      "Intended Audience :: Developers",
+      "License :: OSI Approved :: MIT License",
+      "Programming Language :: Python :: 3",
+      "Programming Language :: Python :: 3.10",
+      "Programming Language :: Python :: 3.11",
+      "Programming Language :: Python :: 3.12",
+      "Programming Language :: Python :: 3.13",
+      "Programming Language :: Python :: 3.14"
+    ],
+    "requires_python": ">=3.10",
+    "yanked": false
+  },
+  "releases": {
+    "0.9.1": [
+      {
+        "upload_time_iso_8601": "2024-11-20T11:37:34.333286Z",
+        "upload_time": "2024-11-20T11:37:34",
+        "yanked": false
+      },
+      {
+        "upload_time_iso_8601": "2024-11-20T11:37:36.109071Z",
+        "upload_time": "2024-11-20T11:37:36",
+        "yanked": false
+      }
+    ],
+    "1.0.0": [
+      {
+        "upload_time_iso_8601": "2024-11-25T14:27:34.367301Z",
+        "upload_time": "2024-11-25T14:27:34",
+        "yanked": false
+      },
+      {
+        "upload_time_iso_8601": "2024-11-25T14:27:35.616459Z",
+        "upload_time": "2024-11-25T14:27:35",
+        "yanked": false
+      }
+    ],
+    "1.1.0": [
+      {
+        "upload_time_iso_8601": "2024-12-03T22:39:17.880529Z",
+        "upload_time": "2024-12-03T22:39:17",
+        "yanked": false
+      },
+      {
+        "upload_time_iso_8601": "2024-12-03T22:39:19.157208Z",
+        "upload_time": "2024-12-03T22:39:19",
+        "yanked": false
+      }
+    ],
+    "1.1.1": [
+      {
+        "upload_time_iso_8601": "2024-12-09T14:45:41.584359Z",
+        "upload_time": "2024-12-09T14:45:41",
+        "yanked": false
+      },
+      {
+        "upload_time_iso_8601": "2024-12-09T14:45:42.926456Z",
+        "upload_time": "2024-12-09T14:45:42",
+        "yanked": false
+      }
+    ],
+    "1.1.2": [
+      {
+        "upload_time_iso_8601": "2024-12-12T17:16:42.117828Z",
+        "upload_time": "2024-12-12T17:16:42",
+        "yanked": false
+      },
+      {
+        "upload_time_iso_8601": "2024-12-12T17:16:44.675192Z",
+        "upload_time": "2024-12-12T17:16:44",
+        "yanked": false
+      }
+    ],
+    "1.1.3": [
+      {
+        "upload_time_iso_8601": "2025-01-03T15:54:39.284858Z",
+        "upload_time": "2025-01-03T15:54:39",
+        "yanked": false
+      },
+      {
+        "upload_time_iso_8601": "2025-01-03T15:54:43.650163Z",
+        "upload_time": "2025-01-03T15:54:43",
+        "yanked": false
+      }
+    ],
+    "1.10.0": [
+      {
+        "upload_time_iso_8601": "2025-06-26T13:51:17.342139Z",
+        "upload_time": "2025-06-26T13:51:17",
+        "yanked": false
+      },
+      {
+        "upload_time_iso_8601": "2025-06-26T13:51:19.025832Z",
+        "upload_time": "2025-06-26T13:51:19",
+        "yanked": false
+      }
+    ],
+    "1.10.1": [
+      {
+        "upload_time_iso_8601": "2025-06-27T12:03:07.328572Z",
+        "upload_time": "2025-06-27T12:03:07",
+        "yanked": false
+      },
+      {
+        "upload_time_iso_8601": "2025-06-27T12:03:08.982622Z",
+        "upload_time": "2025-06-27T12:03:08",
+        "yanked": false
+      }
+    ],
+    "1.11.0": [
+      {
+        "upload_time_iso_8601": "2025-07-10T16:41:07.935442Z",
+        "upload_time": "2025-07-10T16:41:07",
+        "yanked": false
+      },
+      {
+        "upload_time_iso_8601": "2025-07-10T16:41:09.388896Z",
+        "upload_time": "2025-07-10T16:41:09",
+        "yanked": false
+      }
+    ],
+    "1.12.0": [
+      {
+        "upload_time_iso_8601": "2025-07-17T19:46:34.166285Z",
+        "upload_time": "2025-07-17T19:46:34",
+        "yanked": false
+      },
+      {
+        "upload_time_iso_8601": "2025-07-17T19:46:35.522252Z",
+        "upload_time": "2025-07-17T19:46:35",
+        "yanked": false
+      }
+    ],
+    "1.12.1": [
+      {
+        "upload_time_iso_8601": "2025-07-22T16:51:40.086642Z",
+        "upload_time": "2025-07-22T16:51:40",
+        "yanked": false
+      },
+      {
+        "upload_time_iso_8601": "2025-07-22T16:51:41.660735Z",
+        "upload_time": "2025-07-22T16:51:41",
+        "yanked": false
+      }
+    ],
+    "1.12.2": [
+      {
+        "upload_time_iso_8601": "2025-07-24T18:29:03.419879Z",
+        "upload_time": "2025-07-24T18:29:03",
+        "yanked": false
+      },
+      {
+        "upload_time_iso_8601": "2025-07-24T18:29:05.175499Z",
+        "upload_time": "2025-07-24T18:29:05",
+        "yanked": false
+      }
+    ],
+    "1.12.3": [
+      {
+        "upload_time_iso_8601": "2025-07-31T18:36:34.915713Z",
+        "upload_time": "2025-07-31T18:36:34",
+        "yanked": false
+      },
+      {
+        "upload_time_iso_8601": "2025-07-31T18:36:36.795429Z",
+        "upload_time": "2025-07-31T18:36:36",
+        "yanked": false
+      }
+    ],
+    "1.12.4": [
+      {
+        "upload_time_iso_8601": "2025-08-07T20:31:15.690447Z",
+        "upload_time": "2025-08-07T20:31:15",
+        "yanked": false
+      },
+      {
+        "upload_time_iso_8601": "2025-08-07T20:31:18.082079Z",
+        "upload_time": "2025-08-07T20:31:18",
+        "yanked": false
+      }
+    ],
+    "1.13.0": [
+      {
+        "upload_time_iso_8601": "2025-08-14T15:03:56.641167Z",
+        "upload_time": "2025-08-14T15:03:56",
+        "yanked": false
+      },
+      {
+        "upload_time_iso_8601": "2025-08-14T15:03:58.580425Z",
+        "upload_time": "2025-08-14T15:03:58",
+        "yanked": false
+      }
+    ],
+    "1.13.1": [
+      {
+        "upload_time_iso_8601": "2025-08-22T09:22:14.705444Z",
+        "upload_time": "2025-08-22T09:22:14",
+        "yanked": false
+      },
+      {
+        "upload_time_iso_8601": "2025-08-22T09:22:16.061697Z",
+        "upload_time": "2025-08-22T09:22:16",
+        "yanked": false
+      }
+    ],
+    "1.14.0": [
+      {
+        "upload_time_iso_8601": "2025-09-11T17:40:46.891645Z",
+        "upload_time": "2025-09-11T17:40:46",
+        "yanked": false
+      },
+      {
+        "upload_time_iso_8601": "2025-09-11T17:40:48.667431Z",
+        "upload_time": "2025-09-11T17:40:48",
+        "yanked": false
+      }
+    ],
+    "1.14.1": [
+      {
+        "upload_time_iso_8601": "2025-09-18T13:37:18.165771Z",
+        "upload_time": "2025-09-18T13:37:18",
+        "yanked": false
+      },
+      {
+        "upload_time_iso_8601": "2025-09-18T13:37:19.971657Z",
+        "upload_time": "2025-09-18T13:37:19",
+        "yanked": false
+      }
+    ],
+    "1.15.0": [
+      {
+        "upload_time_iso_8601": "2025-09-25T15:39:50.538187Z",
+        "upload_time": "2025-09-25T15:39:50",
+        "yanked": false
+      },
+      {
+        "upload_time_iso_8601": "2025-09-25T15:39:51.995478Z",
+        "upload_time": "2025-09-25T15:39:51",
+        "yanked": false
+      }
+    ],
+    "1.16.0": [
+      {
+        "upload_time_iso_8601": "2025-10-02T16:58:19.039586Z",
+        "upload_time": "2025-10-02T16:58:19",
+        "yanked": false
+      },
+      {
+        "upload_time_iso_8601": "2025-10-02T16:58:20.631448Z",
+        "upload_time": "2025-10-02T16:58:20",
+        "yanked": false
+      }
+    ],
+    "1.17.0": [
+      {
+        "upload_time_iso_8601": "2025-10-10T12:16:42.863200Z",
+        "upload_time": "2025-10-10T12:16:42",
+        "yanked": false
+      },
+      {
+        "upload_time_iso_8601": "2025-10-10T12:16:44.519894Z",
+        "upload_time": "2025-10-10T12:16:44",
+        "yanked": false
+      }
+    ],
+    "1.18.0": [
+      {
+        "upload_time_iso_8601": "2025-10-16T19:19:53.200345Z",
+        "upload_time": "2025-10-16T19:19:53",
+        "yanked": false
+      },
+      {
+        "upload_time_iso_8601": "2025-10-16T19:19:55.125329Z",
+        "upload_time": "2025-10-16T19:19:55",
+        "yanked": false
+      }
+    ],
+    "1.19.0": [
+      {
+        "upload_time_iso_8601": "2025-10-24T01:11:14.151538Z",
+        "upload_time": "2025-10-24T01:11:14",
+        "yanked": false
+      },
+      {
+        "upload_time_iso_8601": "2025-10-24T01:11:15.839756Z",
+        "upload_time": "2025-10-24T01:11:15",
+        "yanked": false
+      }
+    ],
+    "1.2.0": [
+      {
+        "upload_time_iso_8601": "2025-01-03T16:23:36.863122Z",
+        "upload_time": "2025-01-03T16:23:36",
+        "yanked": false
+      },
+      {
+        "upload_time_iso_8601": "2025-01-03T16:23:39.532156Z",
+        "upload_time": "2025-01-03T16:23:39",
+        "yanked": false
+      }
+    ],
+    "1.2.0rc1": [
+      {
+        "upload_time_iso_8601": "2024-12-23T16:46:43.712599Z",
+        "upload_time": "2024-12-23T16:46:43",
+        "yanked": false
+      },
+      {
+        "upload_time_iso_8601": "2024-12-23T16:46:49.138735Z",
+        "upload_time": "2024-12-23T16:46:49",
+        "yanked": false
+      }
+    ],
+    "1.2.1": [
+      {
+        "upload_time_iso_8601": "2025-01-27T16:48:01.930698Z",
+        "upload_time": "2025-01-27T16:48:01",
+        "yanked": false
+      },
+      {
+        "upload_time_iso_8601": "2025-01-27T16:48:03.960148Z",
+        "upload_time": "2025-01-27T16:48:03",
+        "yanked": false
+      }
+    ],
+    "1.20.0": [
+      {
+        "upload_time_iso_8601": "2025-10-30T22:14:51.078517Z",
+        "upload_time": "2025-10-30T22:14:51",
+        "yanked": false
+      },
+      {
+        "upload_time_iso_8601": "2025-10-30T22:14:53.421875Z",
+        "upload_time": "2025-10-30T22:14:53",
+        "yanked": false
+      }
+    ],
+    "1.21.0": [
+      {
+        "upload_time_iso_8601": "2025-11-06T23:19:56.508595Z",
+        "upload_time": "2025-11-06T23:19:56",
+        "yanked": false
+      },
+      {
+        "upload_time_iso_8601": "2025-11-06T23:19:58.432580Z",
+        "upload_time": "2025-11-06T23:19:58",
+        "yanked": false
+      }
+    ],
+    "1.21.1": [
+      {
+        "upload_time_iso_8601": "2025-11-13T20:33:44.502501Z",
+        "upload_time": "2025-11-13T20:33:44",
+        "yanked": false
+      },
+      {
+        "upload_time_iso_8601": "2025-11-13T20:33:46.139146Z",
+        "upload_time": "2025-11-13T20:33:46",
+        "yanked": false
+      }
+    ],
+    "1.21.2": [
+      {
+        "upload_time_iso_8601": "2025-11-17T13:56:04.987485Z",
+        "upload_time": "2025-11-17T13:56:04",
+        "yanked": false
+      },
+      {
+        "upload_time_iso_8601": "2025-11-17T13:56:06.397471Z",
+        "upload_time": "2025-11-17T13:56:06",
+        "yanked": false
+      }
+    ],
+    "1.22.0": [
+      {
+        "upload_time_iso_8601": "2025-11-20T20:11:26.542962Z",
+        "upload_time": "2025-11-20T20:11:26",
+        "yanked": false
+      },
+      {
+        "upload_time_iso_8601": "2025-11-20T20:11:28.095784Z",
+        "upload_time": "2025-11-20T20:11:28",
+        "yanked": false
+      }
+    ],
+    "1.23.0": [
+      {
+        "upload_time_iso_8601": "2025-12-02T13:40:00.738293Z",
+        "upload_time": "2025-12-02T13:40:00",
+        "yanked": false
+      },
+      {
+        "upload_time_iso_8601": "2025-12-02T13:40:02.558797Z",
+        "upload_time": "2025-12-02T13:40:02",
+        "yanked": false
+      }
+    ],
+    "1.23.1": [
+      {
+        "upload_time_iso_8601": "2025-12-02T18:41:11.195085Z",
+        "upload_time": "2025-12-02T18:41:11",
+        "yanked": false
+      },
+      {
+        "upload_time_iso_8601": "2025-12-02T18:41:12.807686Z",
+        "upload_time": "2025-12-02T18:41:12",
+        "yanked": false
+      }
+    ],
+    "1.23.2": [
+      {
+        "upload_time_iso_8601": "2025-12-08T15:51:01.023879Z",
+        "upload_time": "2025-12-08T15:51:01",
+        "yanked": false
+      },
+      {
+        "upload_time_iso_8601": "2025-12-08T15:51:02.432201Z",
+        "upload_time": "2025-12-08T15:51:02",
+        "yanked": false
+      }
+    ],
+    "1.23.3": [
+      {
+        "upload_time_iso_8601": "2025-12-09T16:04:35.560431Z",
+        "upload_time": "2025-12-09T16:04:35",
+        "yanked": false
+      },
+      {
+        "upload_time_iso_8601": "2025-12-09T16:04:37.351378Z",
+        "upload_time": "2025-12-09T16:04:37",
+        "yanked": false
+      }
+    ],
+    "1.24.0": [
+      {
+        "upload_time_iso_8601": "2025-12-12T14:19:36.140891Z",
+        "upload_time": "2025-12-12T14:19:36",
+        "yanked": false
+      },
+      {
+        "upload_time_iso_8601": "2025-12-12T14:19:38.205006Z",
+        "upload_time": "2025-12-12T14:19:38",
+        "yanked": false
+      }
+    ],
+    "1.25.0": [
+      {
+        "upload_time_iso_8601": "2025-12-19T10:19:55.416541Z",
+        "upload_time": "2025-12-19T10:19:55",
+        "yanked": false
+      },
+      {
+        "upload_time_iso_8601": "2025-12-19T10:19:56.985704Z",
+        "upload_time": "2025-12-19T10:19:56",
+        "yanked": false
+      }
+    ],
+    "1.26.0": [
+      {
+        "upload_time_iso_8601": "2026-01-24T19:40:30.652691Z",
+        "upload_time": "2026-01-24T19:40:30",
+        "yanked": false
+      },
+      {
+        "upload_time_iso_8601": "2026-01-24T19:40:32.468833Z",
+        "upload_time": "2026-01-24T19:40:32",
+        "yanked": false
+      }
+    ],
+    "1.27.0": [
+      {
+        "upload_time_iso_8601": "2026-04-02T14:48:07.240886Z",
+        "upload_time": "2026-04-02T14:48:07",
+        "yanked": false
+      },
+      {
+        "upload_time_iso_8601": "2026-04-02T14:48:08.880375Z",
+        "upload_time": "2026-04-02T14:48:08",
+        "yanked": false
+      }
+    ],
+    "1.27.1": [
+      {
+        "upload_time_iso_8601": "2026-05-08T16:50:10.547600Z",
+        "upload_time": "2026-05-08T16:50:10",
+        "yanked": false
+      },
+      {
+        "upload_time_iso_8601": "2026-05-08T16:50:12.601867Z",
+        "upload_time": "2026-05-08T16:50:12",
+        "yanked": false
+      }
+    ],
+    "1.27.2": [
+      {
+        "upload_time_iso_8601": "2026-05-29T17:16:02.442669Z",
+        "upload_time": "2026-05-29T17:16:02",
+        "yanked": false
+      },
+      {
+        "upload_time_iso_8601": "2026-05-29T17:16:04.039959Z",
+        "upload_time": "2026-05-29T17:16:04",
+        "yanked": false
+      }
+    ],
+    "1.28.0": [
+      {
+        "upload_time_iso_8601": "2026-06-16T21:37:16.579617Z",
+        "upload_time": "2026-06-16T21:37:16",
+        "yanked": false
+      },
+      {
+        "upload_time_iso_8601": "2026-06-16T21:37:17.996966Z",
+        "upload_time": "2026-06-16T21:37:17",
+        "yanked": false
+      }
+    ],
+    "1.28.1": [
+      {
+        "upload_time_iso_8601": "2026-06-26T12:57:27.218095Z",
+        "upload_time": "2026-06-26T12:57:27",
+        "yanked": false
+      },
+      {
+        "upload_time_iso_8601": "2026-06-26T12:57:29.093358Z",
+        "upload_time": "2026-06-26T12:57:29",
+        "yanked": false
+      }
+    ],
+    "1.29.0": [
+      {
+        "upload_time_iso_8601": "2026-07-28T13:41:40.337890Z",
+        "upload_time": "2026-07-28T13:41:40",
+        "yanked": false
+      },
+      {
+        "upload_time_iso_8601": "2026-07-28T13:41:41.939004Z",
+        "upload_time": "2026-07-28T13:41:41",
+        "yanked": false
+      }
+    ],
+    "1.29.1": [
+      {
+        "upload_time_iso_8601": "2026-08-24T18:30:39.573830Z",
+        "upload_time": "2026-08-24T18:30:39",
+        "yanked": false
+      },
+      {
+        "upload_time_iso_8601": "2026-08-24T18:30:41.161114Z",
+        "upload_time": "2026-08-24T18:30:41",
+        "yanked": false
+      }
+    ],
+    "1.3.0": [
+      {
+        "upload_time_iso_8601": "2025-02-20T21:45:40.102706Z",
+        "upload_time": "2025-02-20T21:45:40",
+        "yanked": false
+      },
+      {
+        "upload_time_iso_8601": "2025-02-20T21:45:42.597629Z",
+        "upload_time": "2025-02-20T21:45:42",
+        "yanked": false
+      }
+    ],
+    "1.3.0rc1": [
+      {
+        "upload_time_iso_8601": "2025-02-13T16:44:36.498648Z",
+        "upload_time": "2025-02-13T16:44:36",
+        "yanked": false
+      },
+      {
+        "upload_time_iso_8601": "2025-02-13T16:44:37.938190Z",
+        "upload_time": "2025-02-13T16:44:37",
+        "yanked": false
+      }
+    ],
+    "1.30.0": [
+      {
+        "upload_time_iso_8601": "2026-09-07T14:34:14.266679Z",
+        "upload_time": "2026-09-07T14:34:14",
+        "yanked": false
+      },
+      {
+        "upload_time_iso_8601": "2026-09-07T14:34:15.845195Z",
+        "upload_time": "2026-09-07T14:34:15",
+        "yanked": false
+      }
+    ],
+    "1.4.0": [
+      {
+        "upload_time_iso_8601": "2025-03-13T13:49:47.449230Z",
+        "upload_time": "2025-03-13T13:49:47",
+        "yanked": false
+      },
+      {
+        "upload_time_iso_8601": "2025-03-13T13:49:49.077861Z",
+        "upload_time": "2025-03-13T13:49:49",
+        "yanked": false
+      }
+    ],
+    "1.4.1": [
+      {
+        "upload_time_iso_8601": "2025-03-14T09:52:13.669682Z",
+        "upload_time": "2025-03-14T09:52:13",
+        "yanked": false
+      },
+      {
+        "upload_time_iso_8601": "2025-03-14T09:52:15.540179Z",
+        "upload_time": "2025-03-14T09:52:15",
+        "yanked": false
+      }
+    ],
+    "1.5.0": [
+      {
+        "upload_time_iso_8601": "2025-03-21T12:51:02.597768Z",
+        "upload_time": "2025-03-21T12:51:02",
+        "yanked": false
+      },
+      {
+        "upload_time_iso_8601": "2025-03-21T12:51:04.183181Z",
+        "upload_time": "2025-03-21T12:51:04",
+        "yanked": false
+      }
+    ],
+    "1.6.0": [
+      {
+        "upload_time_iso_8601": "2025-03-27T16:46:29.919950Z",
+        "upload_time": "2025-03-27T16:46:29",
+        "yanked": false
+      },
+      {
+        "upload_time_iso_8601": "2025-03-27T16:46:32.336541Z",
+        "upload_time": "2025-03-27T16:46:32",
+        "yanked": false
+      }
+    ],
+    "1.7.0": [
+      {
+        "upload_time_iso_8601": "2025-05-01T19:18:05.807336Z",
+        "upload_time": "2025-05-01T19:18:05",
+        "yanked": false
+      },
+      {
+        "upload_time_iso_8601": "2025-05-01T19:18:07.612201Z",
+        "upload_time": "2025-05-01T19:18:07",
+        "yanked": false
+      }
+    ],
+    "1.7.1": [
+      {
+        "upload_time_iso_8601": "2025-05-02T17:01:54.674737Z",
+        "upload_time": "2025-05-02T17:01:54",
+        "yanked": false
+      },
+      {
+        "upload_time_iso_8601": "2025-05-02T17:01:56.403220Z",
+        "upload_time": "2025-05-02T17:01:56",
+        "yanked": false
+      }
+    ],
+    "1.8.0": [
+      {
+        "upload_time_iso_8601": "2025-05-08T20:09:04.458890Z",
+        "upload_time": "2025-05-08T20:09:04",
+        "yanked": false
+      },
+      {
+        "upload_time_iso_8601": "2025-05-08T20:09:06.255969Z",
+        "upload_time": "2025-05-08T20:09:06",
+        "yanked": false
+      }
+    ],
+    "1.8.1": [
+      {
+        "upload_time_iso_8601": "2025-05-12T17:33:56.136638Z",
+        "upload_time": "2025-05-12T17:33:56",
+        "yanked": false
+      },
+      {
+        "upload_time_iso_8601": "2025-05-12T17:33:57.887777Z",
+        "upload_time": "2025-05-12T17:33:57",
+        "yanked": false
+      }
+    ],
+    "1.9.0": [
+      {
+        "upload_time_iso_8601": "2025-05-15T18:51:04.916913Z",
+        "upload_time": "2025-05-15T18:51:04",
+        "yanked": false
+      },
+      {
+        "upload_time_iso_8601": "2025-05-15T18:51:06.615148Z",
+        "upload_time": "2025-05-15T18:51:06",
+        "yanked": false
+      }
+    ],
+    "1.9.1": [
+      {
+        "upload_time_iso_8601": "2025-05-22T15:52:19.702842Z",
+        "upload_time": "2025-05-22T15:52:19",
+        "yanked": false
+      },
+      {
+        "upload_time_iso_8601": "2025-05-22T15:52:21.260004Z",
+        "upload_time": "2025-05-22T15:52:21",
+        "yanked": false
+      }
+    ],
+    "1.9.2": [
+      {
+        "upload_time_iso_8601": "2025-05-29T14:42:16.211488Z",
+        "upload_time": "2025-05-29T14:42:16",
+        "yanked": false
+      },
+      {
+        "upload_time_iso_8601": "2025-05-29T14:42:17.760497Z",
+        "upload_time": "2025-05-29T14:42:17",
+        "yanked": false
+      }
+    ],
+    "1.9.3": [
+      {
+        "upload_time_iso_8601": "2025-06-05T15:48:24.171716Z",
+        "upload_time": "2025-06-05T15:48:24",
+        "yanked": false
+      },
+      {
+        "upload_time_iso_8601": "2025-06-05T15:48:25.681173Z",
+        "upload_time": "2025-06-05T15:48:25",
+        "yanked": false
+      }
+    ],
+    "1.9.4": [
+      {
+        "upload_time_iso_8601": "2025-06-12T08:20:28.551239Z",
+        "upload_time": "2025-06-12T08:20:28",
+        "yanked": false
+      },
+      {
+        "upload_time_iso_8601": "2025-06-12T08:20:30.158843Z",
+        "upload_time": "2025-06-12T08:20:30",
+        "yanked": false
+      }
+    ],
+    "2.0.0": [
+      {
+        "upload_time_iso_8601": "2026-07-28T13:45:28.853348Z",
+        "upload_time": "2026-07-28T13:45:28",
+        "yanked": false
+      },
+      {
+        "upload_time_iso_8601": "2026-07-28T13:45:32.346253Z",
+        "upload_time": "2026-07-28T13:45:32",
+        "yanked": false
+      }
+    ],
+    "2.0.0a1": [
+      {
+        "upload_time_iso_8601": "2026-06-11T09:55:46.823537Z",
+        "upload_time": "2026-06-11T09:55:46",
+        "yanked": false
+      },
+      {
+        "upload_time_iso_8601": "2026-06-11T09:55:48.791495Z",
+        "upload_time": "2026-06-11T09:55:48",
+        "yanked": false
+      }
+    ],
+    "2.0.0a2": [
+      {
+        "upload_time_iso_8601": "2026-06-16T22:01:35.592035Z",
+        "upload_time": "2026-06-16T22:01:35",
+        "yanked": false
+      },
+      {
+        "upload_time_iso_8601": "2026-06-16T22:01:37.533185Z",
+        "upload_time": "2026-06-16T22:01:37",
+        "yanked": false
+      }
+    ],
+    "2.0.0a3": [
+      {
+        "upload_time_iso_8601": "2026-06-26T08:49:10.845013Z",
+        "upload_time": "2026-06-26T08:49:10",
+        "yanked": false
+      },
+      {
+        "upload_time_iso_8601": "2026-06-26T08:49:13.896941Z",
+        "upload_time": "2026-06-26T08:49:13",
+        "yanked": false
+      }
+    ],
+    "2.0.0b1": [
+      {
+        "upload_time_iso_8601": "2026-06-30T23:24:34.788560Z",
+        "upload_time": "2026-06-30T23:24:34",
+        "yanked": false
+      },
+      {
+        "upload_time_iso_8601": "2026-06-30T23:24:38.363772Z",
+        "upload_time": "2026-06-30T23:24:38",
+        "yanked": false
+      }
+    ],
+    "2.0.0b2": [
+      {
+        "upload_time_iso_8601": "2026-07-14T16:47:54.768521Z",
+        "upload_time": "2026-07-14T16:47:54",
+        "yanked": false
+      },
+      {
+        "upload_time_iso_8601": "2026-07-14T16:47:57.897927Z",
+        "upload_time": "2026-07-14T16:47:57",
+        "yanked": false
+      }
+    ],
+    "2.0.0rc1": [
+      {
+        "upload_time_iso_8601": "2026-07-27T13:35:13.997438Z",
+        "upload_time": "2026-07-27T13:35:13",
+        "yanked": false
+      },
+      {
+        "upload_time_iso_8601": "2026-07-27T13:35:17.166105Z",
+        "upload_time": "2026-07-27T13:35:17",
+        "yanked": false
+      }
+    ],
+    "2.0.1": [
+      {
+        "upload_time_iso_8601": "2026-08-26T10:48:35.253507Z",
+        "upload_time": "2026-08-26T10:48:35",
+        "yanked": false
+      },
+      {
+        "upload_time_iso_8601": "2026-08-26T10:48:38.625526Z",
+        "upload_time": "2026-08-26T10:48:38",
+        "yanked": false
+      }
+    ],
+    "2.1.0": [
+      {
+        "upload_time_iso_8601": "2026-08-24T19:04:29.909929Z",
+        "upload_time": "2026-08-24T19:04:29",
+        "yanked": false
+      },
+      {
+        "upload_time_iso_8601": "2026-08-24T19:04:32.671972Z",
+        "upload_time": "2026-08-24T19:04:32",
+        "yanked": false
+      }
+    ],
+    "2.1.1": [
+      {
+        "upload_time_iso_8601": "2026-08-25T16:13:59.024858Z",
+        "upload_time": "2026-08-25T16:13:59",
+        "yanked": false
+      },
+      {
+        "upload_time_iso_8601": "2026-08-25T16:14:02.376457Z",
+        "upload_time": "2026-08-25T16:14:02",
+        "yanked": false
+      }
+    ],
+    "2.2.0": [
+      {
+        "upload_time_iso_8601": "2026-09-07T16:06:19.711091Z",
+        "upload_time": "2026-09-07T16:06:19",
+        "yanked": false
+      },
+      {
+        "upload_time_iso_8601": "2026-09-07T16:06:23.439276Z",
+        "upload_time": "2026-09-07T16:06:23",
+        "yanked": false
+      }
+    ],
+    "2.3.0": [
+      {
+        "upload_time_iso_8601": "2026-10-02T22:06:52.119073Z",
+        "upload_time": "2026-10-02T22:06:52",
+        "yanked": false
+      },
+      {
+        "upload_time_iso_8601": "2026-10-02T22:06:56.091381Z",
+        "upload_time": "2026-10-02T22:06:56",
+        "yanked": false
+      }
+    ]
+  }
+}

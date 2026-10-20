@@ -122,11 +122,43 @@ export const NPM_INGEST_SCHEDULES: readonly IngestSchedule[] = [
   },
 ];
 
+/**
+ * Spec §7.2 PyPI rows. The 30-minute RSS pass is cheap; admission brings the
+ * pypistats call down to once per project per day. The 11:00 retry repairs a
+ * `partial` 05:00 daily run after pypistats publishes.
+ */
+export const PYPI_INGEST_SCHEDULES: readonly IngestSchedule[] = [
+  {
+    id: 'pypi-discover',
+    name: 'discover',
+    pattern: '*/30 * * * *',
+    data: {
+      type: 'discover',
+      source: 'pypi',
+      strategy: 'rss',
+      maxItems: 1000,
+      trigger: 'schedule',
+    },
+  },
+  {
+    id: 'pypi-daily',
+    name: 'daily',
+    pattern: '0 5 * * *',
+    data: { type: 'daily', source: 'pypi', trigger: 'schedule' },
+  },
+  {
+    id: 'pypi-daily-retry',
+    name: 'daily',
+    pattern: '0 11 * * *',
+    data: { type: 'daily', source: 'pypi', trigger: 'schedule' },
+  },
+];
+
 /** Every implemented ingest row, by source (spec §7.2). */
 export const INGEST_SCHEDULES: Readonly<Record<Source, readonly IngestSchedule[]>> = {
   github: GITHUB_INGEST_SCHEDULES,
   npm: NPM_INGEST_SCHEDULES,
-  pypi: [],
+  pypi: PYPI_INGEST_SCHEDULES,
   huggingface: [],
   arxiv: [],
   mcp: [],

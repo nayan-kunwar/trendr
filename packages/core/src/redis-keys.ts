@@ -44,6 +44,9 @@ export const redisKeys = {
   /** `etag:github:{itemId}` — last REST ETag (7 d). */
   etagGithub: (itemId: bigint | string): string => `etag:github:${itemId}`,
 
+  /** `etag:pypi:{project}` — last PyPI JSON ETag (7 d). */
+  etagPypi: (project: string): string => `etag:pypi:${project}`,
+
   /** `lock:score:{source}` — scoring-run lock, value = holder jobId (120 s). */
   scoreLock: (source: Source): string => `lock:score:${source}`,
 

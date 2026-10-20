@@ -146,6 +146,36 @@ describe('fetchJson (spec §7.5)', () => {
     expect(headers.get('accept')).toBe('application/vnd.github+json');
   });
 
+  it('reads a text body when responseType is "text" (PyPI RSS)', async () => {
+    const xml = '<?xml version="1.0"?><rss><channel><title>PyPI</title></channel></rss>';
+    const fetchMock = vi.fn(() =>
+      Promise.resolve(
+        new Response(xml, {
+          status: 200,
+          headers: { 'content-type': 'application/rss+xml' },
+        }),
+      ),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await fetchJson({
+      url: 'https://pypi.org/rss/packages.xml',
+      schema: z.string().min(1),
+      bucket: bucketSpy(),
+      source: 'pypi',
+      endpoint: 'rss.packages',
+      userAgent: 'Trendr/test (+https://example.test)',
+      responseType: 'text',
+      headers: { accept: 'application/rss+xml' },
+    });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') throw new Error('unreachable');
+    expect(result.data).toBe(xml);
+    const call = fetchMock.mock.calls[0] as unknown as [URL, RequestInit];
+    expect(new Headers(call[1].headers).get('accept')).toBe('application/rss+xml');
+  });
+
   it('throws a non-retryable hashed error on schema mismatch', async () => {
     const metrics = metricsSpy();
     vi.stubGlobal('fetch', vi.fn(respondWith({ value: 'nope' }, 200)));

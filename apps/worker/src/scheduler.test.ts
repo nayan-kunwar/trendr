@@ -151,4 +151,33 @@ describe('registerSchedulers (spec §7.2)', () => {
     expect(byId['npm-daily-retry']?.name).toBe('daily');
     expect(byId['npm-daily-retry']?.data).toMatchObject({ type: 'daily' });
   });
+
+  it('registers the three PyPI rows with their §7.3.3 crons and payloads', async () => {
+    const { queues, calls } = fakeQueues();
+    await registerSchedulers(queues);
+
+    const pypiCalls = calls.filter((call) => call.queue === 'ingest-pypi');
+    expect(pypiCalls).toHaveLength(3);
+    expect(Object.fromEntries(pypiCalls.map((call) => [call.id, call.pattern]))).toEqual({
+      'pypi-discover': '*/30 * * * *',
+      'pypi-daily': '0 5 * * *',
+      'pypi-daily-retry': '0 11 * * *',
+    });
+    for (const call of pypiCalls) {
+      expect(call.tz).toBe('UTC');
+      expect(call.data).toMatchObject({ source: 'pypi', trigger: 'schedule' });
+    }
+
+    const byId = Object.fromEntries(pypiCalls.map((call) => [call.id, call]));
+    expect(byId['pypi-discover']?.name).toBe('discover');
+    expect(byId['pypi-discover']?.data).toMatchObject({ strategy: 'rss', maxItems: 1000 });
+    expect(byId['pypi-daily']?.name).toBe('daily');
+    expect(byId['pypi-daily']?.data).toEqual({
+      type: 'daily',
+      source: 'pypi',
+      trigger: 'schedule',
+    });
+    expect(byId['pypi-daily-retry']?.name).toBe('daily');
+    expect(byId['pypi-daily-retry']?.data).toMatchObject({ type: 'daily' });
+  });
 });

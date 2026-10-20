@@ -47,6 +47,7 @@ describe('redisKeys (spec §9.1)', () => {
 
   it('builds worker bookkeeping keys', () => {
     expect(redisKeys.etagGithub(9n)).toBe('etag:github:9');
+    expect(redisKeys.etagPypi('fastmcp')).toBe('etag:pypi:fastmcp');
     expect(redisKeys.scoreLock('pypi')).toBe('lock:score:pypi');
     expect(redisKeys.arxivConnectionLock()).toBe('lock:arxiv:conn');
     expect(redisKeys.mcpRegistryCursor()).toBe('mcp:registry:cursor_ts');

@@ -42,6 +42,11 @@ export interface FetchJsonOptions<T> {
   bucket: Pick<RedisTokenBucket, 'take' | 'pauseUntil'>;
   source: string;
   endpoint: string;
+  /**
+   * Body parser. JSON is the default; PyPI RSS discovery is XML, so the
+   * adapter reads the body as text and parses it with fast-xml-parser.
+   */
+  responseType?: 'json' | 'text';
   /** `env.HTTP_USER_AGENT` — core does not read env; the caller passes it. */
   userAgent: string;
   cost?: number;
@@ -321,11 +326,11 @@ export async function fetchJson<T>(options: FetchJsonOptions<T>): Promise<FetchJ
 
     let payload: unknown;
     try {
-      payload = await response.json();
+      payload = options.responseType === 'text' ? await response.text() : await response.json();
     } catch {
       options.metrics?.error(options.source, options.endpoint, 'schema');
       throw new UpstreamError(
-        `invalid JSON body from ${url.hostname}`,
+        `invalid ${options.responseType === 'text' ? 'text' : 'JSON'} body from ${url.hostname}`,
         options.source,
         response.status,
         null,

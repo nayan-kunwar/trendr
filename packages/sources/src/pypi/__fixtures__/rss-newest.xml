@@ -1,0 +1,248 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>PyPI newest packages</title>
+    <link>https://pypi.org/</link>
+    <description>Newest packages registered at the Python Package Index</description>
+    <language>en</language>    <item>
+      <title>apisec-orgscan added to PyPI</title>
+      <link>https://pypi.org/project/apisec-orgscan/</link>
+      <guid>https://pypi.org/project/apisec-orgscan/</guid>
+      <description>Scan every repository in a GitHub organization with APIsec Surface.</description>
+      <pubDate>Tue, 20 Oct 2026 04:36:23 GMT</pubDate>
+    </item>    <item>
+      <title>peasy-ai added to PyPI</title>
+      <link>https://pypi.org/project/peasy-ai/</link>
+      <guid>https://pypi.org/project/peasy-ai/</guid>
+      <description>零硬编码、配置驱动的通用 AI 对话框架：AI 核心 + 叙事引擎 + TRPG 训练场</description>
+      <pubDate>Tue, 20 Oct 2026 04:35:56 GMT</pubDate>
+    </item>    <item>
+      <title>securepay-shared added to PyPI</title>
+      <link>https://pypi.org/project/securepay-shared/</link>
+      <guid>https://pypi.org/project/securepay-shared/</guid>
+      <description>Shared models, DB connection, config and AWS client for SecurePay-Riwi</description>
+      <pubDate>Tue, 20 Oct 2026 04:35:44 GMT</pubDate>
+    </item>    <item>
+      <title>uvpip-cli added to PyPI</title>
+      <link>https://pypi.org/project/uvpip-cli/</link>
+      <guid>https://pypi.org/project/uvpip-cli/</guid>
+      <description>Ultra-fast transparent pip wrapper powered by uv</description>
+<author>191557828+yv3000@users.noreply.github.com, trulyimmortal80085@gmail.com</author>      <pubDate>Tue, 20 Oct 2026 04:31:37 GMT</pubDate>
+    </item>    <item>
+      <title>jilebi-sdk added to PyPI</title>
+      <link>https://pypi.org/project/jilebi-sdk/</link>
+      <guid>https://pypi.org/project/jilebi-sdk/</guid>
+      <description>jilebi API</description>
+<author>team@openapitools.org</author>      <pubDate>Tue, 20 Oct 2026 04:28:35 GMT</pubDate>
+    </item>    <item>
+      <title>QuickLab-MCP added to PyPI</title>
+      <link>https://pypi.org/project/quicklab-mcp/</link>
+      <guid>https://pypi.org/project/quicklab-mcp/</guid>
+      <description>QuickLab MCP Server - Production Tabular ML Experimentation Control Plane for AI Agents</description>
+      <pubDate>Tue, 20 Oct 2026 04:27:57 GMT</pubDate>
+    </item>    <item>
+      <title>myutils2 added to PyPI</title>
+      <link>https://pypi.org/project/myutils2/</link>
+      <guid>https://pypi.org/project/myutils2/</guid>
+      <description>Мои полезные функции</description>
+<author>email@example.com</author>      <pubDate>Tue, 20 Oct 2026 04:27:09 GMT</pubDate>
+    </item>    <item>
+      <title>gld-kiln added to PyPI</title>
+      <link>https://pypi.org/project/gld-kiln/</link>
+      <guid>https://pypi.org/project/gld-kiln/</guid>
+      <description>Positional little-endian Kiln codec for Python</description>
+      <pubDate>Tue, 20 Oct 2026 04:26:54 GMT</pubDate>
+    </item>    <item>
+      <title>airegistry-cli added to PyPI</title>
+      <link>https://pypi.org/project/airegistry-cli/</link>
+      <guid>https://pypi.org/project/airegistry-cli/</guid>
+      <description>Dependency-free CLI for discovering and installing versioned AI components from AIRegistry</description>
+      <pubDate>Tue, 20 Oct 2026 04:25:05 GMT</pubDate>
+    </item>    <item>
+      <title>sinet-cli added to PyPI</title>
+      <link>https://pypi.org/project/sinet-cli/</link>
+      <guid>https://pypi.org/project/sinet-cli/</guid>
+      <description>The SINet Go social CLI, packaged with a verified binary</description>
+      <pubDate>Tue, 20 Oct 2026 04:19:38 GMT</pubDate>
+    </item>    <item>
+      <title>govee-cli added to PyPI</title>
+      <link>https://pypi.org/project/govee-cli/</link>
+      <guid>https://pypi.org/project/govee-cli/</guid>
+      <description>Agent-first CLI that controls Govee smart lights at home: discover devices, on/off, brightness, color, color temperature and scenes, via Govee&#39;s official Developer API and the local LAN API. Safe-by-default writes (dry-run unless --apply), --json output for agents.</description>
+      <pubDate>Tue, 20 Oct 2026 04:17:22 GMT</pubDate>
+    </item>    <item>
+      <title>ai-agentcomply added to PyPI</title>
+      <link>https://pypi.org/project/ai-agentcomply/</link>
+      <guid>https://pypi.org/project/ai-agentcomply/</guid>
+      <description>Developer-first runtime authorization SDK for AI agent tool calls. / 面向 AI Agent 工具调用的开发者优先运行时授权 SDK。</description>
+      <pubDate>Tue, 20 Oct 2026 04:09:37 GMT</pubDate>
+    </item>    <item>
+      <title>shapediff added to PyPI</title>
+      <link>https://pypi.org/project/shapediff/</link>
+      <guid>https://pypi.org/project/shapediff/</guid>
+      <description>Evidence-aware JSON API response diffing without a schema</description>
+      <pubDate>Tue, 20 Oct 2026 04:09:14 GMT</pubDate>
+    </item>    <item>
+      <title>modular-tree added to PyPI</title>
+      <link>https://pypi.org/project/modular-tree/</link>
+      <guid>https://pypi.org/project/modular-tree/</guid>
+      <description>Procedural 3D tree generation library</description>
+      <pubDate>Tue, 20 Oct 2026 04:03:52 GMT</pubDate>
+    </item>    <item>
+      <title>nanopeek added to PyPI</title>
+      <link>https://pypi.org/project/nanopeek/</link>
+      <guid>https://pypi.org/project/nanopeek/</guid>
+      <description>nano-style terminal editor with live Markdown, JSON, YAML, TOML and Dockerfile previews</description>
+      <pubDate>Tue, 20 Oct 2026 04:02:01 GMT</pubDate>
+    </item>    <item>
+      <title>exedev added to PyPI</title>
+      <link>https://pypi.org/project/exedev/</link>
+      <guid>https://pypi.org/project/exedev/</guid>
+      <description>Official Python SDK for the exe.dev HTTPS API</description>
+      <pubDate>Tue, 20 Oct 2026 03:56:11 GMT</pubDate>
+    </item>    <item>
+      <title>sshsentry added to PyPI</title>
+      <link>https://pypi.org/project/sshsentry/</link>
+      <guid>https://pypi.org/project/sshsentry/</guid>
+      <description>Plain-English SSH intrusion alerts for Linux servers (detection only).</description>
+<author>sshsentry@gmail.com</author>      <pubDate>Tue, 20 Oct 2026 03:54:43 GMT</pubDate>
+    </item>    <item>
+      <title>governanceos added to PyPI</title>
+      <link>https://pypi.org/project/governanceos/</link>
+      <guid>https://pypi.org/project/governanceos/</guid>
+      <description>Open-source tools from GovernanceOS. First: gos-verify, the offline verifier for GovernanceOS evidence packs.</description>
+      <pubDate>Tue, 20 Oct 2026 03:53:13 GMT</pubDate>
+    </item>    <item>
+      <title>invaria added to PyPI</title>
+      <link>https://pypi.org/project/invaria/</link>
+      <guid>https://pypi.org/project/invaria/</guid>
+      <description>Invaria — Universal LLM Context Compiler</description>
+<author>sgindeed234@gmail.com</author>      <pubDate>Tue, 20 Oct 2026 03:52:35 GMT</pubDate>
+    </item>    <item>
+      <title>skimread added to PyPI</title>
+      <link>https://pypi.org/project/skimread/</link>
+      <guid>https://pypi.org/project/skimread/</guid>
+      <description>Skim before you read: a lossless context guard that cuts the tokens AI coding agents spend on big file reads and noisy command output.</description>
+      <pubDate>Tue, 20 Oct 2026 03:52:07 GMT</pubDate>
+    </item>    <item>
+      <title>tkinter-web-backend added to PyPI</title>
+      <link>https://pypi.org/project/tkinter-web-backend/</link>
+      <guid>https://pypi.org/project/tkinter-web-backend/</guid>
+      <description>A web backend for tkinter: run tkinter programs in a web browser</description>
+<author>romain.casati@basthon.fr</author>      <pubDate>Tue, 20 Oct 2026 03:48:01 GMT</pubDate>
+    </item>    <item>
+      <title>blot-git added to PyPI</title>
+      <link>https://pypi.org/project/blot-git/</link>
+      <guid>https://pypi.org/project/blot-git/</guid>
+      <description>A pre-commit check that has read your project&#39;s history: warns when a change removes a fix, re-adds a fixed bug, or forgets a file that always changes too.</description>
+      <pubDate>Tue, 20 Oct 2026 03:47:39 GMT</pubDate>
+    </item>    <item>
+      <title>carefold added to PyPI</title>
+      <link>https://pypi.org/project/carefold/</link>
+      <guid>https://pypi.org/project/carefold/</guid>
+      <description>Carefold local-first AI and agentic runtime backend</description>
+      <pubDate>Tue, 20 Oct 2026 03:47:38 GMT</pubDate>
+    </item>    <item>
+      <title>ai-template-runner added to PyPI</title>
+      <link>https://pypi.org/project/ai-template-runner/</link>
+      <guid>https://pypi.org/project/ai-template-runner/</guid>
+      <description>Simple AI workflow based on Markdown templates</description>
+<author>48166556+brunodavi@users.noreply.github.com</author>      <pubDate>Tue, 20 Oct 2026 03:42:29 GMT</pubDate>
+    </item>    <item>
+      <title>infill added to PyPI</title>
+      <link>https://pypi.org/project/infill/</link>
+      <guid>https://pypi.org/project/infill/</guid>
+      <description>Infill: describe a part to your AI and get a print-ready 3D model. Coming soon.</description>
+      <pubDate>Tue, 20 Oct 2026 03:42:04 GMT</pubDate>
+    </item>    <item>
+      <title>drughunter added to PyPI</title>
+      <link>https://pypi.org/project/drughunter/</link>
+      <guid>https://pypi.org/project/drughunter/</guid>
+      <description>Structure-based drug discovery toolkit that makes AI models easy for scientists to use: pocket detection, structure prep, and binder generation.</description>
+      <pubDate>Tue, 20 Oct 2026 03:41:32 GMT</pubDate>
+    </item>    <item>
+      <title>time-parser-zh added to PyPI</title>
+      <link>https://pypi.org/project/time-parser-zh/</link>
+      <guid>https://pypi.org/project/time-parser-zh/</guid>
+      <description>A pure Python parser for Chinese natural language date and time expressions.</description>
+      <pubDate>Tue, 20 Oct 2026 03:41:03 GMT</pubDate>
+    </item>    <item>
+      <title>rightnow-system-zero added to PyPI</title>
+      <link>https://pypi.org/project/rightnow-system-zero/</link>
+      <guid>https://pypi.org/project/rightnow-system-zero/</guid>
+      <description>System Zero API client with typed decisions and client-side workflows.</description>
+      <pubDate>Tue, 20 Oct 2026 03:40:38 GMT</pubDate>
+    </item>    <item>
+      <title>cliver-playbook-app-mcp added to PyPI</title>
+      <link>https://pypi.org/project/cliver-playbook-app-mcp/</link>
+      <guid>https://pypi.org/project/cliver-playbook-app-mcp/</guid>
+      <description>cliver-playbook agent surface: MCP server (streamable-http + stdio) on top of the identity stack</description>
+      <pubDate>Tue, 20 Oct 2026 03:40:21 GMT</pubDate>
+    </item>    <item>
+      <title>cliver-playbook-app-rag added to PyPI</title>
+      <link>https://pypi.org/project/cliver-playbook-app-rag/</link>
+      <guid>https://pypi.org/project/cliver-playbook-app-rag/</guid>
+      <description>cliver-playbook knowledge base: pluggable RAG (chunker / embedder / retriever / reranker / LLM) over the identity stack</description>
+      <pubDate>Tue, 20 Oct 2026 03:39:38 GMT</pubDate>
+    </item>    <item>
+      <title>cliver-playbook-app-user added to PyPI</title>
+      <link>https://pypi.org/project/cliver-playbook-app-user/</link>
+      <guid>https://pypi.org/project/cliver-playbook-app-user/</guid>
+      <description>cliver-playbook identity: accounts, RBAC, OIDC login, OAuth 2.1 provider for agent clients</description>
+      <pubDate>Tue, 20 Oct 2026 03:39:25 GMT</pubDate>
+    </item>    <item>
+      <title>cliver-playbook-app-basic added to PyPI</title>
+      <link>https://pypi.org/project/cliver-playbook-app-basic/</link>
+      <guid>https://pypi.org/project/cliver-playbook-app-basic/</guid>
+      <description>cliver-playbook foundations: layered settings, process runtime, meta + demo Items API, own Alembic chain</description>
+      <pubDate>Tue, 20 Oct 2026 03:39:11 GMT</pubDate>
+    </item>    <item>
+      <title>monee-sre-common added to PyPI</title>
+      <link>https://pypi.org/project/monee-sre-common/</link>
+      <guid>https://pypi.org/project/monee-sre-common/</guid>
+      <description>A small example package</description>
+      <pubDate>Tue, 20 Oct 2026 03:34:02 GMT</pubDate>
+    </item>    <item>
+      <title>wimotek-chromium-sync added to PyPI</title>
+      <link>https://pypi.org/project/wimotek-chromium-sync/</link>
+      <guid>https://pypi.org/project/wimotek-chromium-sync/</guid>
+      <description>Universal Chromium Session &amp; Cookie Synchronizer with SSH Tunnel</description>
+      <pubDate>Tue, 20 Oct 2026 03:30:44 GMT</pubDate>
+    </item>    <item>
+      <title>pyfield-esm added to PyPI</title>
+      <link>https://pypi.org/project/pyfield-esm/</link>
+      <guid>https://pypi.org/project/pyfield-esm/</guid>
+      <description>Structured, validated read/write access to Bethesda plugin files (Starfield first): records, scenes, terrain, outposts.</description>
+      <pubDate>Tue, 20 Oct 2026 03:28:41 GMT</pubDate>
+    </item>    <item>
+      <title>tgrtmp added to PyPI</title>
+      <link>https://pypi.org/project/tgrtmp/</link>
+      <guid>https://pypi.org/project/tgrtmp/</guid>
+      <description>High-performance RTMP(S) publishing client for Telegram livestreams</description>
+<author>let.me.code.safe@gmail.com</author>      <pubDate>Tue, 20 Oct 2026 03:25:46 GMT</pubDate>
+    </item>    <item>
+      <title>pal-code added to PyPI</title>
+      <link>https://pypi.org/project/pal-code/</link>
+      <guid>https://pypi.org/project/pal-code/</guid>
+      <description>Pal: build and plan with AI in your terminal (pal cli) or browser (pal web), on a layer that cuts tokens and latency.</description>
+      <pubDate>Tue, 20 Oct 2026 03:24:21 GMT</pubDate>
+    </item>    <item>
+      <title>cernitur-lint added to PyPI</title>
+      <link>https://pypi.org/project/cernitur-lint/</link>
+      <guid>https://pypi.org/project/cernitur-lint/</guid>
+      <description>Deterministic Answer Engine Optimization (AEO) and JSON-LD schema linter for Google AI Overviews and ChatGPT.</description>
+<author>support@cernitur.com</author>      <pubDate>Tue, 20 Oct 2026 03:17:58 GMT</pubDate>
+    </item>    <item>
+      <title>ot-cli added to PyPI</title>
+      <link>https://pypi.org/project/ot-cli/</link>
+      <guid>https://pypi.org/project/ot-cli/</guid>
+      <description>Natural-language terminal agent over local or SSH shells</description>
+      <pubDate>Tue, 20 Oct 2026 03:15:59 GMT</pubDate>
+    </item>    <item>
+      <title>dataproof added to PyPI</title>
+      <link>https://pypi.org/project/dataproof/</link>
+      <guid>https://pypi.org/project/dataproof/</guid>
+      <description>Find out what your dataframe code actually did — silent row loss, join fan-out, misleading statistics</description>
+      <pubDate>Tue, 20 Oct 2026 03:14:12 GMT</pubDate>
+    </item>  </channel>
+</rss>

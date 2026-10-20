@@ -31,6 +31,13 @@ describe('bucket table (spec §7.4)', () => {
       capacity: 1,
       refillPerSec: 1 / 3,
     });
+    // Spec §7.4 / task 5.2: pypistats gets one request per two seconds. With
+    // capacity 1 and a 0.5 token/s refill, a second call waits ≥ 2 s.
+    expect(bucketSpec('pypi:stats')).toEqual({
+      name: 'pypi:stats',
+      capacity: 1,
+      refillPerSec: 0.5,
+    });
   });
 
   it('sizes the Hugging Face bucket from HF_RATE_PER_5MIN (80 %, refilled over 5 min)', () => {

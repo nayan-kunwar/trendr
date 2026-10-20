@@ -1,0 +1,508 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>PyPI recent updates</title>
+    <link>https://pypi.org/</link>
+    <description>Recent updates to the Python Package Index</description>
+    <language>en</language>    <item>
+      <title>llmdbg 0.0.3a23</title>
+      <link>https://pypi.org/project/llmdbg/0.0.3a23/</link>
+      <description>A debugger for stepping through LLM layers and interpreting internal representations.</description>
+      <pubDate>Tue, 20 Oct 2026 04:39:26 GMT</pubDate>
+    </item>    <item>
+      <title>robhan-cdk-lib.aws-grafana 0.1.30</title>
+      <link>https://pypi.org/project/robhan-cdk-lib-aws-grafana/0.1.30/</link>
+      <description>AWS CDK Construct Library for Amazon Managed Grafana</description>
+      <pubDate>Tue, 20 Oct 2026 04:39:15 GMT</pubDate>
+    </item>    <item>
+      <title>pendingai 0.16.3</title>
+      <link>https://pypi.org/project/pendingai/0.16.3/</link>
+      <description>Python SDK and CLI for the Pending AI API</description>
+<author>support@pending.ai</author>      <pubDate>Tue, 20 Oct 2026 04:39:13 GMT</pubDate>
+    </item>    <item>
+      <title>odoo-addon-web-widget-sub-view 16.0.1.0.0.6</title>
+      <link>https://pypi.org/project/odoo-addon-web-widget-sub-view/16.0.1.0.0.6/</link>
+      <description>Create a subview widget</description>
+<author>support@odoo-community.org</author>      <pubDate>Tue, 20 Oct 2026 04:39:03 GMT</pubDate>
+    </item>    <item>
+      <title>robhan-cdk-lib.aws-aps 0.1.5</title>
+      <link>https://pypi.org/project/robhan-cdk-lib-aws-aps/0.1.5/</link>
+      <description>AWS CDK Construct Library for Amazon Managed Service for Prometheus</description>
+      <pubDate>Tue, 20 Oct 2026 04:38:46 GMT</pubDate>
+    </item>    <item>
+      <title>robhan-cdk-lib.aws-mwaa 0.0.273</title>
+      <link>https://pypi.org/project/robhan-cdk-lib-aws-mwaa/0.0.273/</link>
+      <description>AWS CDK Construct Library for Amazon Managed Workflows for Apache Airflow</description>
+      <pubDate>Tue, 20 Oct 2026 04:38:23 GMT</pubDate>
+    </item>    <item>
+      <title>robhan-cdk-lib.utils 0.0.352</title>
+      <link>https://pypi.org/project/robhan-cdk-lib-utils/0.0.352/</link>
+      <description>@robhan-cdk-lib/utils</description>
+      <pubDate>Tue, 20 Oct 2026 04:38:03 GMT</pubDate>
+    </item>    <item>
+      <title>codecraftai-provisioning 1.3.2</title>
+      <link>https://pypi.org/project/codecraftai-provisioning/1.3.2/</link>
+      <description>Code Craft AI - Provisioning Package</description>
+<author>myron.walker@gmail.com</author>      <pubDate>Tue, 20 Oct 2026 04:37:44 GMT</pubDate>
+    </item>    <item>
+      <title>aandd-reader 0.2.16</title>
+      <link>https://pypi.org/project/aandd-reader/0.2.16/</link>
+      <description>aandd_reader</description>
+<author>kengo.nakada@email.com</author>      <pubDate>Tue, 20 Oct 2026 04:37:40 GMT</pubDate>
+    </item>    <item>
+      <title>dbx-tools-graphiti 0.9.144</title>
+      <link>https://pypi.org/project/dbx-tools-graphiti/0.9.144/</link>
+      <description>Unified Graphiti REST, MCP, model routing, and PostgreSQL graph runtime</description>
+      <pubDate>Tue, 20 Oct 2026 04:37:35 GMT</pubDate>
+    </item>    <item>
+      <title>napari-lattice 2.2.3</title>
+      <link>https://pypi.org/project/napari-lattice/2.2.3/</link>
+      <description>Napari plugin for analysing and visualizing lattice lightsheet and Oblique Plane Microscopy data.</description>
+      <pubDate>Tue, 20 Oct 2026 04:37:35 GMT</pubDate>
+    </item>    <item>
+      <title>nexium-exchanger 0.1.23</title>
+      <link>https://pypi.org/project/nexium-exchanger/0.1.23/</link>
+      <description>Nexium Exchanger API</description>
+<author>info@nexium.me</author>      <pubDate>Tue, 20 Oct 2026 04:37:30 GMT</pubDate>
+    </item>    <item>
+      <title>talqing 0.12.2</title>
+      <link>https://pypi.org/project/talqing/0.12.2/</link>
+      <description>Python client for the Talqing API</description>
+      <pubDate>Tue, 20 Oct 2026 04:37:30 GMT</pubDate>
+    </item>    <item>
+      <title>llmdbg 0.0.3a22</title>
+      <link>https://pypi.org/project/llmdbg/0.0.3a22/</link>
+      <description>A debugger for stepping through LLM layers and interpreting internal representations.</description>
+      <pubDate>Tue, 20 Oct 2026 04:37:30 GMT</pubDate>
+    </item>    <item>
+      <title>lls-core 2.2.3</title>
+      <link>https://pypi.org/project/lls-core/2.2.3/</link>
+      <description>Core functionality for analysing and visualizing lattice lightsheet and Oblique Plane Microscopy data.</description>
+      <pubDate>Tue, 20 Oct 2026 04:37:25 GMT</pubDate>
+    </item>    <item>
+      <title>dbx-tools-node-runtime 0.9.144</title>
+      <link>https://pypi.org/project/dbx-tools-node-runtime/0.9.144/</link>
+      <description>Shared PythonMonkey runtime and lazy Node.js bootstrap</description>
+      <pubDate>Tue, 20 Oct 2026 04:37:14 GMT</pubDate>
+    </item>    <item>
+      <title>hgraph 0.8.35</title>
+      <link>https://pypi.org/project/hgraph/0.8.35/</link>
+      <description>C++-first functional reactive runtime for time-series processing</description>
+<author>howard@henson.me.uk, balabin@me.com, whepstead@gmail.com, tolukemi@gmail.com</author>      <pubDate>Tue, 20 Oct 2026 04:37:08 GMT</pubDate>
+    </item>    <item>
+      <title>hgraph-analytics 0.8.35</title>
+      <link>https://pypi.org/project/hgraph-analytics/0.8.35/</link>
+      <description>C++-first numerical analytics for hgraph</description>
+      <pubDate>Tue, 20 Oct 2026 04:37:07 GMT</pubDate>
+    </item>    <item>
+      <title>hgraph-persistence 0.8.35</title>
+      <link>https://pypi.org/project/hgraph-persistence/0.8.35/</link>
+      <description>Durable record/replay and frame storage for hgraph</description>
+      <pubDate>Tue, 20 Oct 2026 04:37:06 GMT</pubDate>
+    </item>    <item>
+      <title>hgraph-kafka 0.8.35</title>
+      <link>https://pypi.org/project/hgraph-kafka/0.8.35/</link>
+      <description>C++-first Kafka services for hgraph</description>
+      <pubDate>Tue, 20 Oct 2026 04:37:05 GMT</pubDate>
+    </item>    <item>
+      <title>hgraph-fabric 0.8.35</title>
+      <link>https://pypi.org/project/hgraph-fabric/0.8.35/</link>
+      <description>Versioned dataflow fabric for recurring hgraph computations</description>
+      <pubDate>Tue, 20 Oct 2026 04:37:03 GMT</pubDate>
+    </item>    <item>
+      <title>quickdbd-cli 0.1.11</title>
+      <link>https://pypi.org/project/quickdbd-cli/0.1.11/</link>
+      <description>Compile QuickDBD-syntax schema files into interactive HTML ER diagrams, with no table limit.</description>
+      <pubDate>Tue, 20 Oct 2026 04:37:03 GMT</pubDate>
+    </item>    <item>
+      <title>policyengine-api-simulation-client 0.20261020.261</title>
+      <link>https://pypi.org/project/policyengine-api-simulation-client/0.20261020.261/</link>
+      <description>A client library for accessing PolicyEngine Simulation Entrypoint</description>
+      <pubDate>Tue, 20 Oct 2026 04:37:02 GMT</pubDate>
+    </item>    <item>
+      <title>hgraph-web 0.8.35</title>
+      <link>https://pypi.org/project/hgraph-web/0.8.35/</link>
+      <description>HTTP/S and WebSocket transport extension for hgraph</description>
+      <pubDate>Tue, 20 Oct 2026 04:36:49 GMT</pubDate>
+    </item>    <item>
+      <title>odoo-addon-rental-base 17.0.1.0.0.2</title>
+      <link>https://pypi.org/project/odoo-addon-rental-base/17.0.1.0.0.2/</link>
+      <description>Manage Rental of Products</description>
+<author>support@odoo-community.org</author>      <pubDate>Tue, 20 Oct 2026 04:36:49 GMT</pubDate>
+    </item>    <item>
+      <title>keba-keenergy-api 2.13.0b8</title>
+      <link>https://pypi.org/project/keba-keenergy-api/2.13.0b8/</link>
+      <description>A Python wrapper for the KEBA KeEnergy API used by the Web HMI.</description>
+<author>mh@superbox.one</author>      <pubDate>Tue, 20 Oct 2026 04:36:45 GMT</pubDate>
+    </item>    <item>
+      <title>front 0.1.109</title>
+      <link>https://pypi.org/project/front/0.1.109/</link>
+      <description>Getting from python objects to UIs exposing them</description>
+      <pubDate>Tue, 20 Oct 2026 04:36:41 GMT</pubDate>
+    </item>    <item>
+      <title>robosystems-client 2.21.0</title>
+      <link>https://pypi.org/project/robosystems-client/2.21.0/</link>
+      <description>Python client library for the RoboSystems financial intelligence platform</description>
+      <pubDate>Tue, 20 Oct 2026 04:36:36 GMT</pubDate>
+    </item>    <item>
+      <title>apisec-orgscan 1.0.0</title>
+      <link>https://pypi.org/project/apisec-orgscan/1.0.0/</link>
+      <description>Scan every repository in a GitHub organization with APIsec Surface.</description>
+      <pubDate>Tue, 20 Oct 2026 04:36:27 GMT</pubDate>
+    </item>    <item>
+      <title>pal-code 0.1.2</title>
+      <link>https://pypi.org/project/pal-code/0.1.2/</link>
+      <description>Pal: build and plan with AI in your terminal (pal cli) or browser (pal web), on a layer that cuts tokens and latency.</description>
+      <pubDate>Tue, 20 Oct 2026 04:36:25 GMT</pubDate>
+    </item>    <item>
+      <title>peasy-ai 1.0.0</title>
+      <link>https://pypi.org/project/peasy-ai/1.0.0/</link>
+      <description>零硬编码、配置驱动的通用 AI 对话框架：AI 核心 + 叙事引擎 + TRPG 训练场</description>
+      <pubDate>Tue, 20 Oct 2026 04:35:56 GMT</pubDate>
+    </item>    <item>
+      <title>europacore 0.4.0a3</title>
+      <link>https://pypi.org/project/europacore/0.4.0a3/</link>
+      <description>Agent and harness core for building agent-based applications: a multi-turn tool-calling harness with guardrails, checkpoint/resume, human-in-the-loop, compaction and sub-agent delegation.</description>
+<author>m4rkmo@gmail.com</author>      <pubDate>Tue, 20 Oct 2026 04:35:45 GMT</pubDate>
+    </item>    <item>
+      <title>securepay-shared 0.1.0</title>
+      <link>https://pypi.org/project/securepay-shared/0.1.0/</link>
+      <description>Shared models, DB connection, config and AWS client for SecurePay-Riwi</description>
+      <pubDate>Tue, 20 Oct 2026 04:35:44 GMT</pubDate>
+    </item>    <item>
+      <title>edgespeak 0.6.8</title>
+      <link>https://pypi.org/project/edgespeak/0.6.8/</link>
+      <description>Python client for the local EdgeSpeak CLI runtime</description>
+      <pubDate>Tue, 20 Oct 2026 04:35:40 GMT</pubDate>
+    </item>    <item>
+      <title>sae-lens 6.54.9</title>
+      <link>https://pypi.org/project/sae-lens/6.54.9/</link>
+      <description>Training and Analyzing Sparse Autoencoders (SAEs)</description>
+      <pubDate>Tue, 20 Oct 2026 04:35:39 GMT</pubDate>
+    </item>    <item>
+      <title>torchspin 0.6.0</title>
+      <link>https://pypi.org/project/torchspin/0.6.0/</link>
+      <description>Differentiable PyTorch port of EasySpin - EPR/ESR spin Hamiltonian and spectrum simulation</description>
+<author>ahfollmer@ucdavis.edu</author>      <pubDate>Tue, 20 Oct 2026 04:35:35 GMT</pubDate>
+    </item>    <item>
+      <title>cdk-vscode-server 0.1.14</title>
+      <link>https://pypi.org/project/cdk-vscode-server/0.1.14/</link>
+      <description>Running VS Code Server on AWS</description>
+      <pubDate>Tue, 20 Oct 2026 04:35:06 GMT</pubDate>
+    </item>    <item>
+      <title>current-cli 0.1.78</title>
+      <link>https://pypi.org/project/current-cli/0.1.78/</link>
+      <description>Command line interface for the Current API, generated from its OpenAPI schema at runtime</description>
+<author>your-email@example.com</author>      <pubDate>Tue, 20 Oct 2026 04:35:05 GMT</pubDate>
+    </item>    <item>
+      <title>discussion-helper 0.2.1</title>
+      <link>https://pypi.org/project/discussion-helper/0.2.1/</link>
+      <description>Hold a spoken conversation: listen, answer, speak — and stop the moment the user cuts in. The loop over vocal-helper (hearing), a local language model (answering) and speaker-helper (speaking), with the floor, barge-in and the latency budget handled properly.</description>
+<author>warithmetics@deraison.ai</author>      <pubDate>Tue, 20 Oct 2026 04:34:51 GMT</pubDate>
+    </item>    <item>
+      <title>zensical-slides 1.0.7</title>
+      <link>https://pypi.org/project/zensical-slides/1.0.7/</link>
+      <description>A Zensical plugin to add a focus-slide button for sections.</description>
+      <pubDate>Tue, 20 Oct 2026 04:34:39 GMT</pubDate>
+    </item>    <item>
+      <title>zju-autologin 1.27.5</title>
+      <link>https://pypi.org/project/zju-autologin/1.27.5/</link>
+      <description>ZJU campus network (Srun portal) auto-login &amp; keep-alive: CLI + systemd service + PyQt6 GUI</description>
+      <pubDate>Tue, 20 Oct 2026 04:34:37 GMT</pubDate>
+    </item>    <item>
+      <title>pyrestoolbox 3.8.7</title>
+      <link>https://pypi.org/project/pyrestoolbox/3.8.7/</link>
+      <description>pyResToolbox - A collection of Reservoir Engineering Utilities</description>
+<author>mark.w.burgoyne@gmail.com</author>      <pubDate>Tue, 20 Oct 2026 04:34:11 GMT</pubDate>
+    </item>    <item>
+      <title>odoo-addon-sale-timesheet-invoice-link 18.0.1.0.2.1</title>
+      <link>https://pypi.org/project/odoo-addon-sale-timesheet-invoice-link/18.0.1.0.2.1/</link>
+      <description>Link invoices with timesheet lines</description>
+<author>support@odoo-community.org</author>      <pubDate>Tue, 20 Oct 2026 04:34:08 GMT</pubDate>
+    </item>    <item>
+      <title>fastjsonpatch 1.0.0</title>
+      <link>https://pypi.org/project/fastjsonpatch/1.0.0/</link>
+      <description>JSON Patch (RFC 6902) with make_patch and apply in Rust; the API of jsonpatch, no dependencies</description>
+<author>bitsbybyun@gmail.com</author>      <pubDate>Tue, 20 Oct 2026 04:33:44 GMT</pubDate>
+    </item>    <item>
+      <title>doc-kg 0.28.1</title>
+      <link>https://pypi.org/project/doc-kg/0.28.1/</link>
+      <description>A tool to build a semantically searchable knowledge graph from markdown and text documents</description>
+<author>suchanek@flux-frontiers.com</author>      <pubDate>Tue, 20 Oct 2026 04:33:26 GMT</pubDate>
+    </item>    <item>
+      <title>remoteRF-server 1.7.4</title>
+      <link>https://pypi.org/project/remoterf-server/1.7.4/</link>
+      <description>RemoteRF server-side control package</description>
+      <pubDate>Tue, 20 Oct 2026 04:33:12 GMT</pubDate>
+    </item>    <item>
+      <title>match-predicting-ann-server-pub-api 7.89</title>
+      <link>https://pypi.org/project/match-predicting-ann-server-pub-api/7.89/</link>
+      <description>Match Predicting ANN Server Public API</description>
+<author>magistvan@yahoo.com</author>      <pubDate>Tue, 20 Oct 2026 04:33:05 GMT</pubDate>
+    </item>    <item>
+      <title>vbpca-py 0.4.7</title>
+      <link>https://pypi.org/project/vbpca-py/0.4.7/</link>
+      <description>Variational Bayesian PCA (Ilin &amp; Raiko 2010) with support for missing data and missing entries.</description>
+<author>jmacdo16@jh.edu, shany215.sn@gmail.com, yoav@yoavram.com</author>      <pubDate>Tue, 20 Oct 2026 04:32:53 GMT</pubDate>
+    </item>    <item>
+      <title>llmdbg 0.0.3a21</title>
+      <link>https://pypi.org/project/llmdbg/0.0.3a21/</link>
+      <description>A debugger for stepping through LLM layers and interpreting internal representations.</description>
+      <pubDate>Tue, 20 Oct 2026 04:32:51 GMT</pubDate>
+    </item>    <item>
+      <title>unraid-mcp 2.10.3</title>
+      <link>https://pypi.org/project/unraid-mcp/2.10.3/</link>
+      <description>MCP Server for Unraid API - provides tools to interact with an Unraid server&#39;s GraphQL API</description>
+<author>jmagar@users.noreply.github.com</author>      <pubDate>Tue, 20 Oct 2026 04:32:47 GMT</pubDate>
+    </item>    <item>
+      <title>ilt-inversion 0.1.7</title>
+      <link>https://pypi.org/project/ilt-inversion/0.1.7/</link>
+      <description>Fast numerical inverse Laplace transforms: GWR (arbitrary precision) + Fixed Talbot, with optional Rust acceleration</description>
+<author>mark.burgoyne@gmail.com</author>      <pubDate>Tue, 20 Oct 2026 04:32:38 GMT</pubDate>
+    </item>    <item>
+      <title>kci-confluence-cli 0.4.3</title>
+      <link>https://pypi.org/project/kci-confluence-cli/0.4.3/</link>
+      <description>Confluence v6.15.7を操作するためのCLIです。</description>
+      <pubDate>Tue, 20 Oct 2026 04:32:30 GMT</pubDate>
+    </item>    <item>
+      <title>gwmock-data 0.4.2</title>
+      <link>https://pypi.org/project/gwmock-data/0.4.2/</link>
+      <description>Shared data structures for the gwmock packages</description>
+      <pubDate>Tue, 20 Oct 2026 04:32:29 GMT</pubDate>
+    </item>    <item>
+      <title>pyrsql 0.0.5</title>
+      <link>https://pypi.org/project/pyrsql/0.0.5/</link>
+      <description>Compiler-oriented RSQL query engine for safe, typed, and extensible Python ORM-backed APIs.</description>
+      <pubDate>Tue, 20 Oct 2026 04:32:25 GMT</pubDate>
+    </item>    <item>
+      <title>antchain-antdigital-iotagent 1.2.15</title>
+      <link>https://pypi.org/project/antchain-antdigital-iotagent/1.2.15/</link>
+      <description>Ant Chain IOTAGENT SDK Library for Python</description>
+<author>sdk-team@alibabacloud.com</author>      <pubDate>Tue, 20 Oct 2026 04:32:22 GMT</pubDate>
+    </item>    <item>
+      <title>nullcal 0.3.2</title>
+      <link>https://pypi.org/project/nullcal/0.3.2/</link>
+      <description>A package to constrain calibration errors of a closed-geometry network of gravitational-wave detectors.</description>
+<author>chunfung.wong@kuleuven.be, milan.wils@kuleuven.be, francesco.cireddu@kuleuven.be</author>      <pubDate>Tue, 20 Oct 2026 04:32:10 GMT</pubDate>
+    </item>    <item>
+      <title>hoshimi 0.1.3</title>
+      <link>https://pypi.org/project/hoshimi/0.1.3/</link>
+      <description>An OpenAI-compatible gateway in front of the free model stations (Cline, TRAE, ZCode, Qoder, MiniMax, Gemini, CodeBuddy, ...)</description>
+      <pubDate>Tue, 20 Oct 2026 04:32:09 GMT</pubDate>
+    </item>    <item>
+      <title>zeocore 0.28.0</title>
+      <link>https://pypi.org/project/zeocore/0.28.0/</link>
+      <description>Typed capability-authoring framework for Python — contracts, @capability tools, and adapters</description>
+<author>rod@aiproduct.engineer</author>      <pubDate>Tue, 20 Oct 2026 04:31:57 GMT</pubDate>
+    </item>    <item>
+      <title>uvpip-cli 1.0.7</title>
+      <link>https://pypi.org/project/uvpip-cli/1.0.7/</link>
+      <description>Ultra-fast transparent pip wrapper powered by uv</description>
+<author>191557828+yv3000@users.noreply.github.com, trulyimmortal80085@gmail.com</author>      <pubDate>Tue, 20 Oct 2026 04:31:37 GMT</pubDate>
+    </item>    <item>
+      <title>piot-fixture-zzz-python-sdist 0.0.1792467138</title>
+      <link>https://pypi.org/project/piot-fixture-zzz-python-sdist/0.0.1792467138/</link>
+      <description>Put It Out There canary fixture. Safe to ignore.</description>
+      <pubDate>Tue, 20 Oct 2026 04:31:20 GMT</pubDate>
+    </item>    <item>
+      <title>alissa-tools-github-orcloop 0.18.32</title>
+      <link>https://pypi.org/project/alissa-tools-github-orcloop/0.18.32/</link>
+      <description>ALISSA-TOOLS-GITHUB-ORCLOOP</description>
+<author>support@alissa.app</author>      <pubDate>Tue, 20 Oct 2026 04:31:18 GMT</pubDate>
+    </item>    <item>
+      <title>odoo-addons-oca-stock-logistics-workflow 18.0.20261019.1</title>
+      <link>https://pypi.org/project/odoo-addons-oca-stock-logistics-workflow/18.0.20261019.1/</link>
+      <description>None</description>
+      <pubDate>Tue, 20 Oct 2026 04:31:14 GMT</pubDate>
+    </item>    <item>
+      <title>piot-fixture-zzz-python-no-rust-fp 0.0.1792467213</title>
+      <link>https://pypi.org/project/piot-fixture-zzz-python-no-rust-fp/0.0.1792467213/</link>
+      <description>Put It Out There canary fixture (first-publish variant). Safe to ignore.</description>
+      <pubDate>Tue, 20 Oct 2026 04:31:14 GMT</pubDate>
+    </item>    <item>
+      <title>piot-fixture-zzz-python-no-rust 0.0.1792467240</title>
+      <link>https://pypi.org/project/piot-fixture-zzz-python-no-rust/0.0.1792467240/</link>
+      <description>Put It Out There canary fixture. Safe to ignore.</description>
+      <pubDate>Tue, 20 Oct 2026 04:31:13 GMT</pubDate>
+    </item>    <item>
+      <title>piot-fixture-zzz-python-maturin 0.0.1792467210</title>
+      <link>https://pypi.org/project/piot-fixture-zzz-python-maturin/0.0.1792467210/</link>
+      <description>Put It Out There canary fixture. Safe to ignore.</description>
+      <pubDate>Tue, 20 Oct 2026 04:31:06 GMT</pubDate>
+    </item>    <item>
+      <title>piot-fixture-zzz-python-hatch 0.0.1792467127</title>
+      <link>https://pypi.org/project/piot-fixture-zzz-python-hatch/0.0.1792467127/</link>
+      <description>Put It Out There canary fixture. Safe to ignore.</description>
+      <pubDate>Tue, 20 Oct 2026 04:31:04 GMT</pubDate>
+    </item>    <item>
+      <title>piot-fixture-zzz-python 0.0.1792467231</title>
+      <link>https://pypi.org/project/piot-fixture-zzz-python/0.0.1792467231/</link>
+      <description>None</description>
+      <pubDate>Tue, 20 Oct 2026 04:30:56 GMT</pubDate>
+    </item>    <item>
+      <title>qagent-pytest 0.2.0</title>
+      <link>https://pypi.org/project/qagent-pytest/0.2.0/</link>
+      <description>Sistema multiagente que genera y valida pruebas pytest para código Python 3.10+</description>
+      <pubDate>Tue, 20 Oct 2026 04:30:54 GMT</pubDate>
+    </item>    <item>
+      <title>dependency-support-policy 0.2.14</title>
+      <link>https://pypi.org/project/dependency-support-policy/0.2.14/</link>
+      <description>Manage rolling minimum-supported versions (SPEC 0 style) for Python projects, as a CLI and GitHub Action.</description>
+<author>chunfung.wong@kuleuven.be</author>      <pubDate>Tue, 20 Oct 2026 04:30:51 GMT</pubDate>
+    </item>    <item>
+      <title>agentshim 0.22.0</title>
+      <link>https://pypi.org/project/agentshim/0.22.0/</link>
+      <description>Provider-agnostic coding-agent CLI shims</description>
+      <pubDate>Tue, 20 Oct 2026 04:30:45 GMT</pubDate>
+    </item>    <item>
+      <title>codecraftai-provisioning 1.3.1</title>
+      <link>https://pypi.org/project/codecraftai-provisioning/1.3.1/</link>
+      <description>Code Craft AI - Provisioning Package</description>
+<author>myron.walker@gmail.com</author>      <pubDate>Tue, 20 Oct 2026 04:30:42 GMT</pubDate>
+    </item>    <item>
+      <title>codecraftai-testplus 1.2.1</title>
+      <link>https://pypi.org/project/codecraftai-testplus/1.2.1/</link>
+      <description>Code Craft AI - TestPlus Package</description>
+<author>myron.walker@gmail.com</author>      <pubDate>Tue, 20 Oct 2026 04:30:32 GMT</pubDate>
+    </item>    <item>
+      <title>codecraftai-interop-ext-upnp 1.3.1</title>
+      <link>https://pypi.org/project/codecraftai-interop-ext-upnp/1.3.1/</link>
+      <description>Code Craft AI - Upnp InterOp Extensions</description>
+<author>myron.walker@gmail.com</author>      <pubDate>Tue, 20 Oct 2026 04:30:27 GMT</pubDate>
+    </item>    <item>
+      <title>codecraftai-interop-ext-can 1.2.1</title>
+      <link>https://pypi.org/project/codecraftai-interop-ext-can/1.2.1/</link>
+      <description>Code Craft AI Interop Extension for CAN</description>
+<author>myron.walker@gmail.com</author>      <pubDate>Tue, 20 Oct 2026 04:30:22 GMT</pubDate>
+    </item>    <item>
+      <title>codecraftai-interop-ext-bluetooth 1.2.1</title>
+      <link>https://pypi.org/project/codecraftai-interop-ext-bluetooth/1.2.1/</link>
+      <description>Code Craft AI Interop Extension for Bluetooth</description>
+<author>myron.walker@gmail.com</author>      <pubDate>Tue, 20 Oct 2026 04:30:22 GMT</pubDate>
+    </item>    <item>
+      <title>odoo-addon-stock-picking-portal-owner 17.0.1.0.0.3</title>
+      <link>https://pypi.org/project/odoo-addon-stock-picking-portal-owner/17.0.1.0.0.3/</link>
+      <description>Show consignment owner stock operations in portal</description>
+<author>support@odoo-community.org</author>      <pubDate>Tue, 20 Oct 2026 04:29:59 GMT</pubDate>
+    </item>    <item>
+      <title>odoo-addon-stock-quant-lock 16.0.2.0.0.6</title>
+      <link>https://pypi.org/project/odoo-addon-stock-quant-lock/16.0.2.0.0.6/</link>
+      <description>Lock selected quants to prevent new reservations and keep stock move traceability</description>
+<author>support@odoo-community.org</author>      <pubDate>Tue, 20 Oct 2026 04:29:28 GMT</pubDate>
+    </item>    <item>
+      <title>tplbuild 0.1.4</title>
+      <link>https://pypi.org/project/tplbuild/0.1.4/</link>
+      <description>Templated container build tool</description>
+<author>msg555@gmail.com</author>      <pubDate>Tue, 20 Oct 2026 04:29:13 GMT</pubDate>
+    </item>    <item>
+      <title>tweetnook 1.1.0</title>
+      <link>https://pypi.org/project/tweetnook/1.1.0/</link>
+      <description>Self-hosted Web archive for Twitter/X bookmarks, likes, tweets, and official exports.</description>
+      <pubDate>Tue, 20 Oct 2026 04:29:11 GMT</pubDate>
+    </item>    <item>
+      <title>jilebi-sdk 0.6.2</title>
+      <link>https://pypi.org/project/jilebi-sdk/0.6.2/</link>
+      <description>jilebi API</description>
+<author>team@openapitools.org</author>      <pubDate>Tue, 20 Oct 2026 04:28:39 GMT</pubDate>
+    </item>    <item>
+      <title>credencegraph 0.3.0</title>
+      <link>https://pypi.org/project/credencegraph/0.3.0/</link>
+      <description>A neutral engine for graphs of propositions with credences: probabilistic inference, sensitivity, and weak-point diagnostics</description>
+      <pubDate>Tue, 20 Oct 2026 04:28:20 GMT</pubDate>
+    </item>    <item>
+      <title>seine-rs 0.4.58</title>
+      <link>https://pypi.org/project/seine-rs/0.4.58/</link>
+      <description>Differentially certified Drools-subset rule engine over Arrow dataframes</description>
+<author>bryan@silverlakeagentics.com</author>      <pubDate>Tue, 20 Oct 2026 04:28:01 GMT</pubDate>
+    </item>    <item>
+      <title>QuickLab-MCP 0.1.0</title>
+      <link>https://pypi.org/project/quicklab-mcp/0.1.0/</link>
+      <description>QuickLab MCP Server - Production Tabular ML Experimentation Control Plane for AI Agents</description>
+      <pubDate>Tue, 20 Oct 2026 04:27:57 GMT</pubDate>
+    </item>    <item>
+      <title>odoo-addon-stock-inventory 18.0.1.2.0.2</title>
+      <link>https://pypi.org/project/odoo-addon-stock-inventory/18.0.1.2.0.2/</link>
+      <description>Allows to do an easier follow up of the Inventory Adjustments</description>
+<author>support@odoo-community.org</author>      <pubDate>Tue, 20 Oct 2026 04:27:34 GMT</pubDate>
+    </item>    <item>
+      <title>py2http 0.1.76</title>
+      <link>https://pypi.org/project/py2http/0.1.76/</link>
+      <description>Declarative HTTP service entry point.</description>
+      <pubDate>Tue, 20 Oct 2026 04:27:27 GMT</pubDate>
+    </item>    <item>
+      <title>dbx-tools-graphiti 0.9.143</title>
+      <link>https://pypi.org/project/dbx-tools-graphiti/0.9.143/</link>
+      <description>Unified Graphiti REST, MCP, model routing, and PostgreSQL graph runtime</description>
+      <pubDate>Tue, 20 Oct 2026 04:27:26 GMT</pubDate>
+    </item>    <item>
+      <title>wealthbraid 0.1.3</title>
+      <link>https://pypi.org/project/wealthbraid/0.1.3/</link>
+      <description>Local-first, AI-native personal wealth management on an append-only double-entry ledger</description>
+      <pubDate>Tue, 20 Oct 2026 04:27:24 GMT</pubDate>
+    </item>    <item>
+      <title>zensical-slides 1.0.6</title>
+      <link>https://pypi.org/project/zensical-slides/1.0.6/</link>
+      <description>A Zensical plugin to add a focus-slide button for sections.</description>
+      <pubDate>Tue, 20 Oct 2026 04:27:17 GMT</pubDate>
+    </item>    <item>
+      <title>odoo-addon-stock-inventory 19.0.1.1.0.2</title>
+      <link>https://pypi.org/project/odoo-addon-stock-inventory/19.0.1.1.0.2/</link>
+      <description>Allows to do an easier follow up of the Inventory Adjustments</description>
+<author>support@odoo-community.org</author>      <pubDate>Tue, 20 Oct 2026 04:27:16 GMT</pubDate>
+    </item>    <item>
+      <title>jaddle 0.2.3</title>
+      <link>https://pypi.org/project/jaddle/0.2.3/</link>
+      <description>First-order primal-dual solvers for large-scale linear and convex programs, written in JAX</description>
+      <pubDate>Tue, 20 Oct 2026 04:27:11 GMT</pubDate>
+    </item>    <item>
+      <title>myutils2 0.1.0</title>
+      <link>https://pypi.org/project/myutils2/0.1.0/</link>
+      <description>Мои полезные функции</description>
+<author>email@example.com</author>      <pubDate>Tue, 20 Oct 2026 04:27:09 GMT</pubDate>
+    </item>    <item>
+      <title>odoo-addon-stock-secondary-unit 18.0.1.2.1.2</title>
+      <link>https://pypi.org/project/odoo-addon-stock-secondary-unit/18.0.1.2.1.2/</link>
+      <description>Get product quantities in a secondary unit</description>
+<author>support@odoo-community.org</author>      <pubDate>Tue, 20 Oct 2026 04:27:05 GMT</pubDate>
+    </item>    <item>
+      <title>gld-kiln 0.2.0</title>
+      <link>https://pypi.org/project/gld-kiln/0.2.0/</link>
+      <description>Positional little-endian Kiln codec for Python</description>
+      <pubDate>Tue, 20 Oct 2026 04:26:54 GMT</pubDate>
+    </item>    <item>
+      <title>odoo-addon-stock-cycle-count 16.0.2.2.1.7</title>
+      <link>https://pypi.org/project/odoo-addon-stock-cycle-count/16.0.2.2.1.7/</link>
+      <description>Adds the capability to schedule cycle counts in a warehouse through different rules defined by the user.</description>
+<author>support@odoo-community.org</author>      <pubDate>Tue, 20 Oct 2026 04:26:44 GMT</pubDate>
+    </item>    <item>
+      <title>dbx-tools-node-runtime 0.9.143</title>
+      <link>https://pypi.org/project/dbx-tools-node-runtime/0.9.143/</link>
+      <description>Shared PythonMonkey runtime and lazy Node.js bootstrap</description>
+      <pubDate>Tue, 20 Oct 2026 04:26:32 GMT</pubDate>
+    </item>    <item>
+      <title>nithin-greeter 0.1.1</title>
+      <link>https://pypi.org/project/nithin-greeter/0.1.1/</link>
+      <description>A simple Python greeting package</description>
+      <pubDate>Tue, 20 Oct 2026 04:26:22 GMT</pubDate>
+    </item>    <item>
+      <title>odoo-addon-stock-location-product-restriction 16.0.2.0.0.1</title>
+      <link>https://pypi.org/project/odoo-addon-stock-location-product-restriction/16.0.2.0.0.1/</link>
+      <description>Prevent to mix different products into the same stock location</description>
+<author>support@odoo-community.org</author>      <pubDate>Tue, 20 Oct 2026 04:26:10 GMT</pubDate>
+    </item>    <item>
+      <title>probe-research 0.275.0</title>
+      <link>https://pypi.org/project/probe-research/0.275.0/</link>
+      <description>CLI + SDK + read-only MCP client for Probe Research (experiment tracking).</description>
+<author>team@prbe.ai</author>      <pubDate>Tue, 20 Oct 2026 04:26:04 GMT</pubDate>
+    </item>    <item>
+      <title>cerebrofy 3.7.0</title>
+      <link>https://pypi.org/project/cerebrofy/3.7.0/</link>
+      <description>AI-powered codebase intelligence CLI</description>
+      <pubDate>Tue, 20 Oct 2026 04:25:57 GMT</pubDate>
+    </item>    <item>
+      <title>contact 1.7.2</title>
+      <link>https://pypi.org/project/contact/1.7.2/</link>
+      <description>This Python curses client for Meshtastic is a terminal-based client designed to manage device settings, enable mesh chat communication, and handle configuration backups and restores.</description>
+<author>ben@pdxlocations.com</author>      <pubDate>Tue, 20 Oct 2026 04:25:51 GMT</pubDate>
+    </item>  </channel>
+</rss>

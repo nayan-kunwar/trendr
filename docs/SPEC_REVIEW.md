@@ -33,6 +33,12 @@ be re-checked later. Decisions with alternatives get an ADR in [`docs/adr/`](./a
   reads `stargazers/history` weekly buckets + `stargazers/count` instead; reachable depth
   ≈ 100 × 30 weeks (ADR-0012, deviation note under task 4.3).
 - **GAP-8** — fine-grained PAT expiry header captured live (`2027-01-17 16:40:21 UTC`, ADR-0013).
+- **GAP-3** — pypistats publishes a numeric per-minute budget after all: `X-RateLimit-Limit: 60`,
+  `X-RateLimit-Remaining` and `X-RateLimit-Reset` on a live `recent` response (2026-10-20), plus
+  `Retry-After: 1` even on a 200. The adapter's `pypi:stats` bucket (capacity 1, 0.5 req/s =
+  30/min) therefore stays at half the observed ceiling. The live `mcp` `overall` series already
+  ended at **2026-10-19** when captured at **04:41Z** on 2026-10-20, so the 05:00 UTC daily has the
+  previous day; the 11:00 retry remains for a late publication.
 
 ## Phase 1 notes
 
@@ -998,6 +1004,102 @@ be re-checked later. Decisions with alternatives get an ADR in [`docs/adr/`](./a
   `agentdb` (id 3335) succeeded: **61 rows `2026-08-19..2026-10-18`**, 8 valid zero days, latest
   still 16293. The 190 restored items will be swept by the next scheduled daily.
 
+### Task 5.2 notes
+
+- **Adapter surface.** `packages/sources/src/pypi` implements RSS discovery (`packages.xml`,
+  `updates.xml`) plus the spec's ≈300-project `seed.json`, project JSON metadata with ETags,
+  pypistats `overall?mirrors=false` daily series/backfill, PEP 503 normalization and
+  `project_urls` → GitHub `package_of` aliases. The seed list is included whenever the process has
+  not completed a full sweep in the last 24 h; the marker is set only when the run budget covers
+  the whole list and every candidate was processed, so a tiny manual discovery does not suppress
+  the scheduled seed sweep and a failed seed run retries. A first full sweep is ~300 project JSON
+  calls (10/s) plus up to 300 `recent` calls (0.5/s, ~10 min).
+- **Discovery and admission.** Both feeds are parsed with `fast-xml-parser`; the project name is
+  read from the `/project/{name}/` link (title fallback strips “added to PyPI” and the version).
+  RSS items are filtered by the spec keywords on the name, title and summary; the seed list
+  bypasses the keyword filter but not admission. Admission is `recent.last_week ≥
+  PYPI_MIN_WEEKLY_DOWNLOADS` (500) **or** first release ≤ 30 days; new projects therefore skip the
+  pypistats call entirely. The per-process recent cache (24 h) keeps RSS polling from re-calling
+  pypistats for the same project every 30 minutes, honoring the “at most once per day per
+  package” etiquette. A 404 from pypistats is treated as “no series yet”, not as an item failure.
+- **Metadata and ETags.** The project JSON is fetched on discovery and on snapshot/refresh; the
+  response ETag is stored under `etag:pypi:{project}` for 7 days and sent as `If-None-Match` on
+  the next refresh. A 304 uses the processor's normal continuity path. Live evidence (2026-10-20)
+  for `mcp`: ETag `"Opwgy85QHdhw9h38/BVOzA"`, `cache-control: max-age=900, public`,
+  `x-pypi-last-serial: 41751579`; the recorder stores these in `meta.json`.
+- **Daily anchor (deviation, observed live).** The spec's “last 3 days” is implemented as the
+  three rows ending at the **newest day pypistats actually returns**, not at UTC yesterday.
+  On 2026-10-20 at 04:41Z the `mcp` overall series ended at **2026-10-19** (the expected day), so
+  the window is `2026-10-17..2026-10-19`; if the newest returned day is older than UTC yesterday,
+  the item still persists the available days and the run closes `partial` (`dailyIncomplete`) for
+  the 11:00 retry. pypistats does not invent a zero row for a day it has not computed, so this
+  check is the analogue of npm's `last-day` probe without an extra watermark request.
+- **Series and backfill.** `overall?mirrors=false` rows are filtered to
+  `category=without_mirrors` and sorted by date. Backfill keeps the newest **60** rows of the
+  existing 180-day series (the spec's “keep 60 days”); daily keeps 3. The live `mcp` capture had
+  **195** points (`2026-04-08..2026-10-19`), i.e. pypistats currently returns more than the
+  documented 180 days; the adapter does not depend on the exact length. Recent `mcp` was
+  65,372,845 downloads/week at capture time.
+- **Groups/aliases.** Classifier `Topic :: …` tails and comma-separated keywords are normalized
+  with the shared topic slugger. Every GitHub URL in `project_urls` (Repository, Issues,
+  Changelog, …) is parsed with the npm URL helper, deduplicated, and emitted as
+  `relation=package_of`, confidence `0.9`, evidence `pypi.project_urls`; the first one is also
+  stored as `metadata.repository`. Alias persistence + `item_topics` remain in task 5.6.
+- **Contract extension (additive).** `FetchJsonOptions.responseType?: 'json' | 'text'` lets the
+  RSS fetcher read XML through the same retry/bucket/allowlist path; the default remains JSON.
+  The adapter uses the primary `pypi:json` bucket for RSS/project JSON and the separate
+  `pypi:stats` bucket for pypistats.
+- **Rate limit.** `pypi:stats` is capacity 1 / **0.5 req/s** (one request per two seconds; the
+  live response advertises `X-RateLimit-Limit: 60` per minute, so the bucket stays at half the
+  observed ceiling). Discovery's recent calls are additionally cached 24 h per process; overall is
+  not cached because the 11:00 retry is deliberately a second call when the 05:00 response was
+  incomplete. The live capture confirms pypistats had published the previous day by **04:41Z**, so
+  the 05:00 UTC daily is suitably placed.
+- **Schedules.** `pypi-discover` `*/30 * * * *` (`maxItems=1000`), `pypi-daily` `0 5 * * *`,
+  `pypi-daily-retry` `0 11 * * *` (§7.2/§7.3.3).
+- **Fixtures.** `RECORD=1 pnpm fixtures:record --source pypi` captured both RSS feeds (40 newest /
+  100 updates), `mcp` project JSON trimmed to consumed fields, the 195-point overall series, the
+  recent payload, and `meta.json` with ETag/CDN evidence. No credentials; the token/header scan
+  covers every fixture file.
+- **Deferred.** Alias persistence + `item_topics`, discover→backfill fan-out, and a dedicated
+  weekly metadata cadence for tracked projects that are neither seeds nor currently in RSS (the
+  daily seed sweep refreshes the seed list; a manual refresh/snapshot still works).
+  `PYPI_MIN_WEEKLY_DOWNLOADS` and `TRACKED_MAX_PYPI` are read at boot but the tracked-set cap
+  enforcement remains the shared open task. A cross-process discovery lock is also deferred:
+  `nextSeedAt` is per worker process, so a seed sweep that overruns the 30-minute slot (observed
+  under pypistats 429s) can overlap the next scheduled run.
+- Acceptance coverage: unit — PEP 503/URLs/date windows, RSS keyword filtering, one-item XML,
+  seed admission, new-project admission without pypistats, recent/overall request shapes,
+  ETag/304/404, daily partial and missing-series handling, 60-row backfill, fixture normalization
+  and the no-secret scan; core — text response parsing and the `pypi:stats` 2 s bucket spec.
+
+### Task 5.2 live acceptance (2026-10-20)
+
+- **Egress fix first.** The pre-fix worker could reach the host but Node `fetch` timed out on the
+  Docker NAT64 AAAA address; the rebuilt image now carries
+  `NODE_OPTIONS=--dns-result-order=ipv4first --no-network-family-autoselection` in the runtime
+  stage (see Environment quirks). Both `pypi.org/rss/packages.xml` and
+  `pypistats.org/api/packages/mcp/recent` return 200 from inside the worker after the rebuild.
+- **Discovery (`pypi.discover.new-hot.2026-10-20T05-40`, run 136).** 10 items seen, 10 upserted,
+  0 failed, 13 API calls, 12.0 s. Inventory went 54 → 58 PyPI items; the upserted rows carry
+  `language=python`, `primary_metric=downloads`, canonical names and metadata such as
+  `repository=kornia/kornia`, `version=0.8.3` (live rows `kornia`, `ultralytics`, …).
+- **Daily (`pypi.daily.2026-10-20`, run 137).** 70 items seen/upserted, 71 API calls, 0 failed,
+  `succeeded` in 5 m 38 s. `mcp` and `fastmcp` gained three rows each
+  (`2026-10-17..2026-10-19`); items that already had the seeded 61-row history kept it. No
+  `dailyIncomplete` items, so the 11:00 retry is not needed for this run.
+- **Backfill (`backfill.pypi.4645.2026-10-20`, run 139).** `mcp` (item 4645), one API call,
+  2.6 s, `succeeded`; the stored series is exactly 60 rows `2026-08-21..2026-10-19`
+  (483,274,384 downloads summed over the window).
+- **First seed sweep** (`repeat:pypi-discover:1792474200000`, run 134). 315 items seen and
+  upserted, 0 failed, 640 API calls, `succeeded` in 21 m 48 s (05:40:48–06:02:36); PyPI inventory
+  reached 319 items. pypistats occasionally answered 429 under the combined seed+daily load;
+  `fetchJson` pauses the shared `pypi:stats` bucket on the response headers and retries, and the
+  per-item failures did not abort the sweep. The 06:00 scheduled run overlapped because the 05:30
+  sweep was still going (`nextSeedAt` is per process); see the deferred lock note above. The 05:00
+  scheduled daily failures were the pre-fix IPv6 timeouts only; the post-fix manual daily above is
+  the acceptance run.
+
 ## Environment quirks worth knowing
 
 - `docker compose port <svc> <port>` exits **0** printing `invalid IP:0` when the port is only
@@ -1025,3 +1127,11 @@ be re-checked later. Decisions with alternatives get an ADR in [`docs/adr/`](./a
   (host `curl` returned 200 while container `fetch` gave `ETIMEDOUT`); the npm live daily passed
   on a reduced set on attempt 3. Explicit `429` HTML responses with `Retry-After: 0` are a
   different, rate-limit issue handled above.
+- **Root cause found (2026-10-20):** the flake was Node 22's `autoSelectFamily` (Happy Eyeballs)
+  trying the Docker NAT64 AAAA address, which blackholes for these AWS/Fastly hosts; `wget` and
+  raw IPv4 TCP worked while `fetch`/`https.get` timed out. The builder stage had
+  `NODE_OPTIONS=--dns-result-order=ipv4first`, but `runner` starts from `FROM node:22-alpine`
+  again, so the setting never reached the deployed process. `infra/docker/node.Dockerfile` now
+  sets `--dns-result-order=ipv4first --no-network-family-autoselection` in **both** stages; with
+  autoselection off, `pypistats.org` fetches from the worker are consistently 200. This also
+  explains the earlier npm/GitHub flakes.

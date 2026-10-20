@@ -6,4 +6,5 @@ export * from './github/schemas.js';
 export * from './npm/downloads.js';
 export * from './npm/npm.adapter.js';
 export * from './npm/schemas.js';
+export * from './pypi/pypi.adapter.js';
 export * from './registry.js';
