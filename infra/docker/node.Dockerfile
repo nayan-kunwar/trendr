@@ -6,8 +6,9 @@ ARG PNPM_VERSION=11.7.0
 ENV PNPM_HOME=/pnpm PATH=/pnpm/bin:/pnpm:$PATH
 # Husky hooks and corepack download prompts must never run inside an image build.
 ENV HUSKY=0 COREPACK_ENABLE_DOWNLOAD_PROMPT=0
-# Container networks often have broken IPv6/NAT64 routes; resolve registry hosts to IPv4.
-ENV NODE_OPTIONS=--dns-result-order=ipv4first
+# Container networks often have broken IPv6/NAT64 routes; force IPv4 and skip
+# Node's Happy Eyeballs, which otherwise waits on a blackholed AAAA address.
+ENV NODE_OPTIONS="--dns-result-order=ipv4first --no-network-family-autoselection"
 # Pin the pnpm the repo's packageManager field expects so no build step ever
 # resolves "pnpm latest" over the network; then keep the store where the
 # builder's buildkit cache mount expects it.
@@ -38,7 +39,9 @@ RUN mkdir -p /out/packages && ln -sfn ../node_modules/@trendr/db /out/packages/d
 
 FROM ${NODE_IMAGE} AS runner
 ARG APP
-ENV NODE_ENV=production APP=${APP}
+# ENV from `base` does not carry across `FROM`; repeat the IPv4-first resolver
+# here so the runtime (not just the builder) avoids blackholed IPv6 egress.
+ENV NODE_ENV=production APP=${APP} NODE_OPTIONS="--dns-result-order=ipv4first --no-network-family-autoselection"
 WORKDIR /app
 RUN apk add --no-cache tini
 COPY --from=builder --chown=node:node /out/ ./
