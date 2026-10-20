@@ -31,6 +31,11 @@ export interface ItemUpsert {
   isArchived: boolean;
   metadata: Record<string, unknown>;
   flags?: ItemFlag[];
+  /**
+   * Additive extension of the §5.1 shape: rolling/gauge values that belong in
+   * `latest_metrics` but must not create a snapshot series (HF `downloads`).
+   */
+  latestMetrics?: Partial<Record<Metric, number>>;
 }
 
 export interface UpsertedItem {
@@ -93,6 +98,7 @@ export async function upsertItems(
       rows.map((row) => ({
         ...row,
         flags: row.flags ?? [],
+        latestMetrics: row.latestMetrics ?? {},
         ...(options.newItemTier === undefined ? {} : { tier: options.newItemTier }),
       })),
     )
@@ -112,6 +118,7 @@ export async function upsertItems(
         upstreamCreatedAt: sql`coalesce(excluded.upstream_created_at, ${items.upstreamCreatedAt})`,
         isArchived: sql`excluded.is_archived`,
         metadata: sql`${items.metadata} || excluded.metadata`,
+        latestMetrics: sql`${items.latestMetrics} || excluded.latest_metrics`,
         flags: sql`(select coalesce(array_agg(distinct f), '{}'::text[]) from unnest(${items.flags} || excluded.flags) as t(f))`,
         lastSeenAt: sql`now()`,
         updatedAt: sql`now()`,

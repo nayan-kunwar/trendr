@@ -58,6 +58,12 @@ export interface FetchJsonOptions<T> {
   etag?: string | null;
   /** Rate-limit header feedback (§7.4); may pause the bucket. */
   onHeaders?: (headers: Headers) => void | Promise<void>;
+  /**
+   * Source-specific reset header (HF `RateLimit: "api";r=0;t=163`), returning
+   * the pause in milliseconds. Falls back to `retry-after` /
+   * `x-ratelimit-reset` / 60 s when it returns null.
+   */
+  rateLimitDelayMs?: (headers: Headers) => number | null;
   metrics?: FetchJsonMetricsSink;
   signal?: AbortSignal;
   /** In-process retry window (§7.5 default: base 500 ms, cap 10 s). */
@@ -278,7 +284,8 @@ export async function fetchJson<T>(options: FetchJsonOptions<T>): Promise<FetchJ
       return { status: 'not_found', headers: response.headers };
     }
     if (isRateLimitResponse(response)) {
-      const retryAfterMs = rateLimitDelayMs(response.headers);
+      const retryAfterMs =
+        options.rateLimitDelayMs?.(response.headers) ?? rateLimitDelayMs(response.headers);
       await options.bucket.pauseUntil(Date.now() + retryAfterMs);
       options.metrics?.error(options.source, options.endpoint, 'rate_limited');
       throw new UpstreamError(

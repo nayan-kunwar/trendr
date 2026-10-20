@@ -1,0 +1,102 @@
+{
+  "recordedAt": "2026-10-20T06:35:04.620Z",
+  "userAgent": "Trendr/1.0 (+https://github.com/nayankunwar/trendr)",
+  "model": "google-bert/bert-base-uncased",
+  "rateLimit": "\"api\";r=499;t=10",
+  "rateLimitPolicy": "\"fixed window\";\"api\";q=500;w=300",
+  "modelListLink": "<https://huggingface.co/api/models?sort=trendingScore&direction=-1&limit=2&expand=likes&expand=downloads&expand=downloadsAllTime&expand=trendingScore&expand=createdAt&expand=pipeline_tag&expand=tags&expand=library_name&expand=gated&expand=disabled&cursor=eyIkb3IiOlt7InRyZW5kaW5nU2NvcmUiOjc2OCwiX2lkIjp7IiRndCI6IjZhY2Y2ZWNkMGJlOTQzZDFmMGM3MDMwMSJ9fSx7InRyZW5kaW5nU2NvcmUiOnsiJGx0Ijo3Njh9fSx7InRyZW5kaW5nU2NvcmUiOm51bGx9XX0%3D>; rel=\"next\"",
+  "expands": {
+    "list": {
+      "model": [
+        "likes",
+        "downloads",
+        "downloadsAllTime",
+        "trendingScore",
+        "createdAt",
+        "pipeline_tag",
+        "tags",
+        "library_name",
+        "gated",
+        "disabled"
+      ],
+      "dataset": [
+        "likes",
+        "downloads",
+        "downloadsAllTime",
+        "trendingScore",
+        "createdAt",
+        "tags",
+        "description",
+        "gated",
+        "disabled"
+      ],
+      "space": ["likes", "trendingScore", "createdAt", "tags", "sdk", "disabled"]
+    },
+    "detail": {
+      "model": [
+        "likes",
+        "downloads",
+        "downloadsAllTime",
+        "trendingScore",
+        "createdAt",
+        "pipeline_tag",
+        "tags",
+        "library_name",
+        "gated",
+        "disabled"
+      ],
+      "dataset": [
+        "likes",
+        "downloads",
+        "downloadsAllTime",
+        "trendingScore",
+        "createdAt",
+        "tags",
+        "description",
+        "gated",
+        "disabled"
+      ],
+      "space": ["likes", "trendingScore", "createdAt", "tags", "sdk", "disabled"]
+    }
+  },
+  "evidence": {
+    "modelDetailArxivTags": ["arxiv:1810.04805"],
+    "modelDetailFields": [
+      "_id",
+      "createdAt",
+      "disabled",
+      "downloads",
+      "downloadsAllTime",
+      "gated",
+      "id",
+      "library_name",
+      "likes",
+      "pipeline_tag",
+      "tags",
+      "trendingScore"
+    ],
+    "datasetListFields": [
+      "_id",
+      "createdAt",
+      "description",
+      "disabled",
+      "downloads",
+      "downloadsAllTime",
+      "gated",
+      "id",
+      "likes",
+      "tags",
+      "trendingScore"
+    ],
+    "spaceListFields": [
+      "_id",
+      "createdAt",
+      "disabled",
+      "id",
+      "likes",
+      "sdk",
+      "tags",
+      "trendingScore"
+    ]
+  }
+}

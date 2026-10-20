@@ -223,5 +223,6 @@ function toItemUpsert(normalized: NormalizedItem): ItemUpsert {
     isArchived: item.isArchived,
     metadata: item.metadata,
     ...(item.flags === undefined ? {} : { flags: item.flags }),
+    ...(normalized.latestMetrics === undefined ? {} : { latestMetrics: normalized.latestMetrics }),
   };
 }

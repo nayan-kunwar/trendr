@@ -42,6 +42,18 @@ const BUCKETS: Record<Exclude<BucketName, 'huggingface:api'>, BucketDefinition> 
   'mcp:registry': { capacity: 5, refillPerSec: 2 }, // undocumented (verify)
 };
 
+/** Spec §7.3.4 — the anonymous Hub limit observed on 2026-10-20 is 500/5 min. */
+export const HF_ANONYMOUS_RATE_PER_5MIN = 500;
+
+/**
+ * `HF_RATE_PER_5MIN` is the authenticated budget. Anonymous requests must not
+ * use the token-sized budget even when the env default (1,000) is left in
+ * place; cap them at the observed 500/5 min endpoint limit.
+ */
+export function effectiveHfRatePer5Min(configured: number, tokenPresent: boolean): number {
+  return tokenPresent ? configured : Math.min(configured, HF_ANONYMOUS_RATE_PER_5MIN);
+}
+
 export interface BucketOptions {
   /** `HF_RATE_PER_5MIN`; capacity is 0.8 × the 5-minute budget (spec §7.4). */
   hfRatePer5Min?: number;

@@ -129,6 +129,7 @@ function fakeAdapter(): SourceAdapter {
           metadata: {},
         },
         snapshots: [{ metric: 'stars', value: 7 }],
+        ...(externalId === `${PREFIX}widget` ? { latestMetrics: { downloads: 99 } } : {}),
         daily: [],
         aliases: [],
       };
@@ -483,6 +484,7 @@ describe('ingest processor (spec §7.1/§7.7)', () => {
     // upstream metadata replaced the stale name…
     const [updated] = await db.select().from(items).where(eq(items.id, created.id));
     expect(updated?.name).toBe('fresh-widget');
+    expect(updated?.latestMetrics.downloads).toBe(99);
 
     // …and the snapshot landed in the hourly bucket
     const points = await db.select().from(snapshots).where(eq(snapshots.itemId, created.id));

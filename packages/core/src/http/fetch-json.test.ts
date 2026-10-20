@@ -244,6 +244,36 @@ describe('fetchJson (spec §7.5)', () => {
     expect(metrics.error).toHaveBeenCalledWith('github', 'repos', 'rate_limited');
   });
 
+  it('prefers a source-specific reset parser when supplied (HF RateLimit t=)', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-10-19T10:00:00.000Z'));
+    const bucket = bucketSpy();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        respondWith({ message: 'slow down' }, 429, {
+          'retry-after': '7',
+          ratelimit: '"api";r=0;t=42',
+        }),
+      ),
+    );
+
+    const error = await failure(
+      fetchJson(
+        options({
+          bucket,
+          rateLimitDelayMs: (headers) => {
+            const match = /;\s*t=(\d+)/.exec(headers.get('ratelimit') ?? '');
+            return match === null ? null : Number(match[1]) * 1_000;
+          },
+        }),
+      ),
+    );
+
+    expect(bucket.pauseUntil).toHaveBeenCalledWith(Date.now() + 42_000);
+    expect((error as UpstreamError).retryAfterMs).toBe(42_000);
+  });
+
   it('treats a 403 with exhausted quota as rate limiting and uses x-ratelimit-reset', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-10-19T10:00:00.000Z'));

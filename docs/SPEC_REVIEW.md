@@ -1100,6 +1100,96 @@ be re-checked later. Decisions with alternatives get an ADR in [`docs/adr/`](./a
   scheduled daily failures were the pre-fix IPv6 timeouts only; the post-fix manual daily above is
   the acceptance run.
 
+### Task 5.3 notes
+
+- **Adapter surface.** `packages/sources/src/huggingface` implements list discovery through
+  `/api/models`, `/api/datasets` and `/api/spaces`, `Link: <…>; rel="next"` cursor pagination,
+  per-kind `expand[]` sets, list-payload-as-snapshot, one detail fallback per uncovered item,
+  `arxiv:` tag aliases, and an in-process one-hour list coverage cache. A list page already carries
+  `likes`, `downloadsAllTime`, `trendingScore`, `createdAt`, tags and the kind-specific metadata, so
+  discovery normalizes and persists the snapshot without an extra request; `fetchMetrics` reuses
+  that payload for the same hour and calls `/api/{kind}/{repo_id}` only when the item was not in a
+  list page (or after a restart). Detail 404s become `notFound`; 304s use the normal continuity
+  path.
+- **Per-kind fields (probed live).** Models accept
+  `likes,downloads,downloadsAllTime,trendingScore,createdAt,pipeline_tag,tags,library_name,gated,disabled`.
+  Datasets accept the same plus `description`; spaces accept only
+  `likes,trendingScore,createdAt,tags,sdk,disabled` and reject `downloads`, `gated` and
+  `description`. Spaces therefore never emit `downloads_total`, and no synthetic download value is
+  invented. The recorded list `Link` uses `expand=` (not `expand[]`) in its cursor URL; both forms
+  are accepted, so the parser follows the header verbatim.
+- **Bigint gauge caveat (live failure fixed).** Hub `trendingScore` is fractional (the recorded
+  fixture has `1.5`; live trending pages included `14.4`), but §5.2 defines `snapshots.value` as
+  `bigint`. Passing the raw float made Postgres reject an entire 100-item page with
+  `invalid input syntax for type bigint: "14.4"`. The adapter now rounds `trending_score` to the
+  nearest integer before building the snapshot; likes and `downloadsAllTime` are already integers.
+- **Rolling downloads (GAP-5 resolved, observed live).** HF `downloads` is a rolling ~30-day count,
+  while `downloadsAllTime` is cumulative. On 2026-10-20 `google-bert/bert-base-uncased` returned
+  `30,160,565` vs `3,267,215,234`, and `fka/prompts.chat` `27,814` vs `723,968`. Only
+  `downloadsAllTime` becomes the `downloads_total` snapshot; `downloads` is carried by the new
+  additive `NormalizedItem.latestMetrics` / `ItemUpsert.latestMetrics` channel and merged into
+  `items.latest_metrics` without touching `snapshots` (ADR-0014). `likes` and `trendingScore` are
+  ordinary snapshots; spaces have neither download field.
+- **Discovery budget and scheduling.** The hourly `trending` strategy is five 100-item trending
+  pages plus two 100-item newest pages filtered by `likes ≥ 5` (700 model items), with a hard job cap
+  of 1,100 so the optional two-page dataset and space phases are not starved when enabled. Datasets
+  and spaces use `sort=trendingScore` and sit behind
+  `HF_INCLUDE_DATASETS`/`HF_INCLUDE_SPACES`. The adapter also implements the §7.3.4 daily top-1,000-by-likes sweep as
+  `strategy=likes`, but §7.2 has no scheduler row for it; it is available through a manual discover
+  job and remains unscheduled (ADR-0014). The §7.2 rows are `hf-discover` `0 * * * *`,
+  `hf-snapshot-hot` `10 * * * *`, `hf-snapshot-warm` `40 */6 * * *`, `hf-snapshot-cold`
+  `45 2 * * *`; snapshot rows use the generic fan-out so the detail fallback gets the documented
+  concurrency 4.
+- **Rate limits.** Anonymous Hub responses advertise
+  `RateLimit-Policy: "fixed window";"api";q=500;w=300` and `RateLimit: "api";r=…;t=…`. `fetchJson`
+  gained an optional `rateLimitDelayMs` hook; HF parses `t` seconds and pauses the shared
+  `huggingface:api` bucket instead of falling back to 60 s (`Retry-After` is absent). `HF_RATE_PER_5MIN`
+  remains the authenticated budget (default 1,000), but the worker caps it at the observed anonymous
+  500/5 min when `HF_TOKEN` is empty (`effectiveHfRatePer5Min`).
+- **Fixtures.** `RECORD=1 pnpm fixtures:record --source huggingface` captured a two-item trending
+  model page (including the live `Link` cursor), the `bert-base-uncased` detail (including
+  `arxiv:1810.04805` and `license:apache-2.0`), one trending dataset and one trending space, plus
+  `meta.json` with the observed `RateLimit`/`RateLimit-Policy`, cursor and field evidence. The
+  recorder trims dataset descriptions to 1,000 characters and redacts token-shaped strings.
+- **Deferred.** Alias persistence + `item_topics` (shared task 5.6), `TRACKED_MAX_HUGGINGFACE`
+  enforcement (shared cap-check task), and a §7.2 row for the daily likes sweep. The list cache is
+  process-local by design; a worker restart between discovery and snapshot is correct but turns
+  cached items into detail calls.
+- Acceptance coverage: unit — fixture normalization for model/dataset/space, list-as-snapshot,
+  `Link` pagination with `maxItems`, newest admission, optional dataset/space phases, likes
+  strategy, detail/404 and 304 paths, bearer-token header, 429 `t=` pause + `onRateLimit`, and
+  actual fixture cursor parsing. Int (real Postgres) — `latest_metrics` merge preserves values
+  across metadata-only upserts and the ingest processor writes an HF-style latest-only download
+  without creating a download snapshot. Core — the `rateLimitDelayMs` override and its 42 s pause.
+
+### Task 5.3 live acceptance (2026-10-20)
+
+- **Worker.** Rebuilt from the task branch (`docker compose build worker`, recreated with
+  `up -d --no-deps --wait worker`); startup logs show `huggingface adapter registered` with
+  `includeDatasets: false, includeSpaces: false`, followed by the four HF scheduler ids. No
+  `HF_TOKEN` is configured.
+- **Discovery (`huggingface.discover.trending.2026-10-20T07-20`, run 176).** Manual
+  `POST /v1/admin/ingest {source:"huggingface",type:"discover",strategy:"trending",maxItems:700}`:
+  500 items seen, 500 upserted, 0 failed, 7 API calls, 5.0 s. The five trending pages supplied all
+  500 models. Both newest pages were fetched but every candidate had `likes: 0`, so the §7.3.4
+  `likes ≥ 5` filter admitted none; the result is 500, not 700. HF inventory went from 26 to 526.
+- **Warm snapshot (`…snapshot-fanout.warm…`, run 177 → child run 178).** 490 warm items seen and
+  upserted, **0 API calls**, 3.8 s. The child reused the discovery process's in-hour list cache for
+  all 490 models instead of issuing 490 detail calls. The automatic score run (179) then completed
+  1,578 items in 0.4 s.
+- **Detail fallback + bigint gauge (`refresh.huggingface.124...`, run 181).** `facebook/bart-large-mnli`
+  (item 124) refreshed with 1 API call in 1.1 s; the live detail returned `trendingScore: 0.5`,
+  which persisted as `trending_score = 1` (nearest bigint) instead of failing. The same refresh
+  wrote `downloads_total = 164,843,490` and `latest_metrics.downloads = 2,461,524`.
+- **Coverage after the run.** All 526 HF items have a `latest_metrics.downloads` value; the first
+  failed pre-fix discovery exposed the fractional-gauge problem, and the post-fix runs have no
+  snapshot errors. Live anonymous response headers were `RateLimit: "api";r=499;t=205` and
+  `RateLimit-Policy: "fixed window";"api";q=500;w=300`; no 429 was needed during the small run.
+- **Manual hot retry.** A manual hot fan-out after 07:10 completed its fan-out but its child job id
+  was the failed hourly child (`huggingface.snapshot.hot.2026-10-20T07.0`), so BullMQ deduplicated
+  it instead of rerunning. This is the documented hourly job-id idempotency; use `refresh-item`, wait
+  for the next hourly slot, or replay the DLQ job when a failed child must be retried immediately.
+
 ## Environment quirks worth knowing
 
 - `docker compose port <svc> <port>` exits **0** printing `invalid IP:0` when the port is only

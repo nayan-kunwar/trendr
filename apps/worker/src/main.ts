@@ -5,6 +5,7 @@ import { env } from '@trendr/config';
 import { QUEUE, SOURCES } from '@trendr/core';
 import { createDb, type Connection } from '@trendr/db';
 import { createLogger } from '@trendr/logger';
+import { effectiveHfRatePer5Min } from '@trendr/sources';
 
 import { registerIngestAdapters } from './ingestion/adapters.js';
 import { startMetricsServer } from './metrics-server.js';
@@ -72,6 +73,7 @@ if (roles.includes('scoring') || roles.includes('ingest')) {
 
   if (roles.includes('ingest')) {
     registerIngestAdapters(redis, logger);
+    const hfTokenPresent = (env.HF_TOKEN?.trim() ?? '') !== '';
     for (const source of SOURCES) {
       const ingestWorker = createIngestWorker(source, {
         deps: {
@@ -79,7 +81,7 @@ if (roles.includes('scoring') || roles.includes('ingest')) {
           redis,
           logger,
           scoringQueue: queues.scoring,
-          hfRatePer5Min: env.HF_RATE_PER_5MIN,
+          hfRatePer5Min: effectiveHfRatePer5Min(env.HF_RATE_PER_5MIN, hfTokenPresent),
           fanoutBatchItems: env.FANOUT_BATCH_ITEMS,
           ingestQueue: queues.ingest[source],
         },

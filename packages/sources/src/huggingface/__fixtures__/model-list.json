@@ -1,0 +1,55 @@
+[
+  {
+    "_id": "6ad2e0265a59c8bc18707765",
+    "id": "deepseek-ai/DeepSeek-V4.1-Flash-1017",
+    "disabled": false,
+    "gated": false,
+    "likes": 1750,
+    "trendingScore": 1586,
+    "downloads": 17924,
+    "downloadsAllTime": 17924,
+    "tags": [
+      "transformers",
+      "safetensors",
+      "deepseek_v41",
+      "text-generation",
+      "image-text-to-text",
+      "license:mit",
+      "endpoints_compatible",
+      "8-bit",
+      "fp8",
+      "region:us"
+    ],
+    "pipeline_tag": "image-text-to-text",
+    "library_name": "transformers",
+    "createdAt": "2026-10-17T02:40:38.000Z"
+  },
+  {
+    "_id": "6acf6ecd0be943d1f0c70301",
+    "id": "black-forest-labs/flux-3-image-klein-comfy",
+    "disabled": false,
+    "gated": "auto",
+    "likes": 996,
+    "trendingScore": 768,
+    "downloads": 393062,
+    "downloadsAllTime": 393062,
+    "tags": [
+      "diffusion-single-file",
+      "comfyui",
+      "image-generation",
+      "image-editing",
+      "flux",
+      "flux-3",
+      "black-forest-labs",
+      "image-to-image",
+      "en",
+      "base_model:black-forest-labs/flux-3-image-klein",
+      "base_model:finetune:black-forest-labs/flux-3-image-klein",
+      "license:other",
+      "region:us"
+    ],
+    "pipeline_tag": "image-to-image",
+    "library_name": "diffusion-single-file",
+    "createdAt": "2026-10-14T12:00:13.000Z"
+  }
+]

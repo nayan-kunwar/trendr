@@ -48,6 +48,11 @@ export interface NormalizedItem {
   };
   /** Cumulative/gauge values observed now → `snapshots`. */
   snapshots: { metric: Metric; value: number }[];
+  /**
+   * Values written only to `items.latest_metrics`, never to the snapshot
+   * series (spec §7.3.4 HF `downloads` is a rolling ~30-day count).
+   */
+  latestMetrics?: Partial<Record<Metric, number>>;
   /** Per-day aggregates (npm/PyPI downloads) → `daily_metrics`. */
   daily: { metric: Metric; day: string; value: number }[];
   /** Cross-source links discovered from metadata → `item_aliases`. */

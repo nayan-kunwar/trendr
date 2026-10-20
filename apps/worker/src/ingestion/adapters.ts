@@ -6,6 +6,7 @@ import {
   createBucket,
   createGitHubAdapter,
   createGitHubBuckets,
+  createHuggingFaceAdapter,
   createNpmAdapter,
   createPypiAdapter,
   createRedisEtagStore,
@@ -39,6 +40,20 @@ export function registerIngestAdapters(redis: Redis, logger: Logger): void {
     }),
   );
   logger.info('pypi adapter registered');
+
+  const hfToken = env.HF_TOKEN?.trim() ?? '';
+  registerAdapter(
+    createHuggingFaceAdapter({
+      userAgent: env.HTTP_USER_AGENT,
+      ...(hfToken === '' ? {} : { token: hfToken }),
+      includeDatasets: env.HF_INCLUDE_DATASETS,
+      includeSpaces: env.HF_INCLUDE_SPACES,
+    }),
+  );
+  logger.info(
+    { includeDatasets: env.HF_INCLUDE_DATASETS, includeSpaces: env.HF_INCLUDE_SPACES },
+    'huggingface adapter registered',
+  );
 
   const tokens = env.GITHUB_TOKENS ?? [];
   if (tokens.length === 0) {

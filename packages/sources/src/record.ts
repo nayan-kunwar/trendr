@@ -10,7 +10,7 @@ function argValue(name: string): string | null {
   return process.argv[index + 1] ?? null;
 }
 
-const USAGE = 'usage: RECORD=1 pnpm fixtures:record --source {github|npm|pypi}';
+const USAGE = 'usage: RECORD=1 pnpm fixtures:record --source {github|npm|pypi|huggingface}';
 
 async function main(): Promise<void> {
   const source = argValue('--source');
@@ -31,6 +31,11 @@ async function main(): Promise<void> {
     case 'pypi': {
       const { recordPypiFixtures } = await import('./pypi/record.js');
       await recordPypiFixtures();
+      return;
+    }
+    case 'huggingface': {
+      const { recordHuggingFaceFixtures } = await import('./huggingface/record.js');
+      await recordHuggingFaceFixtures();
       return;
     }
     default:

@@ -1,4 +1,5 @@
 import { SOURCES, WINDOWS, type IngestJob, type MaintenanceJob, type Source } from '@trendr/core';
+import { HUGGINGFACE_DISCOVERY_MAX_ITEMS } from '@trendr/sources';
 import type { Logger } from '@trendr/logger';
 
 import { defaultJobOpts, type Queues } from './queues.js';
@@ -154,12 +155,52 @@ export const PYPI_INGEST_SCHEDULES: readonly IngestSchedule[] = [
   },
 ];
 
+/**
+ * Spec §7.2 Hugging Face rows. Discovery pages are snapshots; the snapshot
+ * rows use the generic fan-out so the detail fallback runs at concurrency 4
+ * (spec §7.3.4). The adapter also supports a `likes` strategy (top 1,000 by
+ * likes, §7.3.4), but §7.2 defines no separate scheduler id for it; see
+ * docs/SPEC_REVIEW.md.
+ */
+export const HUGGINGFACE_INGEST_SCHEDULES: readonly IngestSchedule[] = [
+  {
+    id: 'hf-discover',
+    name: 'discover',
+    pattern: '0 * * * *',
+    data: {
+      type: 'discover',
+      source: 'huggingface',
+      strategy: 'trending',
+      maxItems: HUGGINGFACE_DISCOVERY_MAX_ITEMS,
+      trigger: 'schedule',
+    },
+  },
+  {
+    id: 'hf-snapshot-hot',
+    name: 'snapshot-fanout',
+    pattern: '10 * * * *',
+    data: { type: 'snapshot-fanout', source: 'huggingface', tier: 'hot', trigger: 'schedule' },
+  },
+  {
+    id: 'hf-snapshot-warm',
+    name: 'snapshot-fanout',
+    pattern: '40 */6 * * *',
+    data: { type: 'snapshot-fanout', source: 'huggingface', tier: 'warm', trigger: 'schedule' },
+  },
+  {
+    id: 'hf-snapshot-cold',
+    name: 'snapshot-fanout',
+    pattern: '45 2 * * *',
+    data: { type: 'snapshot-fanout', source: 'huggingface', tier: 'cold', trigger: 'schedule' },
+  },
+];
+
 /** Every implemented ingest row, by source (spec §7.2). */
 export const INGEST_SCHEDULES: Readonly<Record<Source, readonly IngestSchedule[]>> = {
   github: GITHUB_INGEST_SCHEDULES,
   npm: NPM_INGEST_SCHEDULES,
   pypi: PYPI_INGEST_SCHEDULES,
-  huggingface: [],
+  huggingface: HUGGINGFACE_INGEST_SCHEDULES,
   arxiv: [],
   mcp: [],
 };

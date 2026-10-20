@@ -141,6 +141,30 @@ describe('items.repo (spec §6.2)', () => {
     expect(new Set(row.flags)).toEqual(new Set(['manual_hidden', 'fork'])); // union
     expect(row.metadata).toEqual({ stars: 7 }); // jsonb merge, key replaced
   });
+
+  it('merges latest-only metrics across upserts (HF rolling downloads)', async () => {
+    const created = single(
+      await upsertItems(db, [
+        itemInput('acme/latest-only', {
+          latestMetrics: { downloads: 123 },
+        }),
+      ]),
+    );
+
+    let rows = await db.select().from(items).where(eq(items.id, created.id));
+    expect(single(rows).latestMetrics).toEqual({ downloads: 123 });
+
+    // A metadata-only refresh (no latestMetrics) must preserve the value.
+    await upsertItems(db, [itemInput('acme/latest-only', { description: 'refreshed' })]);
+    rows = await db.select().from(items).where(eq(items.id, created.id));
+    expect(single(rows).latestMetrics).toEqual({ downloads: 123 });
+
+    await upsertItems(db, [
+      itemInput('acme/latest-only', { latestMetrics: { downloads: 456, likes: 7 } }),
+    ]);
+    rows = await db.select().from(items).where(eq(items.id, created.id));
+    expect(single(rows).latestMetrics).toEqual({ downloads: 456, likes: 7 });
+  });
 });
 
 describe('snapshots.repo (spec §6.3)', () => {

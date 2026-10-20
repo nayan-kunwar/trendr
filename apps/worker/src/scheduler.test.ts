@@ -152,6 +152,32 @@ describe('registerSchedulers (spec §7.2)', () => {
     expect(byId['npm-daily-retry']?.data).toMatchObject({ type: 'daily' });
   });
 
+  it('registers the four Hugging Face rows with their §7.2 crons and payloads', async () => {
+    const { queues, calls } = fakeQueues();
+    await registerSchedulers(queues);
+
+    const hfCalls = calls.filter((call) => call.queue === 'ingest-huggingface');
+    expect(hfCalls).toHaveLength(4);
+    expect(Object.fromEntries(hfCalls.map((call) => [call.id, call.pattern]))).toEqual({
+      'hf-discover': '0 * * * *',
+      'hf-snapshot-hot': '10 * * * *',
+      'hf-snapshot-warm': '40 */6 * * *',
+      'hf-snapshot-cold': '45 2 * * *',
+    });
+    for (const call of hfCalls) {
+      expect(call.tz).toBe('UTC');
+      expect(call.data).toMatchObject({ source: 'huggingface', trigger: 'schedule' });
+    }
+
+    const byId = Object.fromEntries(hfCalls.map((call) => [call.id, call]));
+    expect(byId['hf-discover']?.name).toBe('discover');
+    expect(byId['hf-discover']?.data).toMatchObject({ strategy: 'trending', maxItems: 1_100 });
+    expect(byId['hf-snapshot-hot']?.name).toBe('snapshot-fanout');
+    expect(byId['hf-snapshot-hot']?.data).toMatchObject({ tier: 'hot' });
+    expect(byId['hf-snapshot-warm']?.data).toMatchObject({ tier: 'warm' });
+    expect(byId['hf-snapshot-cold']?.data).toMatchObject({ tier: 'cold' });
+  });
+
   it('registers the three PyPI rows with their §7.3.3 crons and payloads', async () => {
     const { queues, calls } = fakeQueues();
     await registerSchedulers(queues);

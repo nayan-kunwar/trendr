@@ -3,7 +3,13 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { RedisTokenBucket, SOURCES } from '@trendr/core';
 
-import { BUCKET_NAMES, SOURCE_PRIMARY_BUCKET, bucketSpec, createBucket } from './buckets.js';
+import {
+  BUCKET_NAMES,
+  SOURCE_PRIMARY_BUCKET,
+  bucketSpec,
+  createBucket,
+  effectiveHfRatePer5Min,
+} from './buckets.js';
 
 describe('bucket table (spec §7.4)', () => {
   it('resolves every named bucket with positive limits', () => {
@@ -51,6 +57,12 @@ describe('bucket table (spec §7.4)', () => {
       capacity: 400,
       refillPerSec: 400 / 300,
     });
+  });
+
+  it('caps anonymous HF at the observed 500/5 min budget', () => {
+    expect(effectiveHfRatePer5Min(1_000, true)).toBe(1_000);
+    expect(effectiveHfRatePer5Min(1_000, false)).toBe(500);
+    expect(effectiveHfRatePer5Min(300, false)).toBe(300);
   });
 
   it('maps every source to one of the named primary buckets', () => {
