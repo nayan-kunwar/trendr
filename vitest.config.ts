@@ -50,6 +50,18 @@ export default defineConfig({
           hookTimeout: 30_000,
         },
       },
+      {
+        // Spec §16: real-network schema probes, nightly only. `pnpm test` and
+        // `pnpm test:int` never select this project; the package script gates it
+        // behind CONTRACT=1 and the tests skip without it.
+        resolve: { alias: workspaceAliases },
+        test: {
+          name: 'contract',
+          include: ['packages/sources/test/contract/**/*.contract.test.ts'],
+          testTimeout: 90_000,
+          hookTimeout: 30_000,
+        },
+      },
     ],
     // CI uploads coverage/coverage-summary.json as an artifact (spec §17.4).
     coverage: {

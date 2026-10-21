@@ -2,14 +2,16 @@
 #  - Unit/int suites run through the root Vitest workspace (`pnpm test` / `pnpm test:int`);
 #    the spec's `pnpm turbo run test` would be a no-op until packages define per-package
 #    test scripts, and per-package Vitest runs would re-run the whole suite N times.
-#  - The nightly contract job arrives with Phase 5 (5.6).
+#  - The nightly contract job (spec §16) probes the six live upstreams and opens an
+#    issue when an upstream schema drifts; it never runs on pull requests.
 name: CI
 on:
   pull_request:
   push:
     branches: [main]
   schedule:
-    - cron: '0 3 * * *' # nightly slot reserved for the Phase 5 contract job
+    - cron: '0 3 * * *' # nightly contract probes
+  workflow_dispatch:
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
@@ -109,3 +111,49 @@ jobs:
       - if: failure()
         uses: actions/upload-artifact@v4
         with: { name: compose-logs, path: compose.log }
+
+  contract:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - name: Live upstream schema probes
+        run: pnpm --filter @trendr/sources test:contract
+        env:
+          CONTRACT: '1'
+          GITHUB_TOKENS: ${{ secrets.GITHUB_TOKENS }}
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+      - if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const title = 'Nightly contract tests failed';
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const body = `The real-upstream contract probes failed on ${new Date().toISOString()}.\n\n${runUrl}`;
+            const { data } = await github.rest.search.issuesAndPullRequests({
+              q: `repo:${context.repo.owner}/${context.repo.repo} is:issue is:open in:title "${title}"`,
+            });
+            const existing = data.items[0];
+            if (existing === undefined) {
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: existing.number,
+                body,
+              });
+            }

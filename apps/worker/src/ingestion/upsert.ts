@@ -1,11 +1,13 @@
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 
-import type { Metric, Source, Tier } from '@trendr/core';
+import { normalizeTopicSlugs, type Metric, type Source, type Tier } from '@trendr/core';
 import {
   applyItemRename,
   itemAliases,
+  itemTopics,
   items,
   loadItemsByUpstreamIds,
+  topics,
   upsertDailyMetrics,
   upsertItems,
   upsertSnapshots,
@@ -54,10 +56,9 @@ export interface PersistOptions {
 
 /**
  * Spec §7.1 step 5 — bulk upsert of one chunk in a single transaction:
- * `items` (metadata), upstream rename handling (§5.4) and, per mode,
- * `snapshots` + `daily_metrics`. Returns how many items were upserted.
- * (`item_topics` persistence still lands with a later task — see
- * docs/SPEC_REVIEW.md.)
+ * `items` (metadata), `item_topics`, upstream rename handling (§5.4), per-mode
+ * `snapshots` + `daily_metrics`, and alias resolution. Returns how many items
+ * were upserted.
  */
 export async function persistNormalizedItems(
   db: Db,
@@ -83,6 +84,7 @@ export async function persistNormalizedItems(
       preservePrimaryMetric: options.mode === 'daily' || options.preserveMetadata === true,
     });
     const idByExternalId = new Map(upserted.map((row) => [row.externalId, row.id]));
+    await persistTopics(tx, normalized, idByExternalId);
     await persistAliases(tx, normalized, idByExternalId);
 
     const snapshots: SnapshotUpsert[] = [];
@@ -212,6 +214,70 @@ export async function persistContinuitySnapshots(
   if (snapshots.length === 0) return 0;
   await upsertSnapshots(db, snapshots, { refreshAggregates: true });
   return snapshots.length;
+}
+
+/**
+ * Spec §7.1 step 5 — persist the adapter-normalized topic slugs and refresh
+ * `topics.item_count` for the touched topics. Links are additive: an adapter
+ * that later omits a topic does not erase a previously observed one.
+ */
+async function persistTopics(
+  db: DbExecutor,
+  normalized: readonly NormalizedItem[],
+  idByExternalId: ReadonlyMap<string, bigint>,
+): Promise<void> {
+  const slugsByItem = new Map<bigint, string[]>();
+  const touched = new Set<string>();
+  for (const item of normalized) {
+    const itemId = idByExternalId.get(item.item.externalId);
+    if (itemId === undefined) continue;
+    const slugs = normalizeTopicSlugs(item.item.topics);
+    if (slugs.length === 0) continue;
+    slugsByItem.set(itemId, slugs);
+    for (const slug of slugs) touched.add(slug);
+  }
+  if (touched.size === 0) return;
+
+  const slugs = [...touched];
+  await db
+    .insert(topics)
+    .values(slugs.map((slug) => ({ slug, name: topicName(slug) })))
+    .onConflictDoNothing();
+  const topicRows = await db
+    .select({ id: topics.id, slug: topics.slug })
+    .from(topics)
+    .where(inArray(topics.slug, slugs));
+  const topicIdBySlug = new Map(topicRows.map((row) => [row.slug, row.id]));
+
+  const links: { itemId: bigint; topicId: number }[] = [];
+  for (const [itemId, itemSlugs] of slugsByItem) {
+    for (const slug of itemSlugs) {
+      const topicId = topicIdBySlug.get(slug);
+      if (topicId !== undefined) links.push({ itemId, topicId });
+    }
+  }
+  if (links.length === 0) return;
+
+  await db.insert(itemTopics).values(links).onConflictDoNothing();
+  // Sort IDs so concurrent chunks lock topic rows in the same order and cannot
+  // deadlock while refreshing the denormalized counts.
+  const topicIds = [...new Set(links.map((link) => link.topicId))].sort((a, b) => a - b);
+  await db.execute(sql`
+    UPDATE topics t
+    SET item_count = (
+      SELECT count(*)::int FROM item_topics it WHERE it.topic_id = t.id
+    )
+    WHERE t.id IN (${sql.join(
+      topicIds.map((id) => sql`${id}`),
+      sql`, `,
+    )})`);
+}
+
+function topicName(slug: string): string {
+  return slug
+    .split('-')
+    .map((part) => (part === '' ? part : part.charAt(0).toUpperCase() + part.slice(1)))
+    .join(' ');
 }
 
 /**

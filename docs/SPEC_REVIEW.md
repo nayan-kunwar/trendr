@@ -15,7 +15,7 @@ be re-checked later. Decisions with alternatives get an ADR in [`docs/adr/`](./a
 | R-5  | §2 stack table       | lists Vitest 5.x; implementation is on 3.x (stable line, same `projects` API)                                        | ADR-0008 — revisit at Phase 2                                 |
 | R-6  | §17.4 security job   | `pnpm audit --prod --audit-level high` fails out of the box: `next@15.5.28` pins `postcss 8.4.31` (two high advisories) | pnpm override `postcss ^8.5.23` in `pnpm-workspace.yaml`      |
 | R-7  | §17.4 compose-smoke  | seed step needs `packages/db/dist/seed.js` (Phase 1); task 0.8 says "without the seed step yet"                      | deferred with comment in `ci.yml`; enabled at Phase 3.7        |
-| R-8  | §17.4                | OpenAPI-export step needs Phase 3.1; nightly contract job needs Phase 5.6 (`test:contract` script)                   | deferred with comments in `ci.yml`                            |
+| R-8  | §17.4                | OpenAPI-export step needs Phase 3.1; nightly contract job needs Phase 5.6 (`test:contract` script)                   | resolved: OpenAPI step active at 3.1; nightly contract job added at 5.6 |
 | R-9  | §17.2                | `next build` warns "The Next.js plugin was not detected in your ESLint configuration" (repo lints with its own flat config) | decide at Phase 6.1: add `eslint-config-next` or `eslint.ignoreDuringBuilds` |
 | R-10 | §18 task 0.9         | no `docs/SPEC_REVIEW.md` existed despite the baseline commit message (this file)                                      | created with task 0.9                                         |
 | R-11 | §17.4 security job   | `gitleaks-action@v2` fails on a repo whose first commit is a root commit (it scans `<first>^..HEAD`); its redacted SARIF also showed a `generic-api-key` false positive: an empty `HF_TOKEN=` followed by `HF_RATE_PER_5MIN=1000` captures the next line as the secret | pinned `ghcr.io/gitleaks/gitleaks:v8.30.1` over full history + `.gitleaks.toml` allowlist for that exact placeholder pattern |
@@ -1152,9 +1152,9 @@ be re-checked later. Decisions with alternatives get an ADR in [`docs/adr/`](./a
   `arxiv:1810.04805` and `license:apache-2.0`), one trending dataset and one trending space, plus
   `meta.json` with the observed `RateLimit`/`RateLimit-Policy`, cursor and field evidence. The
   recorder trims dataset descriptions to 1,000 characters and redacts token-shaped strings.
-- **Deferred.** `item_topics` (shared task 5.6; alias persistence shipped in task 5.5),
-  `TRACKED_MAX_HUGGINGFACE` enforcement (shared cap-check task), and a §7.2 row for the daily likes
-  sweep. The list cache is
+- **Deferred.** `TRACKED_MAX_HUGGINGFACE` enforcement (shared cap-check task) and a §7.2 row for
+  the daily likes sweep; `item_topics` persistence shipped in task 5.6 and alias persistence in
+  task 5.5. The list cache is
   process-local by design; a worker restart between discovery and snapshot is correct but turns
   cached items into detail calls.
 - Acceptance coverage: unit — fixture normalization for model/dataset/space, list-as-snapshot,
@@ -1231,8 +1231,8 @@ be re-checked later. Decisions with alternatives get an ADR in [`docs/adr/`](./a
   authors, comments). The live HF daily feed (2 papers) and `2610.22471` paper detail provide the
   upvotes/GitHub-repo fixture; `2610.22471` had `upvotes: 419`, `githubStars: 151` and
   `githubRepo: https://github.com/OpenSenseNova/SenseNova-RoboRSI` on 2026-10-20.
-- **Deferred.** `item_topics` persistence remains in task 5.6 (alias persistence shipped in task
-  5.5); the arXiv cap-check is shared with the tracked-limit task. The error-feed parser is
+- **Deferred.** The arXiv cap-check is shared with the tracked-limit task; `item_topics`
+  persistence shipped in task 5.6 and alias persistence in task 5.5. The error-feed parser is
   exercised through a 200 response in
   unit tests; live arXiv error feeds currently arrive as HTTP 400, which `fetchJson` already turns
   into a non-retryable `UpstreamError` before the parser sees the body.
@@ -1294,7 +1294,7 @@ be re-checked later. Decisions with alternatives get an ADR in [`docs/adr/`](./a
   `filterLinkedAliasTargets`, and only then emits refs, so a repository/package already represented
   by a registry item does not become a second MCP item.
 - **Alias persistence.** `persistAliases` is now in the generic worker upsert path, so every source
-  can persist its `NormalizedItem.aliases` (task 5.6 keeps `item_topics`). Alias targets are created
+  can persist its `NormalizedItem.aliases` (task 5.6 adds `item_topics`). Alias targets are created
   as minimal **warm** rows without the `stub` flag, exactly so their own source adapters will
   snapshot them; existing `cold`/`archived` targets are promoted to warm. Deleted targets are
   skipped. This is how registry servers acquire GitHub stars and npm/PyPI downloads.
@@ -1314,9 +1314,10 @@ be re-checked later. Decisions with alternatives get an ADR in [`docs/adr/`](./a
   (GitHub+npm, npm-only, remote-only, and a `status=deleted` entry), a live GitHub search page, a
   live npm search page, and the observed registry schema/cursor metadata. The schema URL is pinned
   to `2025-12-11/server.schema.json`.
-- **Deferred.** `item_topics` and any alias-confidence updates remain task 5.6. The inactive
-  registry `search` query is not used; discovery relies on cursor paging. The 50k/500-page bound and
-  the warm snapshot row are documented in ADR-0015.
+- **Deferred.** Any alias-confidence updates remain deferred; `item_topics` persistence is now
+  implemented by the shared upsert in task 5.6. The inactive registry `search` query is not used;
+  discovery relies on cursor paging. The 50k/500-page bound and the warm snapshot row are documented
+  in ADR-0015.
 - Acceptance coverage: unit — registry normalization (GitHub/npm/remote/deleted), GitHub and npm
   fallback normalization/admission, cursor pagination and watermark rules, v0.1→v0 fallback,
   truncation, fallback filtering, no-token npm-only fallback, derived snapshot/backfill paths, and
@@ -1350,6 +1351,45 @@ be re-checked later. Decisions with alternatives get an ADR in [`docs/adr/`](./a
 - **Schema drift.** The full pass logged one warning for older entries carrying
   `2025-09-29/server.schema.json` while the pinned expectation is `2025-12-11`; all 48,379 entries
   still normalized with zero failures, which is the intended warn-and-continue behavior.
+
+### Task 5.6 notes
+
+- **Shared alias resolver.** All six adapters emit `NormalizedItem.aliases`, and every source now
+  goes through the same worker `persistAliases` path. It creates warm stub targets for unseen
+  aliases, promotes existing `cold`/`archived` targets, skips self-links and deleted targets, and
+  relies on the `(item_id, alias_item_id, relation)` unique index to dedupe repeated aliases. The
+  new `apps/worker/test/int/aliases.int.test.ts` covers all six §5.4 relation values in one
+  transaction and asserts the resulting warm stubs; the MCP integration test still covers
+  promotion and sticky deletes.
+- **API surfacing.** `GET /v1/items/:id/aliases` and the item-detail `aliases` array were already
+  implemented in task 3.3 (`loadItemAliasLinks` returns outgoing and incoming rows with the row's
+  own relation, confidence, evidence and direction). Task 5.6 adds no route or schema changes;
+  the existing real-Postgres test continues to assert both directions and the public ETag path.
+- **Topic persistence.** The generic upsert now writes `topics` and `item_topics` alongside items.
+  Slugs are normalized again at the persistence boundary with `normalizeTopicSlugs` (dedupe,
+  synonym folding, invalid-slug rejection, 20-topic cap). Links are additive: a later payload that
+  omits a topic does not delete an earlier observation. `topics.item_count` is recomputed only for
+  the touched topics. This closes the `item_topics` deferrals recorded in the adapter notes. The
+  additive semantics and count maintenance are recorded in ADR-0016.
+- **Contract project.** `packages/sources/test/contract` contains one file per source
+  (`github`, `npm`, `pypi`, `huggingface`, `arxiv`, `mcp`) with 13 probes total. They validate real
+  responses against the adapters' Zod schemas: GitHub REST search/repo, one GraphQL batch and the
+  stargazer count/history endpoints; npm search, packument, point, single range and bulk downloads;
+  both PyPI RSS feeds plus project JSON, overall and recent stats; HF model/dataset/space lists and
+  model detail; the arXiv Atom export plus HF daily-paper and paper-detail payloads; and MCP
+  `/v0.1` list/detail plus the `/v0` fallback list. The helper retries only 429/5xx, times out at
+  30 s, and never logs query strings or tokens.
+- **Contract gating and CI.** The root Vitest config has a separate `contract` project, so
+  `pnpm test` and `pnpm test:int` never touch the network. `CONTRACT=1` is checked by the test
+  helper; without it all 13 probes are reported skipped. `pnpm --filter sources test:contract`
+  selects only that project. The nightly `contract` CI job runs it with `GITHUB_TOKENS` and
+  `HF_TOKEN` secrets and, on failure, opens or comments on a single `Nightly contract tests failed`
+  issue. A missing GitHub token is a hard failure, not a silent skip.
+- **Local contract acceptance (2026-10-21).** `CONTRACT=1 pnpm --filter sources test:contract`
+  passed **6 files / 13 tests in 70.6 s** with the local tokens supplied through the shell. All
+  probes returned valid payloads; no schema drift was observed. The registry probes returned 200
+  for both `/v0.1` and `/v0`, and the detail response validated as `{server, _meta}`. Without
+  `CONTRACT=1`, the same command reports 6 files / 13 tests skipped.
 
 ## Environment quirks worth knowing
 

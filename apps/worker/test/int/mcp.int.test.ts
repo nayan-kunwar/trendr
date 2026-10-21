@@ -7,6 +7,7 @@ import {
   dailyMetrics,
   itemAliases,
   items,
+  loadItemTopics,
   upsertDailyMetrics,
   upsertSnapshots,
   type Connection,
@@ -202,6 +203,7 @@ describe('MCP alias persistence and derived snapshots (spec §7.3.6)', () => {
       'mcp_server_of',
       'registry_entry_of',
     ]);
+    expect(await loadItemTopics(db, mcp.id)).toContain('mcp');
 
     await upsertSnapshots(
       db,

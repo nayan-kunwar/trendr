@@ -16,7 +16,8 @@
     "dev": "tsup src/index.ts --format esm --dts --watch",
     "fixtures:record": "tsx src/record.ts",
     "lint": "eslint .",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:contract": "vitest run --root ../.. --project contract"
   },
   "dependencies": {
     "@trendr/core": "workspace:*",
