@@ -13,9 +13,15 @@ const workspaceAliases: Record<string, string> = {
   '@trendr/db': resolve(import.meta.dirname, 'packages/db/src/index.ts'),
   '@trendr/logger': resolve(import.meta.dirname, 'packages/logger/src/index.ts'),
   '@trendr/sources': resolve(import.meta.dirname, 'packages/sources/src/index.ts'),
+  // Web source aliases (`@/components/...`); keep after the package aliases so
+  // `@trendr/*` always wins the prefix match.
+  '@': resolve(import.meta.dirname, 'apps/web/src'),
 };
 
 export default defineConfig({
+  // Web component tests use the React 17+ automatic JSX runtime; Next's
+  // tsconfig uses `jsx: preserve`, so esbuild needs the explicit hint.
+  esbuild: { jsx: 'automatic' },
   test: {
     // Root-only option (vitest `NonProjectOptions`): all files run sequentially.
     // The int project shares one Testcontainers database, and partition DDL
@@ -27,6 +33,7 @@ export default defineConfig({
     projects: [
       {
         resolve: { alias: workspaceAliases },
+        esbuild: { jsx: 'automatic' },
         test: {
           name: 'unit',
           include: [

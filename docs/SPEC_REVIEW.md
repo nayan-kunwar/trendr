@@ -16,7 +16,7 @@ be re-checked later. Decisions with alternatives get an ADR in [`docs/adr/`](./a
 | R-6  | §17.4 security job   | `pnpm audit --prod --audit-level high` fails out of the box: `next@15.5.28` pins `postcss 8.4.31` (two high advisories) | pnpm override `postcss ^8.5.23` in `pnpm-workspace.yaml`      |
 | R-7  | §17.4 compose-smoke  | seed step needs `packages/db/dist/seed.js` (Phase 1); task 0.8 says "without the seed step yet"                      | deferred with comment in `ci.yml`; enabled at Phase 3.7        |
 | R-8  | §17.4                | OpenAPI-export step needs Phase 3.1; nightly contract job needs Phase 5.6 (`test:contract` script)                   | resolved: OpenAPI step active at 3.1; nightly contract job added at 5.6 |
-| R-9  | §17.2                | `next build` warns "The Next.js plugin was not detected in your ESLint configuration" (repo lints with its own flat config) | decide at Phase 6.1: add `eslint-config-next` or `eslint.ignoreDuringBuilds` |
+| R-9  | §17.2                | `next build` warns "The Next.js plugin was not detected in your ESLint configuration" (repo lints with its own flat config) | `eslint.ignoreDuringBuilds` (web ESLint remains a separate gate) |
 | R-10 | §18 task 0.9         | no `docs/SPEC_REVIEW.md` existed despite the baseline commit message (this file)                                      | created with task 0.9                                         |
 | R-11 | §17.4 security job   | `gitleaks-action@v2` fails on a repo whose first commit is a root commit (it scans `<first>^..HEAD`); its redacted SARIF also showed a `generic-api-key` false positive: an empty `HF_TOKEN=` followed by `HF_RATE_PER_5MIN=1000` captures the next line as the secret | pinned `ghcr.io/gitleaks/gitleaks:v8.30.1` over full history + `.gitleaks.toml` allowlist for that exact placeholder pattern |
 | R-12 | §6.4 / task 1.1      | `tablesFilter: ['!snapshots*']` does **not** keep drizzle-kit `generate` away from `snapshots` (it filters DB-side diffs only — kit created the table in `0000_init.sql`) | typing-only declaration lives in `src/schema/snapshots.ts` and is omitted from the kit schema entry (`src/schema/index.ts`); the filter stays for DB-side operations |
@@ -1391,7 +1391,60 @@ be re-checked later. Decisions with alternatives get an ADR in [`docs/adr/`](./a
   for both `/v0.1` and `/v0`, and the detail response validated as `{server, _meta}`. Without
   `CONTRACT=1`, the same command reports 6 files / 13 tests skipped.
 
+
+## Phase 6 notes
+
+- **Task 6.1 / Docker-network acceptance.** The home page was loaded through the compose network
+  (`http://localhost:3000/`) and rendered the seeded combined board plus the source spotlights. The
+  web image is a pure API client; no database package is imported at runtime.
+- **Tailwind/shadcn foundation.** Tailwind v4 lives in `apps/web/src/app/globals.css`; the local
+  `components/ui/*` primitives follow the shadcn structure (CVA + Radix + `cn`) without adding the
+  shadcn CLI as a runtime dependency. `next-themes` drives the dark default; the palette follows
+  `docs/mockups/home-final.html`. The API wire schemas are mirrored in `apps/web/src/lib/schemas.ts`
+  and every fetch is parsed with Zod at the boundary.
+- **Runtime-import constraint.** `@trendr/core` exports server-only helpers (Redis, Lua file reads);
+  importing its runtime barrel from a client component broke the Next build. Web code therefore
+  uses `import type` from core only and mirrors the small runtime enums locally. This is a build
+  boundary, not a contract change: local schemas are checked against the API in the smoke test.
+- **Task 6.2.** `/trending/[scope]/[window]` and the `/trending/[scope]` alias are URL-state driven
+  (`window`, `lang`, `topic`, `kind`, `new`). `LiveLeaderboard` uses SWR plus SSE, exponential
+  reconnect and a reduced-motion-aware rank-change animation. The fake-event component test passes
+  (1/1) and the URL helper test passes (3/3). `pnpm --filter @trendr/web build` marks every data
+  route dynamic instead of prebuilding empty boards.
+- **Task 6.3.** The item route fetches detail, a year of daily metric history, 30 days of score
+  history for all three windows, the 24h score explanation and aliases. Cumulative metrics render
+  an area, daily-count metrics bars plus a 7-day moving average, and gauges a line; the range and
+  log controls are client-side. The chart animations are disabled so SSR/hydration and headless
+  screenshots show the final series immediately. A wrong slug returns a 308 to the canonical slug.
+  Lighthouse SEO on `/item/13/open-webui-open-webui` scored **100** on 2026-10-21 in both the
+  local production build and the Docker stack (`localhost:3000`), using Chrome headless and
+  Lighthouse 12.8.2.
+- **Task 6.4.** Search groups results by source and supports source/kind filters and cursor paging;
+  `/new` has source tabs, a window/kind form and a dedicated "New in MCP" strip; `/topics` is an
+  additive index and `/topics/[slug]` renders a topic board; `/compare` validates 2–5 IDs, offers a
+  client picker, and renders indexed or raw multi-series charts plus a standing table.
+  `apps/web/scripts/smoke.mjs` exercises all of these against a running stack
+  (`pnpm --filter @trendr/web smoke`); both the local and Docker (`localhost:3000`) runs passed
+  9/9 checks.
+- **Task 6.5.** Root, item and source OG images use `next/og` and return `image/png`
+  (1200×630; the item image includes the 30-day sparkline, delta, percentile and rank). The
+  sitemap and robots routes are dynamic, and item/leaderboard/home pages emit schema.org JSON-LD.
+  `/item/13/open-webui-open-webui/opengraph-image` returned a valid 88 KB PNG locally.
+
+### Phase 6 deviations
+
+| # | Spec location | Finding | Resolution |
+| --- | --- | --- | --- |
+| R-13 | §12.1 / task 6.2 | The spec asks for ISR and prebuilt params for data pages; the Docker web image is built before the API exists, so build-time fetches would bake empty boards. | Data routes use `force-dynamic` with API-side Redis caching and 60–300 s fetch hints. `generateStaticParams` was removed from the leaderboard routes. |
+| R-14 | §12.4 sitemap | The spec asks for up to 5,000 item URLs. `/v1/trending` caps `limit` at 100, and crawling 50 cursor pages on every sitemap request is wasteful. | The sitemap emits the combined top 100 plus 100 per source (≤700 canonical item URLs), all leaderboard/topic/static routes; search and deep archive remain crawlable through internal links. |
+| R-15 | §12.4 OG runtime | The spec labels OG routes "Edge". | `runtime = 'nodejs'`; the routes reuse the server API client (`API_INTERNAL_URL`) and `next/og` produces the same PNG. Tested locally. |
+| R-16 | §12.1 `/compare` | The spec calls the page "Client (SWR)". | The page fetches the validated comparison on the server; only the picker, scale toggle and chart are a client island. There is no live SSE contract for comparisons, so SWR would add no behaviour. |
+| R-17 | §12.4 item title | The spec's sample title embeds `+{delta} {metric}`. | Titles use the item display name (template `%s · Trendr`) because long names and mixed source metrics make the delta suffix noisy; the delta remains in the OG image and description. |
+| R-18 | §12.1 routes | `/topics` (index) and the "New in MCP" section are not listed as separate routes/content. | Additive only; both reuse existing API endpoints and do not change contracts. |
+| R-19 | §12.3 Zod gating | The spec says response validation is development-only. | Schemas are parsed on every server fetch. The payloads are small and this catches API drift at the boundary; the browser only receives already-validated data. |
+
 ## Environment quirks worth knowing
+
 
 - `docker compose port <svc> <port>` exits **0** printing `invalid IP:0` when the port is only
   `expose`d — use `docker inspect … NetworkSettings.Ports` (all `null` = unpublished) or a host
@@ -1405,11 +1458,10 @@ be re-checked later. Decisions with alternatives get an ADR in [`docs/adr/`](./a
 - The worker metrics port (`9464`) is `expose`d for Prometheus and must never be published; the
   acceptance check does an in-network GET (`docker compose exec api …`) plus a host-side refusal
   check.
-- On this machine **host port 3000 is taken by an unrelated project** (`gmail-bulk-sender`'s
-  `next start`), so a local `docker compose up` cannot publish the web service. Verify web
-  in-network instead (`docker run --network trendr_default` + an in-network `curl` to the
-  container name); CI runners have 3000 free, and the workflow's `localhost:3000` check is
-  unaffected.
+- On this machine **host port 3000 was taken by an unrelated project** (`gmail-bulk-sender`'s
+  `next start`). The process was stopped in Phase 6, so compose `web` now publishes
+  `localhost:3000`; the same check works in CI. If it reappears, verify web in-network instead
+  (`docker run --network trendr_default` + a curl to the container name).
 - Docker Desktop's container→`api.github.com` path occasionally fails with a bare `fetch failed`
   while the same request from the host (or a later container request) succeeds. The 17:30Z
   2026-10-19 discover job hit this on its first four attempts (in-process retries included) and

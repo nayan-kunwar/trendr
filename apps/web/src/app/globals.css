@@ -1,0 +1,180 @@
+@import 'tailwindcss';
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  --background: 0 0% 100%;
+  --foreground: 240 10% 3.9%;
+  --card: 0 0% 100%;
+  --muted: 240 4.8% 95.9%;
+  --muted-foreground: 240 3.8% 42%;
+  --accent: 240 4.8% 95.9%;
+  --border: 240 5.9% 90%;
+  --primary: 240 5.9% 10%;
+  --primary-foreground: 0 0% 98%;
+  --ring: 240 5% 65%;
+  --spark: #16a34a;
+  --spark-down: #e11d48;
+  --src-github: #1f2328;
+  --srcbg-github: rgb(31 35 40 / 0.06);
+  --srcring-github: rgb(31 35 40 / 0.18);
+  --src-npm: #cb3837;
+  --srcbg-npm: rgb(203 56 55 / 0.1);
+  --srcring-npm: rgb(248 113 113 / 0.28);
+  --src-pypi: #2563eb;
+  --srcbg-pypi: rgb(59 130 246 / 0.1);
+  --srcring-pypi: rgb(96 165 250 / 0.28);
+  --src-huggingface: #b45309;
+  --srcbg-huggingface: rgb(250 204 21 / 0.1);
+  --srcring-huggingface: rgb(250 204 21 / 0.28);
+  --src-arxiv: #c2410c;
+  --srcbg-arxiv: rgb(251 146 60 / 0.1);
+  --srcring-arxiv: rgb(251 146 60 / 0.28);
+  --src-mcp: #7c3aed;
+  --srcbg-mcp: rgb(167 139 250 / 0.1);
+  --srcring-mcp: rgb(167 139 250 / 0.3);
+}
+
+.dark {
+  --background: 240 10% 3.9%;
+  --foreground: 0 0% 98%;
+  --card: 240 8% 5.6%;
+  --muted: 240 3.7% 13.5%;
+  --muted-foreground: 240 5% 64.9%;
+  --accent: 240 3.7% 11.5%;
+  --border: 240 3.7% 15.9%;
+  --primary: 0 0% 98%;
+  --primary-foreground: 240 5.9% 10%;
+  --ring: 240 4.9% 83.9%;
+  --spark: #4ade80;
+  --spark-down: #fb7185;
+  --src-github: #e6edf3;
+  --srcbg-github: rgb(230 237 243 / 0.08);
+  --srcring-github: rgb(230 237 243 / 0.18);
+  --src-npm: #f87171;
+  --srcbg-npm: rgb(203 56 55 / 0.14);
+  --srcring-npm: rgb(248 113 113 / 0.28);
+  --src-pypi: #60a5fa;
+  --srcbg-pypi: rgb(59 130 246 / 0.14);
+  --srcring-pypi: rgb(96 165 250 / 0.28);
+  --src-huggingface: #facc15;
+  --srcbg-huggingface: rgb(250 204 21 / 0.12);
+  --srcring-huggingface: rgb(250 204 21 / 0.28);
+  --src-arxiv: #fb923c;
+  --srcbg-arxiv: rgb(251 146 60 / 0.13);
+  --srcring-arxiv: rgb(251 146 60 / 0.28);
+  --src-mcp: #a78bfa;
+  --srcbg-mcp: rgb(167 139 250 / 0.14);
+  --srcring-mcp: rgb(167 139 250 / 0.3);
+}
+
+@theme inline {
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+  --color-card: hsl(var(--card));
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--foreground));
+  --color-secondary: hsl(var(--muted));
+  --color-secondary-foreground: hsl(var(--foreground));
+  --color-popover: hsl(var(--card));
+  --color-popover-foreground: hsl(var(--foreground));
+  --color-destructive: #e11d48;
+  --color-destructive-foreground: #ffffff;
+  --color-input: hsl(var(--border));
+  --color-border: hsl(var(--border));
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+  --color-ring: hsl(var(--ring));
+  --color-spark: var(--spark);
+  --color-spark-down: var(--spark-down);
+  --color-source-github: var(--src-github);
+  --color-source-npm: var(--src-npm);
+  --color-source-pypi: var(--src-pypi);
+  --color-source-huggingface: var(--src-huggingface);
+  --color-source-arxiv: var(--src-arxiv);
+  --color-source-mcp: var(--src-mcp);
+}
+
+@layer base {
+  * {
+    border-color: hsl(var(--border));
+  }
+
+  html {
+    -webkit-font-smoothing: antialiased;
+    font-feature-settings: 'cv11', 'ss01';
+  }
+
+  body {
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
+  }
+
+  ::selection {
+    background: rgb(16 185 129 / 0.25);
+  }
+}
+
+@utility bg-grid {
+  background-image:
+    linear-gradient(to right, hsl(var(--border) / 0.55) 1px, transparent 1px),
+    linear-gradient(to bottom, hsl(var(--border) / 0.55) 1px, transparent 1px);
+  background-size: 44px 44px;
+  -webkit-mask-image: radial-gradient(ellipse 70% 60% at 50% 0%, #000 40%, transparent 100%);
+  mask-image: radial-gradient(ellipse 70% 60% at 50% 0%, #000 40%, transparent 100%);
+}
+
+@keyframes trendr-ping {
+  75%,
+  100% {
+    transform: scale(2.2);
+    opacity: 0;
+  }
+}
+
+.ping {
+  animation: trendr-ping 1.6s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+
+@keyframes trendr-rank-up {
+  0% {
+    background-color: rgb(16 185 129 / 0.14);
+    transform: translateY(4px);
+  }
+  100% {
+    background-color: transparent;
+    transform: translateY(0);
+  }
+}
+
+@keyframes trendr-rank-down {
+  0% {
+    background-color: rgb(244 63 94 / 0.12);
+    transform: translateY(-4px);
+  }
+  100% {
+    background-color: transparent;
+    transform: translateY(0);
+  }
+}
+
+.rank-up {
+  animation: trendr-rank-up 900ms ease-out;
+}
+
+.rank-down {
+  animation: trendr-rank-down 900ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

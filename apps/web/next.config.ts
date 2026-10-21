@@ -9,6 +9,9 @@ const standalone = process.env.NEXT_STANDALONE === 'true';
 
 const nextConfig: NextConfig = {
   output: standalone ? 'standalone' : undefined,
+  // The repo's flat ESLint config is the single source of truth (spec review
+  // R-9); skip Next's internal lint pass, which cannot discover that config.
+  eslint: { ignoreDuringBuilds: true },
   // Trace from the repo root so the bundle lands at standalone/apps/web/server.js,
   // the path the web Dockerfile copies. Next tasks run with apps/web as cwd.
   outputFileTracingRoot: standalone ? path.resolve(process.cwd(), '../..') : undefined,
