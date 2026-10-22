@@ -32,3 +32,14 @@ regexes = ['''int-test-[a-z0-9-]+''']
 description = 'fixtures: fabricated API-key suffix used by the api-key tests'
 regexTarget = "match"
 regexes = ['''abcdef0123456789abcdef0123456789''']
+
+# Verified false positive (Fingerprint 8988ef5:apps/api/src/app.test.ts:generic-api-key:22):
+# `TEST_DEPS.jwtSecret` exists only so `registerAuth`'s global bearer hook is active in the
+# app tests (the `/metrics` vs. JWT collision is invisible without it). The value is a
+# fabricated `test-jwt-secret-…` fixture, never a credential; the prefix allowlist also covers
+# the already-pushed commit, since CI scans the full history. The literal itself is kept
+# low-entropy so it would not trip the generic rule even without this entry.
+[[allowlists]]
+description = 'fixtures: fabricated test JWT secret in the API app tests'
+regexTarget = "match"
+regexes = ['''test-jwt-secret-[a-z0-9-]+''']

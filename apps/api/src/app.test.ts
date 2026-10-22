@@ -19,7 +19,7 @@ const TEST_DEPS = {
   metricsToken: 'test-metrics-token',
   // Production always sets JWT_SECRET, so the global bearer-verifying hook is
   // active; without it `/metrics` vs. the JWT hook would never be exercised.
-  jwtSecret: 'test-jwt-secret-0123456789abcdef0123456789abcdef',
+  jwtSecret: 'test-jwt-secret-for-app-tests-only',
 };
 /** First build compiles the whole OpenAPI graph; give each test room under load. */
 const TEST_TIMEOUT = 15_000;
