@@ -38,7 +38,7 @@ const DATABASE_URL = process.env.DATABASE_URL ?? '';
 const REDIS_URL = process.env.REDIS_URL ?? '';
 const SMTP_URL = process.env.SMTP_URL ?? '';
 const MAILPIT_URL = process.env.MAILPIT_URL ?? '';
-const UNSUBSCRIBE_SECRET = 'int-digest-unsubscribe-secret-0123456789abcdef';
+const UNSUBSCRIBE_SECRET = randomUUID();
 const NOW = new Date('2026-10-21T08:00:00Z'); // Wednesday
 const WEEK = '2026-10-19';
 
