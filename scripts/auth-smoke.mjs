@@ -19,6 +19,9 @@ async function apiPost(path, body, headers = {}) {
     method: 'POST',
     headers: {
       accept: 'application/json',
+      // Spec §15: cookie-authenticated writes must carry the CSRF header, like
+      // the browser client does; refresh/logout would otherwise 403.
+      'x-requested-with': 'trendr',
       ...(body === undefined ? {} : { 'content-type': 'application/json' }),
       ...headers,
     },
