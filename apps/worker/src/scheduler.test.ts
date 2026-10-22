@@ -4,6 +4,7 @@ import { SOURCES } from '@trendr/core';
 
 import type { Queues } from './queues.js';
 import {
+  DIGEST_SCHEDULES,
   INGEST_SCHEDULES,
   MAINTENANCE_SCHEDULES,
   SCORE_SAFETY_PATTERN,
@@ -52,6 +53,7 @@ function fakeQueues(): { queues: Queues; calls: SchedulerCall[] } {
       ingest,
       scoring: recorder('scoring'),
       maintenance: recorder('maintenance'),
+      digest: recorder('digest'),
     } as unknown as Queues,
     calls,
   };
@@ -75,7 +77,9 @@ describe('registerSchedulers (spec §7.2)', () => {
       (total, source) => total + INGEST_SCHEDULES[source].length,
       0,
     );
-    expect(ids).toHaveLength(SOURCES.length + ingestCount + MAINTENANCE_SCHEDULES.length);
+    expect(ids).toHaveLength(
+      SOURCES.length + ingestCount + MAINTENANCE_SCHEDULES.length + DIGEST_SCHEDULES.length,
+    );
   });
 
   it('registers the maintenance rows, including the §7.8 retier-items cron', async () => {

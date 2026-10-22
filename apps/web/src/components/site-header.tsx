@@ -1,6 +1,7 @@
 import { Search, TrendingUp } from 'lucide-react';
 import Link from 'next/link';
 
+import { AuthMenu } from '@/components/auth-menu';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { Button } from '@/components/ui/button';
 
@@ -62,6 +63,7 @@ export function SiteHeader() {
             </Link>
           </Button>
           <ThemeToggle />
+          <AuthMenu />
           <Button asChild size="sm" className="hidden lg:inline-flex">
             <Link href="/trending/all/24h">Open leaderboard</Link>
           </Button>

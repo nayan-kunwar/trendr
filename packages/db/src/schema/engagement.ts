@@ -85,6 +85,7 @@ export const alerts = pgTable(
       'alerts_target_ck',
       sql`(${t.type} = 'rank_entered' AND ${t.itemId} IS NULL AND ${t.watchlistId} IS NULL) OR (${t.type} <> 'rank_entered' AND num_nonnulls(${t.itemId}, ${t.watchlistId}) = 1)`,
     ),
+    index('alerts_user_idx').on(t.userId),
     index('alerts_item_idx')
       .on(t.itemId)
       .where(sql`${t.enabled}`),

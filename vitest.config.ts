@@ -11,6 +11,7 @@ const workspaceAliases: Record<string, string> = {
   '@trendr/db/migrate': resolve(import.meta.dirname, 'packages/db/src/migrate.ts'),
   '@trendr/db/seed': resolve(import.meta.dirname, 'packages/db/src/seed.ts'),
   '@trendr/db': resolve(import.meta.dirname, 'packages/db/src/index.ts'),
+  '@trendr/email': resolve(import.meta.dirname, 'packages/email/src/index.ts'),
   '@trendr/logger': resolve(import.meta.dirname, 'packages/logger/src/index.ts'),
   '@trendr/sources': resolve(import.meta.dirname, 'packages/sources/src/index.ts'),
   // Web source aliases (`@/components/...`); keep after the package aliases so

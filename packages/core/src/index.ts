@@ -1,3 +1,4 @@
+export * from './alerts.js';
 export * from './api-keys.js';
 export * from './auth.js';
 export * from './errors.js';

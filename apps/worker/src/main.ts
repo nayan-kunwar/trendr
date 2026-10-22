@@ -4,6 +4,7 @@ import { Redis } from 'ioredis';
 import { env } from '@trendr/config';
 import { QUEUE, SOURCES } from '@trendr/core';
 import { createDb, type Connection } from '@trendr/db';
+import { createEmailSender } from '@trendr/email';
 import { createLogger } from '@trendr/logger';
 import { effectiveHfRatePer5Min } from '@trendr/sources';
 
@@ -12,6 +13,8 @@ import { startMetricsServer } from './metrics-server.js';
 import { registry } from './metrics.js';
 import { createIngestWorker } from './processors/ingest.processor.js';
 import { createMaintenanceWorker } from './processors/maintenance.processor.js';
+import { createDigestWorker } from './processors/digest.processor.js';
+import { createNotifyWorker } from './processors/notify.processor.js';
 import { closeQueues, createQueues } from './queues.js';
 import { registerSchedulers } from './scheduler.js';
 import { createScoringWorker } from './scoring/processor.js';
@@ -37,7 +40,7 @@ if (roles.includes('scheduler') && env.SCHEDULER_ENABLED) {
 
 const workers: Worker[] = [];
 let db: Connection | null = null;
-if (roles.includes('scoring') || roles.includes('ingest')) {
+if (roles.includes('scoring') || roles.includes('ingest') || roles.includes('notify')) {
   db = createDb(env.DATABASE_URL);
 
   if (roles.includes('scoring')) {
@@ -69,6 +72,48 @@ if (roles.includes('scoring') || roles.includes('ingest')) {
       lastJobByQueue[QUEUE.maintenance] = new Date().toISOString();
     });
     workers.push(maintenanceWorker);
+  }
+
+  if (roles.includes('notify')) {
+    const sender = createEmailSender({
+      provider: env.EMAIL_PROVIDER,
+      from: env.EMAIL_FROM,
+      smtpUrl: env.SMTP_URL,
+      ...(env.RESEND_API_KEY === undefined ? {} : { resendApiKey: env.RESEND_API_KEY }),
+    });
+    const notifyWorker = createNotifyWorker({
+      db: db.db,
+      redis,
+      connection: redis,
+      sender,
+      webPublicUrl: env.WEB_PUBLIC_URL,
+      apiPublicUrl: env.API_PUBLIC_URL,
+      unsubscribeSecret: env.UNSUBSCRIBE_SECRET,
+      notifyQueue: queues.notify,
+      deadLetter: queues.deadLetter,
+      logger,
+    });
+    notifyWorker.on('completed', () => {
+      lastJobByQueue[QUEUE.notify] = new Date().toISOString();
+    });
+    workers.push(notifyWorker);
+
+    const digestWorker = createDigestWorker({
+      db: db.db,
+      redis,
+      connection: redis,
+      sender,
+      digestQueue: queues.digest,
+      webPublicUrl: env.WEB_PUBLIC_URL,
+      apiPublicUrl: env.API_PUBLIC_URL,
+      unsubscribeSecret: env.UNSUBSCRIBE_SECRET,
+      deadLetter: queues.deadLetter,
+      logger,
+    });
+    digestWorker.on('completed', () => {
+      lastJobByQueue[QUEUE.digest] = new Date().toISOString();
+    });
+    workers.push(digestWorker);
   }
 
   if (roles.includes('ingest')) {

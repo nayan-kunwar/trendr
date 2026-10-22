@@ -163,6 +163,11 @@ export async function getItemById(db: DbExecutor, id: bigint): Promise<ItemRow |
   return row ?? null;
 }
 
+/** Spec §7.8 — watchlist adds promote an item to the hot tier immediately. */
+export async function markItemHot(db: DbExecutor, id: bigint, now: Date): Promise<void> {
+  await db.update(items).set({ tier: 'hot', updatedAt: now }).where(eq(items.id, id));
+}
+
 /** Spec §10.1 `/v1/items/lookup`: resolve `(source, externalId)` to a live item. */
 export async function findItemByNaturalKey(
   db: DbExecutor,

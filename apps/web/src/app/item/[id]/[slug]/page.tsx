@@ -10,6 +10,8 @@ import { AliasesCard } from '@/components/item/aliases-card';
 import { ItemFacts } from '@/components/item/item-facts';
 import { ScoreExplainCard } from '@/components/item/score-explain-card';
 import { SourceBadge } from '@/components/source-badge';
+import { ItemAlertButton } from '@/components/item-alert-button';
+import { WatchButton } from '@/components/watch-button';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { METRIC_KINDS, METRIC_LABELS, SCOPE_LABELS, WINDOW_SHORT_LABELS } from '@/lib/constants';
@@ -183,16 +185,8 @@ export default async function ItemPage({ params }: ItemPageProps) {
                 <ArrowUpRight aria-hidden="true" />
               </a>
             </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled
-              title="Watchlists arrive with accounts"
-            >
-              <Star aria-hidden="true" />
-              Watch
-            </Button>
+            <WatchButton itemId={item.id} />
+            <ItemAlertButton itemId={item.id} />
           </div>
         </div>
 

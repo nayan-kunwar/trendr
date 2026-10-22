@@ -1,8 +1,10 @@
+import cookie from '@fastify/cookie';
 import Fastify from 'fastify';
 import type { FastifyBaseLogger, FastifyInstance } from 'fastify';
 import type { Redis } from 'ioredis';
 
 import type { Connection } from '@trendr/db';
+import type { EmailSender } from '@trendr/email';
 
 import { registerApiKey } from './plugins/api-key.js';
 import { registerAuth } from './plugins/auth.js';
@@ -17,7 +19,11 @@ import { registerRedis } from './plugins/redis.js';
 import { registerSecurity } from './plugins/security.js';
 import { createApiQueues, type ApiQueues } from './queues.js';
 import { registerAdminRoutes } from './routes/admin.js';
+import { registerApiKeyRoutes } from './routes/api-keys.js';
+import { registerAlertRoutes } from './routes/alerts.js';
+import { registerAuthRoutes, type AuthRoutesOptions } from './routes/auth.js';
 import { registerCompareRoutes } from './routes/compare.js';
+import { registerDigestRoutes, registerUnsubscribeRoutes } from './routes/digest.js';
 import { registerHealthRoutes } from './routes/health.js';
 import { registerItemRoutes } from './routes/items.js';
 import { registerNewRoutes } from './routes/new.js';
@@ -26,6 +32,7 @@ import { registerStatsRoutes } from './routes/stats.js';
 import { registerStreamRoutes } from './routes/stream.js';
 import { registerTopicRoutes } from './routes/topics.js';
 import { registerTrendingRoutes } from './routes/trending.js';
+import { registerWatchlistRoutes } from './routes/watchlists.js';
 
 export interface BuildAppDeps {
   /** Pre-built pino logger from main.ts; tests omit it for a silent app. */
@@ -48,6 +55,8 @@ export interface BuildAppDeps {
   apiKeyPepper?: string;
   /** JWT_SECRET (spec §15). Present → bearer tokens are verified and admin routes enforce §10.5. */
   jwtSecret?: string;
+  /** Magic-link/refresh/profile configuration (task 7.1). */
+  auth?: Omit<AuthRoutesOptions, 'emailSender'> & { emailSender: EmailSender };
   /**
    * Dedicated BullMQ producer connection (spec §10.1 admin triggers, §7.7 DLQ
    * replay). Caller-owned; the app closes the queues but not the client.
@@ -55,6 +64,8 @@ export interface BuildAppDeps {
   queueConnection?: Redis;
   /** Anonymous rate-limit tier (spec §10.5); `false` disables limiting for tooling. */
   rateLimit?: { max?: number; timeWindowMs?: number } | false;
+  /** UNSUBSCRIBE_SECRET for the §13.4 one-click links; absent in tooling builds. */
+  unsubscribeSecret?: string;
   /** Scores-retention bounds for `/v1/items/:id/scores` (env: SCORES_*; §10.4). */
   scoresRetention?: { hourlyHours: number; dailyDays: number };
   /** OpenAPI document metadata (spec §10.1). */
@@ -84,6 +95,7 @@ export async function buildApp(deps: BuildAppDeps = {}): Promise<FastifyInstance
 
   await registerSecurity(app, deps);
   registerErrors(app);
+  await app.register(cookie);
 
   if (deps.db) {
     await app.register(registerDb, { connection: deps.db });
@@ -102,7 +114,12 @@ export async function buildApp(deps: BuildAppDeps = {}): Promise<FastifyInstance
     });
   }
   if (deps.jwtSecret !== undefined) {
-    await app.register(registerAuth, { secret: deps.jwtSecret });
+    await app.register(registerAuth, {
+      secret: deps.jwtSecret,
+      ...(deps.auth?.accessTokenTtlSeconds === undefined
+        ? {}
+        : { accessTtlSeconds: deps.auth.accessTokenTtlSeconds }),
+    });
   }
   if (deps.rateLimit !== false) {
     await registerRateLimit(app, {
@@ -126,6 +143,15 @@ export async function buildApp(deps: BuildAppDeps = {}): Promise<FastifyInstance
   registerStatsRoutes(app);
   registerStreamRoutes(app, { trustProxy: deps.trustProxy ?? false });
   registerAdminRoutes(app, queues === undefined ? {} : { queues });
+  registerAuthRoutes(app, deps.auth ?? {});
+  registerWatchlistRoutes(app, queues === undefined ? {} : { queues });
+  registerAlertRoutes(app);
+  registerDigestRoutes(app);
+  registerApiKeyRoutes(app, deps.apiKeyPepper === undefined ? {} : { pepper: deps.apiKeyPepper });
+  registerUnsubscribeRoutes(
+    app,
+    deps.unsubscribeSecret === undefined ? {} : { secret: deps.unsubscribeSecret },
+  );
 
   return app;
 }

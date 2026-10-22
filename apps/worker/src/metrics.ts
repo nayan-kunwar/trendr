@@ -55,6 +55,14 @@ export const dlqJobsTotal = new Counter({
   registers: [registry],
 });
 
+/** `trendr_alerts_fired_total{type}` — newly inserted `alert_events` (spec §14.1). */
+export const alertsFiredTotal = new Counter({
+  name: 'trendr_alerts_fired_total',
+  help: 'Alert events inserted after a scoring run, by rule type.',
+  labelNames: ['type'],
+  registers: [registry],
+});
+
 /**
  * `trendr_source_api_requests_total{source,endpoint,status}` — every upstream
  * HTTP request a source adapter makes (spec §14.1).

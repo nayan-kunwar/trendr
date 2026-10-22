@@ -1443,6 +1443,86 @@ be re-checked later. Decisions with alternatives get an ADR in [`docs/adr/`](./a
 | R-18 | §12.1 routes | `/topics` (index) and the "New in MCP" section are not listed as separate routes/content. | Additive only; both reuse existing API endpoints and do not change contracts. |
 | R-19 | §12.3 Zod gating | The spec says response validation is development-only. | Schemas are parsed on every server fetch. The payloads are small and this catches API drift at the boundary; the browser only receives already-validated data. |
 
+## Phase 7 notes
+
+- **Task 7.1.** `packages/email` centralizes the `EmailSender` boundary (ADR-0017); the API sends
+  the `${WEB_PUBLIC_URL}/auth/verify?token=…` link through SMTP to Mailpit in development.
+  Magic links are single-use 15-minute rows whose SHA-256 is stored; verification creates an
+  unverified user when needed, sets `email_verified_at`/`last_login_at`, promotes `ADMIN_EMAILS`,
+  and returns a 15-minute JWT plus a rotating 30-day `dt_refresh` cookie. Reusing a consumed
+  refresh token revokes the entire family (theft detection), and logout revokes the family.
+  The integration suite adds an `axllent/mailpit` Testcontainer (`test/global-setup.ts`) and reads
+  the real message through the Mailpit API; `scripts/auth-smoke.mjs` repeats the flow against the
+  Compose stack in CI. The web app keeps access tokens in memory only and restores sessions from
+  the httpOnly cookie on load.
+- **Rate limits.** `/v1/auth/*` has a shared 5 requests/minute per-IP counter
+  (`apirl:auth:{ip}`) plus the spec's 3 magic links/hour per email (`apirl:magic:{sha256(email)}`).
+  Both fail closed with 429 and `Retry-After`; the email counter is per normalized address, so
+  unknown addresses are indistinguishable.
+
+- **Task 7.2.** `/v1/me|watchlists` implements create/list/rename/delete, item list with
+  current 24h/7d summaries, idempotent PUT/DELETE, and the §15 caps (20 lists, 500 items).
+  Every route scopes by `user_id`, so another user's watchlist returns 404 rather than leaking
+  existence. Adding an item promotes it from cold to warm immediately. The dashboard renders the
+  lists, and the item page has a watch button that remembers the current path through sign-in.
+  When a signed-in user saves their first item, the API finds no watchlist and the web creates a
+  default "My watchlist"; the first list created becomes the default. Integration coverage:
+  `apps/api/test/int/watchlists.int.test.ts` (3/3).
+- **Task 7.3.** Alert CRUD supports all four §13.1 rules inside the spec's `params` discriminator,
+  the 50-rule cap, target ownership checks and 404 IDOR behaviour. `evaluate-alerts` runs after
+  each scoring run, evaluates only rows from the run's source, applies cooldowns, and inserts with
+  the deterministic `{alertId}:{itemId}:{window}:{epoch-hour bucket}` unique key. A seeded spike
+  produces exactly one `alert_events` row after two evaluations and the alert email arrives in
+  Mailpit (`apps/worker/test/int/alerts.int.test.ts`, 1/1). More than five events for one user in
+  one run share a single `send-alert-email` job carrying `alertEventIds`; smaller groups keep
+  one job per event. The dashboard manages rules and shows recent events, while an item page can
+  create an item-targeted rule without a watchlist.
+- **Task 7.4.** `PUT /v1/me/digest` persists sources, topics, watchlist inclusion, day-of-week and
+  enabled/unsubscribed state. The scheduler enqueues `build-weekly-digest` daily at 08:00 UTC;
+  it reuses the cached `digest:content:{date}` payload, selects enabled due subscriptions and
+  enqueues `send-digest` with `digest.{subId}.{weekStart}`. A `(subscription_id, week_start)`
+  unique claim makes a repeated send a no-op; provider failure releases the claim for retry.
+  The React Email template includes per-source sections, new MCP servers, papers and "Your
+  watchlist this week", with plain text and RFC 8058 headers. `GET /v1/unsubscribe` previews the
+  token; `POST` performs the idempotent unsubscribe (the web page uses POST). Integration:
+  `apps/worker/test/int/digest.int.test.ts` sends through Mailpit, verifies one `digest_sends`
+  row, and skips the second send; `account.int.test.ts` covers preferences and one-click POST.
+- **Task 7.5.** `GET/POST/DELETE /v1/me/api-keys` list prefixes, show the full
+  `dt_live_…` key exactly once, cap active keys at five, and revoke without deleting the audit
+  row. Keys use the core HMAC helper and only the prefix is stored in clear. The settings page
+  creates read keys, copies the one-time reveal, lists last use and revokes. Integration coverage
+  includes hash verification, the five-key cap, duplicate names, revocation and IDOR
+  (`account.int.test.ts`, 4/4 including alert CRUD and digest). The compose CI job creates a
+  user through Mailpit, then exercises the watchlist, digest, alert and API-key endpoints and uses
+  the revealed key against `/v1/trending` (`scripts/auth-smoke.mjs`).
+- **Phase 7 verification (2026-10-22).** `pnpm lint`, `pnpm typecheck`, `pnpm build` and
+  `pnpm test` pass (523 unit tests); `pnpm test:int` passes all 137 integration tests across 28
+  files; the opt-in contract suite exits 0 with its 13 live probes skipped; the OpenAPI export
+  contains 43 paths; and the full Compose stack is healthy with `readyz` returning
+  `{db: ok, redis: ok, migrations: ok}`. `scripts/auth-smoke.mjs` then passed against Compose for
+  magic-link login, refresh rotation/logout, watchlist, digest, alert CRUD, API-key
+  create/list/revoke and API-key authentication. The first image build hit transient npm registry
+  `ETIMEDOUT`s while fetching deploy-only dependencies and succeeded on retry; no application
+  failure was involved.
+
+### Phase 7 deviations
+
+| # | Spec location | Finding | Resolution |
+| --- | --- | --- | --- |
+| R-20 | §10.5 cookie flags | The spec requires `Secure` on `dt_refresh`. A browser on `http://localhost:3000` (the documented local origin, API on `:4000`) may reject a Secure cookie, which would make local sign-in untestable. | `cookieSecure` follows `NODE_ENV === 'production'`; production always sends `Secure`, local http sends it without. `HttpOnly`, `SameSite=Lax` and `Path=/v1/auth` are unconditional. |
+| R-21 | §13.3 | `EmailSender` is specified under `apps/worker/src/notify/email.ts`, but the API also needs it for magic links. | Moved to shared `packages/email` with no domain-layer dependency (ADR-0017); worker alerts/digests will reuse it. |
+| R-22 | §10.5 / §18 task 7.1 | The spec's 30-day refresh lifetime is fixed; `REFRESH_TTL_DAYS` already exists in the typed env schema. | The service and cookie use `REFRESH_TTL_DAYS` with a 30-day default, so tests can shorten it without changing the wire contract. |
+| R-23 | §10.5 optional Turnstile | `TURNSTILE_SECRET` is declared but Turnstile is explicitly optional and not part of task 7.1's acceptance gate. | Deferred to the Phase 9 security checklist; magic links still have per-email and per-IP limits plus generic 202 responses. |
+| R-24 | §12.1 dashboard | The spec does not define what the dashboard does when a user saves an item before creating a list. | The API stays strict (the watchlist id must exist); the web creates a default "My watchlist" on the first save. The first list created by any client becomes the default. |
+| R-25 | §13.1 batching | The spec names one `send-alert-email` job per event but also requires a combined email after five events. | `NotifyJobSchema.send-alert-email` accepts an optional `alertEventIds[]`; batched jobs reuse the first event's `alert.{eventId}` id and single-event jobs keep the original shape. |
+| R-26 | §13.1 `rank_entered` | The spec reads `lb:{scope}:{window}:{lang}` but Phase 6 publishes only the all-language boards. | The evaluator reads the `_all` board and applies `lang`/`topic` filters in memory. A language-specific board can be added later without changing the API or rule shape. |
+| R-27 | §13.1 `rank_entered` | `prevRank` is not persisted on a Redis board after the atomic swap. | `publishBoard` copies the pre-swap ZSET to `lbprev:{scope}:{window}:{lang}:{runId}` (48 h TTL) before publishing; the evaluator reads that snapshot. A repeated scoring attempt reuses the existing snapshot so retries compare against the same board. |
+| R-28 | §13.1 threshold rules | The spec describes a previous-run comparison using `latest_metrics`. | The evaluator compares the two most recent snapshots for the configured metric. This uses the same metric stream as `latest_metrics`, tolerates missed scoring runs, and records both `previousValue` and `currentValue` in the event payload. |
+| R-29 | §13.1 `new_alias` | The spec does not define the lookback when a rule has never fired. | The evaluator uses `last_triggered_at`, or the rule's `created_at` before the first firing, and caps the event payload at ten aliases. |
+| R-30 | §13.2 digest content | The spec builds content from Redis leaderboards; the API/worker already have a canonical SQL current-run path, and per-source boards can be absent outside published scopes. | Content is read from `scores` joined to `score_runs_current` (the same rows and rank columns that produce the boards) with the spec's limits: 10/source, 5/all, 5 new MCP, 5 papers. This avoids a second ranking implementation and lets the digest run without a live Redis board copy. |
+| R-31 | §13.2 scheduler payload | The `build-weekly-digest` job is scheduled without a `weekStart`; the spec's processor input is not shown. | `weekStart` is optional for the build job only; the worker computes the current UTC Monday and passes the explicit value to every `send-digest` child. |
+| R-32 | §10.4 API keys | The spec's create body has `name` and `expiresInDays` but the table also has `scopes` and `rate_limit_per_min`. | User-created keys are read-only and use the 120/min default. Admin-scope keys remain seeded/operator-managed, so a normal account cannot mint its own admin credential. `expiresInDays` is converted to `expires_at` server-side. |
+
 ## Environment quirks worth knowing
 
 

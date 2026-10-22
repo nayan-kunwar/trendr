@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { and, eq, isNull, sql } from 'drizzle-orm';
 
 import type { DbExecutor } from '../client.js';
 import { apiKeys } from '../schema/users.js';
@@ -41,4 +41,75 @@ export async function findApiKeyByPrefix(
 /** Spec §10.5: `last_used_at` writes are debounced to at most once per minute. */
 export async function touchApiKeyLastUsed(db: DbExecutor, id: string, at: Date): Promise<void> {
   await db.update(apiKeys).set({ lastUsedAt: at }).where(eq(apiKeys.id, id));
+}
+
+export interface ApiKeySummary {
+  id: string;
+  name: string;
+  prefix: string;
+  scopes: string[];
+  rateLimitPerMin: number;
+  lastUsedAt: Date | null;
+  expiresAt: Date | null;
+  revokedAt: Date | null;
+  createdAt: Date;
+}
+
+const summaryColumns = {
+  id: apiKeys.id,
+  name: apiKeys.name,
+  prefix: apiKeys.prefix,
+  scopes: apiKeys.scopes,
+  rateLimitPerMin: apiKeys.rateLimitPerMin,
+  lastUsedAt: apiKeys.lastUsedAt,
+  expiresAt: apiKeys.expiresAt,
+  revokedAt: apiKeys.revokedAt,
+  createdAt: apiKeys.createdAt,
+};
+
+export async function listApiKeysForUser(db: DbExecutor, userId: string): Promise<ApiKeySummary[]> {
+  return db
+    .select(summaryColumns)
+    .from(apiKeys)
+    .where(eq(apiKeys.userId, userId))
+    .orderBy(apiKeys.createdAt);
+}
+
+export async function countActiveApiKeysForUser(db: DbExecutor, userId: string): Promise<number> {
+  const [row] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(apiKeys)
+    .where(and(eq(apiKeys.userId, userId), isNull(apiKeys.revokedAt)));
+  return row?.count ?? 0;
+}
+
+export interface ApiKeyInsert {
+  id: string;
+  userId: string;
+  name: string;
+  prefix: string;
+  keyHash: Buffer;
+  scopes: string[];
+  rateLimitPerMin: number;
+  expiresAt: Date | null;
+}
+
+export async function insertApiKey(db: DbExecutor, input: ApiKeyInsert): Promise<ApiKeySummary> {
+  const [row] = await db.insert(apiKeys).values(input).returning(summaryColumns);
+  if (row === undefined) throw new Error('insertApiKey returned no row');
+  return row;
+}
+
+export async function revokeApiKey(
+  db: DbExecutor,
+  userId: string,
+  keyId: string,
+  at: Date,
+): Promise<ApiKeySummary | null> {
+  const [row] = await db
+    .update(apiKeys)
+    .set({ revokedAt: at })
+    .where(and(eq(apiKeys.id, keyId), eq(apiKeys.userId, userId), isNull(apiKeys.revokedAt)))
+    .returning(summaryColumns);
+  return row ?? null;
 }

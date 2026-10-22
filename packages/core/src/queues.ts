@@ -89,12 +89,17 @@ export type ScoringJob = z.infer<typeof ScoringJobSchema>;
 
 export const NotifyJobSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('evaluate-alerts'), scoreRunId: z.string(), source: SourceSchema }),
-  z.object({ type: z.literal('send-alert-email'), alertEventId: z.string() }),
+  z.object({
+    type: z.literal('send-alert-email'),
+    /** First event identifies the job (`alert.{eventId}`); batches list all. */
+    alertEventId: z.string(),
+    alertEventIds: z.array(z.string()).min(1).optional(),
+  }),
 ]);
 export type NotifyJob = z.infer<typeof NotifyJobSchema>;
 
 export const DigestJobSchema = z.discriminatedUnion('type', [
-  z.object({ type: z.literal('build-weekly-digest'), weekStart: z.string() }),
+  z.object({ type: z.literal('build-weekly-digest'), weekStart: z.string().optional() }),
   z.object({ type: z.literal('send-digest'), subscriptionId: z.string(), weekStart: z.string() }),
 ]);
 export type DigestJob = z.infer<typeof DigestJobSchema>;

@@ -77,6 +77,9 @@ export function registerErrors(app: FastifyInstance): void {
     if (issues) {
       body.errors = issues;
     }
+    if (status === 429 && !reply.hasHeader('retry-after')) {
+      reply.header('retry-after', '60');
+    }
     reply.status(status).type('application/problem+json').send(body);
   });
 }

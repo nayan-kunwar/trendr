@@ -1,0 +1,31 @@
+{
+  "name": "@trendr/email",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsup src/index.ts --format esm --dts --sourcemap --clean",
+    "dev": "tsup src/index.ts --format esm --dts --watch",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "nodemailer": "^7",
+    "resend": "^6"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "@types/nodemailer": "^7",
+    "eslint": "^9",
+    "tsup": "^8",
+    "typescript": "^5"
+  }
+}

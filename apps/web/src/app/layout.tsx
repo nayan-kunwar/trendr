@@ -3,6 +3,7 @@ import { GeistMono } from 'geist/font/mono';
 import { GeistSans } from 'geist/font/sans';
 import type { ReactNode } from 'react';
 
+import { AuthProvider } from '@/components/auth-provider';
 import { SiteFooter } from '@/components/site-footer';
 import { SiteHeader } from '@/components/site-header';
 import { ThemeProvider } from '@/components/theme-provider';
@@ -61,9 +62,11 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     >
       <body className="flex min-h-screen flex-col font-sans antialiased">
         <ThemeProvider attribute="class" defaultTheme="dark" enableSystem disableTransitionOnChange>
-          <SiteHeader />
-          <div className="flex-1">{children}</div>
-          <SiteFooter />
+          <AuthProvider>
+            <SiteHeader />
+            <div className="flex-1">{children}</div>
+            <SiteFooter />
+          </AuthProvider>
         </ThemeProvider>
       </body>
     </html>

@@ -86,8 +86,10 @@ jobs:
       # The one-shot `migrate` service exits 0 and modern Compose `--wait` accepts that
       # (verified locally on Compose v5.4). If a runner's Compose disagrees, run
       # `docker compose run --rm migrate` first (spec §17.4 note).
-      - run: docker compose up -d --build --wait --wait-timeout 300 postgres redis migrate api worker web mcp
+      - run: docker compose up -d --build --wait --wait-timeout 300 postgres redis migrate api worker web mcp mailpit
       - run: curl -fsS http://localhost:4000/readyz && curl -fsS http://localhost:3000 >/dev/null
+      - name: Account smoke (Mailpit)
+        run: node scripts/auth-smoke.mjs
       - name: Worker health (port 9464 is not published; check inside the container)
         run: docker compose exec -T worker node -e "fetch('http://localhost:9464/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
       # Spec §17.4 — seed, then assert trending. The spec snippet asserts immediately

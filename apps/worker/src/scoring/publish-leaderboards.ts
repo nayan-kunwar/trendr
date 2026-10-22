@@ -28,6 +28,8 @@ const ZADD_CHUNK = 500;
 const MSET_CHUNK = 50;
 const CARD_TTL_SECONDS = 6 * 3600;
 const TMP_TTL_SECONDS = 600;
+/** Previous-board snapshots feed rank-entry alert evaluation (task 7.3). */
+const PREVIOUS_BOARD_TTL_SECONDS = 48 * 3600;
 /** Cards and the mover diff cover the top of each board (spec §9.2 "top 100"). */
 export const CARD_LIMIT = 100;
 const MOVER_LIMIT = 20;
@@ -103,6 +105,15 @@ export async function publishBoard(
     const rank = readReply(beforeReplies[index + 1], 'ZREVRANK');
     if (typeof rank === 'number') previousRanks.set(row.itemId, rank + 1);
   });
+
+  // Preserve the pre-swap board for `rank_entered` alerts. Do not overwrite a
+  // snapshot from an earlier attempt of the same run (retries must compare
+  // against the same previous board).
+  const previousKey = redisKeys.leaderboardPrevious(scope, w, lang, runId);
+  if ((await redis.exists(previousKey)) === 0 && (await redis.exists(live)) === 1) {
+    await redis.copy(live, previousKey);
+    await redis.expire(previousKey, PREVIOUS_BOARD_TTL_SECONDS);
+  }
 
   const builder = redis.pipeline();
   builder.del(tmp);

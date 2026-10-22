@@ -11,6 +11,7 @@ import {
   scoringSlot,
   UpstreamError,
   type DeadLetterJob,
+  type DigestJob,
   type IngestJob,
   type MaintenanceJob,
   type NotifyJob,
@@ -53,6 +54,7 @@ export interface Queues {
   ingest: Record<Source, Queue<IngestJob>>;
   scoring: Queue<ScoringJob, ScoringResult>;
   notify: Queue<NotifyJob>;
+  digest: Queue<DigestJob>;
   maintenance: Queue<MaintenanceJob>;
   deadLetter: Queue<DeadLetterJob>;
 }
@@ -73,6 +75,7 @@ export function createQueues(connection: Redis): Queues {
     ingest,
     scoring: new Queue<ScoringJob, ScoringResult>(QUEUE.scoring, options),
     notify: new Queue<NotifyJob>(QUEUE.notify, options),
+    digest: new Queue<DigestJob>(QUEUE.digest, options),
     maintenance: new Queue<MaintenanceJob>(QUEUE.maintenance, options),
     deadLetter: new Queue<DeadLetterJob>(QUEUE.deadLetter, options),
   };
@@ -83,6 +86,7 @@ export async function closeQueues(queues: Queues): Promise<void> {
     ...Object.values(queues.ingest).map((queue) => queue.close()),
     queues.scoring.close(),
     queues.notify.close(),
+    queues.digest.close(),
     queues.maintenance.close(),
     queues.deadLetter.close(),
   ]);

@@ -19,9 +19,9 @@ an MCP server for agents.
 | 3     | Read API (public)                                | ✅ done |
 | 4     | Ingestion framework + GitHub adapter             | ✅ done |
 | 5     | npm, PyPI, Hugging Face, arXiv, MCP adapters     | ✅ done |
-| 6     | Web frontend                                     | ⏳ next |
-| 7     | Accounts, watchlists, alerts, digest             | ⏳      |
-| 8     | MCP server                                       | ⏳      |
+| 6     | Web frontend                                     | ✅ done |
+| 7     | Accounts, watchlists, alerts, digest             | ✅ done |
+| 8     | MCP server                                       | ⏳ next |
 | 9     | Observability, security, operations              | ⏳      |
 | 10    | Deployment and polish                            | ⏳      |
 
@@ -30,7 +30,7 @@ an MCP server for agents.
 - **API** — Fastify 5 + Zod (schema-first, RFC 7807 errors, OpenAPI from the same schemas)
 - **Worker** — BullMQ on Redis 7 (schedulers, retries, rate-limited source adapters)
 - **Data** — PostgreSQL 16 + Drizzle ORM (monthly-partitioned `snapshots`, raw-SQL migrations)
-- **Web** — Next.js 15 App Router (Tailwind + shadcn/ui arrive in Phase 6)
+- **Web** — Next.js 15 App Router + Tailwind v4 and local shadcn-style primitives
 - **MCP** — Model Context Protocol server (stdio + Streamable HTTP)
 - **Tooling** — TypeScript 5 strict, pnpm 11 workspaces + Turborepo, Vitest, ESLint 9, Prettier,
   Docker Compose, GitHub Actions
@@ -41,7 +41,8 @@ an MCP server for agents.
 apps/api        Fastify API              packages/config   zod env schema (fail-fast)
 apps/worker     BullMQ worker            packages/core     domain types, errors, scoring
 apps/web        Next.js frontend         packages/db       Drizzle schema, repos, migrations
-apps/mcp        MCP server               packages/logger   pino factory + redaction
+apps/mcp        MCP server               packages/email    SMTP/Resend sender + React Email
+                                         packages/logger   pino factory + redaction
                                          packages/sources  source adapters (Phase 4+)
 infra/          Dockerfiles, prometheus + grafana provisioning
 docs/           ADRs, spec review, UI mockups
@@ -67,7 +68,7 @@ docker compose up --build --wait postgres redis migrate api worker web mcp
 | API                        | http://localhost:4000 (`/healthz`, `/readyz`)                            |
 | Web                        | http://localhost:3000                                                    |
 | MCP (HTTP transport)       | http://localhost:4100                                                    |
-| Mailpit (email UI)         | http://localhost:8025                                                    |
+| Mailpit (email UI)         | http://localhost:8025 (magic-link sign-in at `/login`)                   |
 | Worker metrics             | `worker:9464` inside the network only; `/metrics` needs the bearer token |
 | Prometheus (profile `obs`) | http://localhost:9090                                                    |
 | Grafana (profile `obs`)    | http://localhost:3001                                                    |
@@ -97,6 +98,7 @@ Key variables — the full annotated list is in [`.env.example`](./.env.example)
 | `API_PORT`                      | `4000`                            | Fastify listen port                          |
 | `CORS_ORIGINS`                  | `http://localhost:3000`           | Allowed browser origins                      |
 | `JWT_SECRET` / `API_KEY_PEPPER` | `change-me…`                      | Auth signing / key hashing (replace in prod) |
+| `UNSUBSCRIBE_SECRET`            | `change-me…`                      | HMAC key for alert/digest unsubscribe links  |
 | `METRICS_TOKEN`                 | `change-me-metrics-token`         | Bearer token for `/metrics`                  |
 | `WORKER_ROLES`                  | `scheduler,ingest,scoring,notify` | Comma-separated worker roles                 |
 | `WORKER_METRICS_PORT`           | `9464`                            | Worker health/metrics port (never published) |
@@ -110,8 +112,10 @@ Key variables — the full annotated list is in [`.env.example`](./.env.example)
 
 Postgres is the source of truth; Redis carries the cache, rate-limit buckets, BullMQ queues and
 pub/sub. The worker ingests upstream APIs into partitioned `snapshots`, runs the scoring engine per
-(source, window), and publishes leaderboards to Redis ZSETs; the API reads Redis first and falls
-back to SQL; SSE broadcasts leaderboard updates to the web app. See `TRENDR_SPEC.md` §3 for the
+(source, window), publishes leaderboards to Redis ZSETs, evaluates alert rules, and sends digest
+and alert email through `packages/email`; the API reads Redis first and falls back to SQL; SSE
+broadcasts leaderboard updates to the web app. Magic-link sessions keep the access token in memory
+and rotate an httpOnly refresh cookie. See `TRENDR_SPEC.md` §3 for the
 full component diagram and §8 for the scoring model.
 
 ## Testing and CI

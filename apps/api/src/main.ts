@@ -1,11 +1,19 @@
 import { env } from '@trendr/config';
 import { createDb } from '@trendr/db';
+import { createEmailSender } from '@trendr/email';
 import { createLogger } from '@trendr/logger';
 import { Redis } from 'ioredis';
 
 import { buildApp } from './app.js';
 
 const logger = createLogger({ service: 'api', level: env.LOG_LEVEL });
+
+const emailSender = createEmailSender({
+  provider: env.EMAIL_PROVIDER,
+  from: env.EMAIL_FROM,
+  smtpUrl: env.SMTP_URL,
+  ...(env.RESEND_API_KEY === undefined ? {} : { resendApiKey: env.RESEND_API_KEY }),
+});
 
 const connection = createDb(env.DATABASE_URL, { max: env.DATABASE_POOL_MAX });
 const redis = new Redis(env.REDIS_URL, {
@@ -38,7 +46,16 @@ const app = await buildApp({
   redis,
   apiKeyPepper: env.API_KEY_PEPPER,
   jwtSecret: env.JWT_SECRET,
+  auth: {
+    emailSender,
+    webPublicUrl: env.WEB_PUBLIC_URL,
+    adminEmails: env.ADMIN_EMAILS,
+    refreshTtlDays: env.REFRESH_TTL_DAYS,
+    accessTokenTtlSeconds: env.JWT_ACCESS_TTL_SEC,
+    cookieSecure: env.NODE_ENV === 'production',
+  },
   queueConnection: queueRedis,
+  unsubscribeSecret: env.UNSUBSCRIBE_SECRET,
   scoresRetention: {
     hourlyHours: env.SCORES_HOURLY_RETENTION_HOURS,
     dailyDays: env.SCORES_DAILY_RETENTION_DAYS,

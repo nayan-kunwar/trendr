@@ -14,6 +14,17 @@ export const redisKeys = {
   leaderboard: (scope: LeaderboardScope, window: Window, lang: string = LANG_ALL): string =>
     `lb:${scope}:${window}:${lang}`,
 
+  /**
+   * `lbprev:{scope}:{window}:{lang}:{runId}` — copy of the board before the
+   * run's swap, kept for rank-entry alert evaluation (48 h).
+   */
+  leaderboardPrevious: (
+    scope: LeaderboardScope,
+    window: Window,
+    lang: string,
+    runId: bigint | string,
+  ): string => `lbprev:${scope}:${window}:${lang}:${String(runId)}`,
+
   /** `lbmeta:{scope}:{window}` — HASH runId/computedAt/count/version (ETag source). */
   leaderboardMeta: (scope: LeaderboardScope, window: Window): string => `lbmeta:${scope}:${window}`,
 

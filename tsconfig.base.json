@@ -9,6 +9,7 @@
       "@trendr/db": ["./packages/db/src/index.ts"],
       "@trendr/db/migrate": ["./packages/db/src/migrate.ts"],
       "@trendr/db/seed": ["./packages/db/src/seed.ts"],
+      "@trendr/email": ["./packages/email/src/index.ts"],
       "@trendr/logger": ["./packages/logger/src/index.ts"],
       "@trendr/sources": ["./packages/sources/src/index.ts"]
     },

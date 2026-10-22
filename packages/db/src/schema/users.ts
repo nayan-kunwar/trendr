@@ -33,6 +33,7 @@ export const authTokens = pgTable(
   },
   (t) => [
     index('auth_tokens_user_idx').on(t.userId, t.kind),
+    index('auth_tokens_family_idx').on(t.familyId),
     index('auth_tokens_expiry_idx').on(t.expiresAt),
   ],
 );

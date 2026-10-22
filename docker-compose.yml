@@ -47,12 +47,16 @@ services:
 
   api:
     build: { context: ., dockerfile: infra/docker/node.Dockerfile, args: { APP: api } }
-    environment: { <<: *node-env, API_PORT: '4000' }
+    environment:
+      <<: *node-env
+      API_PORT: '4000'
+      SMTP_URL: smtp://mailpit:1025
     env_file: [.env]
     ports: ['4000:4000']
     depends_on:
       migrate: { condition: service_completed_successfully }
       redis: { condition: service_healthy }
+      mailpit: { condition: service_started }
     healthcheck:
       test:
         [

@@ -1,4 +1,11 @@
-import { SOURCES, WINDOWS, type IngestJob, type MaintenanceJob, type Source } from '@trendr/core';
+import {
+  SOURCES,
+  WINDOWS,
+  type DigestJob,
+  type IngestJob,
+  type MaintenanceJob,
+  type Source,
+} from '@trendr/core';
 import {
   ARXIV_DISCOVERY_MAX_ITEMS,
   HUGGINGFACE_DISCOVERY_MAX_ITEMS,
@@ -316,6 +323,23 @@ export const MAINTENANCE_SCHEDULES: readonly MaintenanceSchedule[] = [
   },
 ];
 
+export interface DigestSchedule {
+  id: string;
+  name: string;
+  pattern: string;
+  data: DigestJob;
+}
+
+/** Spec �7.2/�13.2 � build daily at 08:00 UTC; `send-digest` is enqueued per subscriber. */
+export const DIGEST_SCHEDULES: readonly DigestSchedule[] = [
+  {
+    id: 'digest-daily',
+    name: 'build-weekly-digest',
+    pattern: '0 8 * * *',
+    data: { type: 'build-weekly-digest' },
+  },
+];
+
 export async function registerSchedulers(queues: Queues, logger?: Logger): Promise<string[]> {
   const scoreIds: string[] = [];
   for (const source of SOURCES) {
@@ -372,5 +396,16 @@ export async function registerSchedulers(queues: Queues, logger?: Logger): Promi
   }
   logger?.info({ ids: maintenanceIds }, 'maintenance schedulers registered');
 
-  return [...scoreIds, ...ingestIds, ...maintenanceIds];
+  const digestIds: string[] = [];
+  for (const schedule of DIGEST_SCHEDULES) {
+    await queues.digest.upsertJobScheduler(
+      schedule.id,
+      { pattern: schedule.pattern, tz: 'UTC' },
+      { name: schedule.name, data: schedule.data, opts: defaultJobOpts },
+    );
+    digestIds.push(schedule.id);
+  }
+  logger?.info({ ids: digestIds }, 'digest schedulers registered');
+
+  return [...scoreIds, ...ingestIds, ...maintenanceIds, ...digestIds];
 }

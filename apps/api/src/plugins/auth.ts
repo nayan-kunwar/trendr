@@ -4,7 +4,7 @@ import type { FastifyRequest } from 'fastify';
 
 import {
   ForbiddenError,
-  JWT_ACCESS_TTL,
+  JWT_ACCESS_TTL_SECONDS,
   JWT_AUDIENCE,
   JWT_ISSUER,
   UnauthorizedError,
@@ -44,13 +44,19 @@ declare module '@fastify/jwt' {
 export interface AuthPluginOptions {
   /** JWT_SECRET (spec §15). */
   secret: string;
+  /** Access-token lifetime in seconds (env JWT_ACCESS_TTL_SEC, spec default 900). */
+  accessTtlSeconds?: number;
 }
 
 export const registerAuth = fp<AuthPluginOptions>(
-  async (app, { secret }) => {
+  async (app, { secret, accessTtlSeconds }) => {
     await app.register(jwt, {
       secret,
-      sign: { iss: JWT_ISSUER, aud: JWT_AUDIENCE, expiresIn: JWT_ACCESS_TTL },
+      sign: {
+        iss: JWT_ISSUER,
+        aud: JWT_AUDIENCE,
+        expiresIn: accessTtlSeconds ?? JWT_ACCESS_TTL_SECONDS,
+      },
       verify: { allowedIss: JWT_ISSUER, allowedAud: JWT_AUDIENCE },
     });
 
@@ -103,5 +109,17 @@ export async function requireAdmin(request: FastifyRequest): Promise<void> {
   }
   if (request.authUser.role !== 'admin') {
     throw new ForbiddenError('admin role required');
+  }
+}
+
+/**
+ * Spec §10.5 — user-authenticated surfaces (`/v1/me/*`, watchlists, alerts,
+ * digest preferences, API keys). API keys are deliberately not accepted here:
+ * account management requires a live JWT session.
+ */
+// eslint-disable-next-line @typescript-eslint/require-await -- Fastify hook contract, see requireAdmin.
+export async function requireUser(request: FastifyRequest): Promise<void> {
+  if (request.authUser === undefined) {
+    throw new UnauthorizedError('authentication required');
   }
 }
