@@ -1,6 +1,7 @@
 import type { Redis } from 'ioredis';
 
 import { env } from '@trendr/config';
+import type { RateLimitWaitObserver } from '@trendr/core';
 import type { Logger } from '@trendr/logger';
 import {
   createArxivAdapter,
@@ -26,12 +27,22 @@ import {
  * npm and PyPI are credential-free, so they register regardless of the GitHub
  * token set.
  */
-export function registerIngestAdapters(redis: Redis, logger: Logger): void {
+export interface RegisterIngestAdaptersOptions {
+  /** §14.1 rate-limit wait histogram hook. */
+  onRateLimitWait?: RateLimitWaitObserver;
+}
+
+export function registerIngestAdapters(
+  redis: Redis,
+  logger: Logger,
+  options: RegisterIngestAdaptersOptions = {},
+): void {
+  const waitOpts = options.onRateLimitWait === undefined ? {} : { onWait: options.onRateLimitWait };
   registerAdapter(
     createNpmAdapter({
       userAgent: env.HTTP_USER_AGENT,
       minWeeklyDownloads: env.NPM_MIN_WEEKLY_DOWNLOADS,
-      downloadsBucket: createBucket(redis, 'npm:downloads'),
+      downloadsBucket: createBucket(redis, 'npm:downloads', waitOpts),
     }),
   );
   logger.info('npm adapter registered');
@@ -40,7 +51,7 @@ export function registerIngestAdapters(redis: Redis, logger: Logger): void {
     createPypiAdapter({
       userAgent: env.HTTP_USER_AGENT,
       minWeeklyDownloads: env.PYPI_MIN_WEEKLY_DOWNLOADS,
-      statsBucket: createBucket(redis, 'pypi:stats'),
+      statsBucket: createBucket(redis, 'pypi:stats', waitOpts),
       etags: createRedisPypiEtagStore(redis),
     }),
   );
@@ -64,7 +75,7 @@ export function registerIngestAdapters(redis: Redis, logger: Logger): void {
   registerAdapter(
     createArxivAdapter({
       userAgent: env.HTTP_USER_AGENT,
-      hfBucket: createBucket(redis, 'huggingface:api', { hfRatePer5Min }),
+      hfBucket: createBucket(redis, 'huggingface:api', { hfRatePer5Min, ...waitOpts }),
       ...(hfToken === '' ? {} : { hfToken }),
       connectionLock: createRedisArxivConnectionLock(redis),
     }),
@@ -76,13 +87,13 @@ export function registerIngestAdapters(redis: Redis, logger: Logger): void {
     createMcpAdapter({
       userAgent: env.HTTP_USER_AGENT,
       cursorStore: createRedisMcpCursor(redis),
-      npmBucket: createBucket(redis, 'npm:registry'),
+      npmBucket: createBucket(redis, 'npm:registry', waitOpts),
       ...(tokens.length === 0
         ? {}
         : {
             github: {
               tokens,
-              searchBucket: createBucket(redis, 'github:search'),
+              searchBucket: createBucket(redis, 'github:search', waitOpts),
               reserve: env.GITHUB_RESERVE,
             },
           }),
@@ -100,7 +111,7 @@ export function registerIngestAdapters(redis: Redis, logger: Logger): void {
       userAgent: env.HTTP_USER_AGENT,
       reserve: env.GITHUB_RESERVE,
       backfillMaxPages: env.BACKFILL_GITHUB_MAX_PAGES,
-      buckets: createGitHubBuckets(redis, tokens.length),
+      buckets: createGitHubBuckets(redis, tokens.length, options.onRateLimitWait),
       etags: createRedisEtagStore(redis),
     }),
   );

@@ -23,6 +23,7 @@ import {
   loadItemTopics,
 } from '@trendr/db';
 
+import type { CacheKind } from '../plugins/cache.js';
 import { CACHE_CONTROL } from '../plugins/etag.js';
 import { IdParam, MAX_ITEM_ID } from '../schemas/common.js';
 import {
@@ -88,11 +89,12 @@ function cached<T>(
   key: string,
   ttlSec: number,
   load: () => Promise<T>,
+  kind: CacheKind,
 ): Promise<T> {
   if (!app.hasDecorator('cache')) {
     return load();
   }
-  return app.cache.readThrough(key, ttlSec, load);
+  return app.cache.readThrough(key, ttlSec, load, kind);
 }
 
 async function readItemDetail(app: FastifyInstance, id: bigint): Promise<ItemDetailBody> {
@@ -189,10 +191,16 @@ async function readHistory(
   const toT = truncateToGranularity(to, granularity);
   const key = redisKeys.history(id, metric, granularity, historyRangeKey(fromT, toT, granularity));
 
-  return cached(app, key, HISTORY_TTL_SECONDS, async () => {
-    const points = await loadMetricSeries(db, id, metric, granularity, fromT, toT);
-    return { itemId: String(id), metric, kind, granularity, points };
-  });
+  return cached(
+    app,
+    key,
+    HISTORY_TTL_SECONDS,
+    async () => {
+      const points = await loadMetricSeries(db, id, metric, granularity, fromT, toT);
+      return { itemId: String(id), metric, kind, granularity, points };
+    },
+    'history',
+  );
 }
 
 async function readScores(
@@ -364,8 +372,12 @@ export function registerItemRoutes(app: FastifyInstance, options: ItemRoutesOpti
     },
     async (request) => {
       const id = parseItemId(request.params.id);
-      return cached(app, redisKeys.item(id), ITEM_DETAIL_TTL_SECONDS, () =>
-        readItemDetail(app, id),
+      return cached(
+        app,
+        redisKeys.item(id),
+        ITEM_DETAIL_TTL_SECONDS,
+        () => readItemDetail(app, id),
+        'item',
       );
     },
   );

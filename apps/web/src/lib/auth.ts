@@ -96,6 +96,8 @@ async function authorizedFetch(path: string, init: RequestInit): Promise<Respons
 function request(path: string, init: RequestInit): Promise<Response> {
   const headers = new Headers(init.headers);
   if (!headers.has('accept')) headers.set('accept', 'application/json');
+  // §15 CSRF defence: cookie-authenticated writes must carry this header.
+  headers.set('x-requested-with', 'trendr');
   if (accessToken !== null) headers.set('authorization', `Bearer ${accessToken}`);
   return fetch(`${apiBaseUrl()}${path}`, {
     ...init,
@@ -142,6 +144,7 @@ function post(path: string, body?: unknown): Promise<Response> {
     method: 'POST',
     headers: {
       accept: 'application/json',
+      'x-requested-with': 'trendr',
       ...(body === undefined ? {} : { 'content-type': 'application/json' }),
     },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),

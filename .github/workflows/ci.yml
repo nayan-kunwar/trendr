@@ -32,6 +32,12 @@ jobs:
       - run: pnpm test:coverage
       - name: OpenAPI up to date
         run: pnpm --filter @trendr/api openapi:export && git diff --exit-code apps/api/openapi.json
+      - name: Prometheus alert rules
+        run: |
+          docker run --rm \
+            -v "$PWD/infra/prometheus:/etc/prometheus:ro" \
+            --entrypoint promtool prom/prometheus:v2.55.1 \
+            check rules /etc/prometheus/alerts.yml
       - uses: actions/upload-artifact@v4
         with: { name: coverage, path: '**/coverage/coverage-summary.json' }
 
@@ -88,6 +94,14 @@ jobs:
       # `docker compose run --rm migrate` first (spec §17.4 note).
       - run: docker compose up -d --build --wait --wait-timeout 300 postgres redis migrate api worker web mcp mailpit
       - run: curl -fsS http://localhost:4000/readyz && curl -fsS http://localhost:3000 >/dev/null
+      - name: Security headers (spec §15, task 9.3)
+        run: |
+          curl -fsS -o /dev/null -D - http://localhost:3000/login > web-headers.txt
+          grep -qi "content-security-policy:.*'nonce-" web-headers.txt
+          grep -qi 'x-content-type-options: nosniff' web-headers.txt
+          curl -fsS -o /dev/null -D - http://localhost:4000/healthz > api-headers.txt
+          grep -qi "content-security-policy:.*default-src 'none'" api-headers.txt
+          grep -qi 'x-content-type-options: nosniff' api-headers.txt
       - name: Account smoke (Mailpit)
         run: node scripts/auth-smoke.mjs
       - name: Worker health (port 9464 is not published; check inside the container)
@@ -110,6 +124,10 @@ jobs:
           exit 1
       - name: MCP tools smoke
         run: node scripts/mcp-smoke.mjs
+      - name: Observability profile smoke
+        run: |
+          docker compose --profile obs up -d prometheus grafana
+          node scripts/obs-smoke.mjs
       - if: failure()
         run: docker compose logs --no-color > compose.log
       - if: failure()

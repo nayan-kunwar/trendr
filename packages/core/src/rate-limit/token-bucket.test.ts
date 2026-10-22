@@ -86,6 +86,33 @@ describe('RedisTokenBucket (spec §7.4)', () => {
     expect(waitMs).toBeLessThan(5 + 50);
   });
 
+  it('reports the blocked time once when a take eventually succeeds', async () => {
+    const redis = new FakeRedis();
+    const onWait = vi.fn();
+    const bucket = new RedisTokenBucket(
+      redis as unknown as Redis,
+      { name: 'github:core', capacity: 500, refillPerSec: 1.25 },
+      onWait,
+    );
+    redis.takeToken.mockResolvedValueOnce([0, 5]).mockResolvedValueOnce([1, 0]);
+    await bucket.take();
+    expect(onWait).toHaveBeenCalledTimes(1);
+    expect(onWait).toHaveBeenCalledWith('github:core', expect.any(Number));
+    expect(onWait.mock.calls[0]?.[1]).toBeGreaterThanOrEqual(0);
+  });
+
+  it('does not report a wait when the first take is allowed', async () => {
+    const redis = new FakeRedis();
+    const onWait = vi.fn();
+    const bucket = new RedisTokenBucket(
+      redis as unknown as Redis,
+      { name: 'github:core', capacity: 500, refillPerSec: 1.25 },
+      onWait,
+    );
+    await bucket.take();
+    expect(onWait).not.toHaveBeenCalled();
+  });
+
   it('caps a single wait at 60 s', async () => {
     const { bucket, redis } = setup();
     redis.takeToken.mockResolvedValueOnce([0, 10_000_000]).mockResolvedValueOnce([1, 0]);

@@ -23,6 +23,7 @@
     "fixtures:record": "pnpm --filter @trendr/sources fixtures:record",
     "ingest:bootstrap": "pnpm --filter @trendr/worker ingest:bootstrap",
     "worker:score": "pnpm --filter @trendr/worker worker:score",
+    "obs:smoke": "node scripts/obs-smoke.mjs",
     "prepare": "husky"
   },
   "devDependencies": {

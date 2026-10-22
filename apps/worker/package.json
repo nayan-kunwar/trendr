@@ -4,10 +4,11 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "tsup src/main.ts src/score-cli.ts --format esm --sourcemap --clean",
+    "build": "tsup src/main.ts src/score-cli.ts src/maintenance-cli.ts --format esm --sourcemap --clean",
     "dev": "tsx watch src/main.ts",
     "start": "node dist/main.js",
     "worker:score": "node dist/score-cli.js",
+    "maintenance": "node dist/maintenance-cli.js",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit"
   },

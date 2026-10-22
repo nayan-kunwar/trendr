@@ -34,7 +34,7 @@ const createBase = {
 };
 
 export const CreateAlertBody = z
-  .object({ ...createBase, params: alertParams })
+  .strictObject({ ...createBase, params: alertParams })
   .superRefine((value, ctx) => {
     if (value.params.type === 'rank_entered') {
       if (value.itemId !== undefined || value.watchlistId !== undefined) {
@@ -57,7 +57,7 @@ export const CreateAlertBody = z
   });
 
 export const UpdateAlertBody = z
-  .object({
+  .strictObject({
     type: AlertTypeSchema.optional(),
     itemId: itemIdString.nullable().optional(),
     watchlistId: z.uuid().nullable().optional(),

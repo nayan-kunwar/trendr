@@ -19,13 +19,25 @@ export interface CacheBreakerState {
   openUntil: number | null;
 }
 
+/** §14.1 `trendr_cache_requests_total{cache=…}`. */
+export type CacheKind = 'leaderboard' | 'item' | 'history' | 'query';
+export type CacheResult = 'hit' | 'miss';
+
+/** Client-side cache namespace → metric label. */
+export function cacheKindForKey(key: string): CacheKind {
+  if (key.startsWith('item:')) return 'item';
+  if (key.startsWith('hist:')) return 'history';
+  if (key.startsWith('lb:') || key.startsWith('lbmeta:')) return 'leaderboard';
+  return 'query';
+}
+
 export interface CacheApi {
   /**
    * Spec §9.3 read-through: return the JSON cached under `key`, or run `load`
    * and cache its result for `ttlSec`. While the breaker is open — or whenever
    * Redis fails — only the loader runs, so callers never see Redis errors.
    */
-  readThrough<T>(key: string, ttlSec: number, load: () => Promise<T>): Promise<T>;
+  readThrough<T>(key: string, ttlSec: number, load: () => Promise<T>, kind?: CacheKind): Promise<T>;
   /** Best-effort DEL; a failure only feeds the breaker. */
   invalidate(...keys: string[]): Promise<void>;
   breakerState(): CacheBreakerState;
@@ -35,10 +47,12 @@ export interface CacheDeps {
   store: CacheStore;
   /** Injectable clock (unit tests). */
   now?: () => number;
+  /** §14.1 cache hit/miss observer. */
+  onResult?: (cache: CacheKind, result: CacheResult) => void;
 }
 
 /** Pure factory so breaker/read-through logic is testable without Fastify. */
-export function createCache({ store, now = Date.now }: CacheDeps): CacheApi {
+export function createCache({ store, now = Date.now, onResult }: CacheDeps): CacheApi {
   let consecutiveErrors = 0;
   let openUntil: number | null = null;
 
@@ -57,8 +71,16 @@ export function createCache({ store, now = Date.now }: CacheDeps): CacheApi {
   }
 
   return {
-    async readThrough<T>(key: string, ttlSec: number, load: () => Promise<T>): Promise<T> {
+    async readThrough<T>(
+      key: string,
+      ttlSec: number,
+      load: () => Promise<T>,
+      kind?: CacheKind,
+    ): Promise<T> {
+      const cache = kind ?? cacheKindForKey(key);
+      const report = (result: CacheResult): void => onResult?.(cache, result);
       if (isOpen()) {
+        report('miss');
         return load();
       }
       let cached: string | null;
@@ -67,15 +89,19 @@ export function createCache({ store, now = Date.now }: CacheDeps): CacheApi {
         recordSuccess();
       } catch {
         recordError();
+        report('miss');
         return load();
       }
       if (cached !== null) {
         try {
-          return JSON.parse(cached) as T;
+          const value = JSON.parse(cached) as T;
+          report('hit');
+          return value;
         } catch {
           // Corrupt entry: fall through and let the loader refresh it.
         }
       }
+      report('miss');
       const value = await load();
       try {
         await store.set(key, JSON.stringify(value), 'EX', ttlSec);
@@ -116,11 +142,13 @@ export interface CachePluginOptions {
   store?: CacheStore;
   /** Injectable clock (unit tests). */
   now?: () => number;
+  /** §14.1 observer; Fastify metrics decorates this after the cache plugin. */
+  onResult?: (cache: CacheKind, result: CacheResult) => void;
 }
 
 /** Decorates `app.cache` (spec §4); requires the redis plugin unless a store is given. */
 export const registerCache = fp<CachePluginOptions>(
-  (app, { store, now }) => {
+  (app, { store, now, onResult }) => {
     if (store === undefined && !app.hasDecorator('redis')) {
       throw new Error('registerCache requires the redis plugin (or an explicit store)');
     }
@@ -129,6 +157,10 @@ export const registerCache = fp<CachePluginOptions>(
       createCache({
         store: store ?? (app.redis as CacheStore),
         ...(now ? { now } : {}),
+        onResult: (cache, result) => {
+          onResult?.(cache, result);
+          if (app.hasDecorator('observeCache')) app.observeCache(cache, result);
+        },
       }),
     );
   },

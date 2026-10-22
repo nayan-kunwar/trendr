@@ -1,4 +1,9 @@
-import { RedisTokenBucket, type BucketSpec, type Source } from '@trendr/core';
+import {
+  RedisTokenBucket,
+  type BucketSpec,
+  type RateLimitWaitObserver,
+  type Source,
+} from '@trendr/core';
 import type { Redis } from 'ioredis';
 
 /**
@@ -57,6 +62,8 @@ export function effectiveHfRatePer5Min(configured: number, tokenPresent: boolean
 export interface BucketOptions {
   /** `HF_RATE_PER_5MIN`; capacity is 0.8 × the 5-minute budget (spec §7.4). */
   hfRatePer5Min?: number;
+  /** §14.1 metric hook; omitted in tooling/tests. */
+  onWait?: RateLimitWaitObserver;
 }
 
 export function bucketSpec(name: BucketName, options: BucketOptions = {}): BucketSpec {
@@ -73,7 +80,7 @@ export function createBucket(
   name: BucketName,
   options: BucketOptions = {},
 ): RedisTokenBucket {
-  return new RedisTokenBucket(redis, bucketSpec(name, options));
+  return new RedisTokenBucket(redis, bucketSpec(name, options), options.onWait);
 }
 
 /**

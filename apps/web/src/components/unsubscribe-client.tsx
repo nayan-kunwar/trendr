@@ -24,7 +24,7 @@ export function UnsubscribeClient() {
     let active = true;
     void fetch(`${publicApiBaseUrl()}/v1/unsubscribe?token=${encodeURIComponent(token)}`, {
       method: 'POST',
-      headers: { accept: 'application/json' },
+      headers: { accept: 'application/json', 'x-requested-with': 'trendr' },
     })
       .then(async (response) => {
         if (!active) return;

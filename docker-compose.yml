@@ -134,19 +134,26 @@ services:
     ports: ['8025:8025', '1025:1025']
 
   prometheus:
-    image: prom/prometheus:latest
+    image: prom/prometheus:v2.55.1
     profiles: ['obs']
+    # Prometheus has no config-file env expansion (governance vote,
+    # prometheus/prometheus#2357), so the bearer token is rendered into a
+    # read-only file at `docker compose config` time instead.
+    configs: [{ source: metrics_token, target: /etc/prometheus/metrics.token }]
+    command: ['--config.file=/etc/prometheus/prometheus.yml', '--storage.tsdb.path=/prometheus']
     volumes:
       - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./infra/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
     ports: ['9090:9090']
+    depends_on: [api, worker]
 
   grafana:
-    image: grafana/grafana:latest
+    image: grafana/grafana:11.4.0
     profiles: ['obs']
     environment:
-      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
       GF_AUTH_ANONYMOUS_ENABLED: 'true'
+      GF_USERS_ALLOW_SIGN_UP: 'false'
     volumes:
       - ./infra/grafana/provisioning:/etc/grafana/provisioning:ro
       - ./infra/grafana/dashboards:/var/lib/grafana/dashboards:ro
@@ -154,10 +161,16 @@ services:
     depends_on: [prometheus]
 
   jaeger:
-    image: jaegertracing/all-in-one:latest
+    image: jaegertracing/all-in-one:1.62.0
     profiles: ['obs']
     ports: ['16686:16686', '4318:4318']
 
 volumes:
   pgdata:
   redisdata:
+
+# Rendered from the same `.env` METRICS_TOKEN the API/worker read via `env_file`,
+# mounted read-only into Prometheus for the two scrape jobs (spec §14.5).
+configs:
+  metrics_token:
+    content: ${METRICS_TOKEN:-change-me-metrics-token}

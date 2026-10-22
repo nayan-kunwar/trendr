@@ -44,6 +44,15 @@ export default tseslint.config(
       '@typescript-eslint/no-explicit-any': 'error',
       // Ports, status codes, and counts are idiomatic in template literals.
       '@typescript-eslint/restrict-template-expressions': ['error', { allowNumber: true }],
+      // §15: values must be parameterized. `sql.raw` is only for reviewed,
+      // static SQL; an inline disable documents any exception.
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: "CallExpression[callee.object.name='sql'][callee.property.name='raw']",
+          message: 'Avoid sql.raw with dynamic input; use a parameterized SQL template.',
+        },
+      ],
     },
   },
   ...LAYER_RESTRICTIONS.map(({ layer, forbidden }) => ({

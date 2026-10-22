@@ -17,7 +17,7 @@ export const DigestResponse = z.object({
   subscription: DigestSubscriptionDto.nullable(),
 });
 
-export const DigestBody = z.object({
+export const DigestBody = z.strictObject({
   sources: z
     .array(SourceSchema)
     .min(1)

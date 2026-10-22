@@ -2,20 +2,40 @@ import { UnrecoverableError, Worker, type WorkerOptions } from 'bullmq';
 import type { Redis } from 'ioredis';
 
 import { MaintenanceJobSchema, QUEUE, type MaintenanceJob } from '@trendr/core';
-import type { Db } from '@trendr/db';
+import {
+  countSnapshotsDefault,
+  deleteExpiredAuthTokens,
+  dropOldPartitions,
+  ensurePartitions,
+  pruneAlertEvents,
+  pruneIngestionRuns,
+  pruneScores,
+  rollupDailyMetrics,
+  type Db,
+} from '@trendr/db';
 import type { Logger } from '@trendr/logger';
 
 import { attachDeadLetter } from '../dlq.js';
 import { runRetierItems, type HotMaxBySource, type RetierSummary } from '../ingestion/tiering.js';
+import { snapshotsDefaultRows } from '../metrics.js';
 import { workerSettings, type Queues } from '../queues.js';
 
 /**
- * Spec §3.2/§7.8 — the `maintenance` queue processor (the `scoring` role
- * hosts it). Task 4.5 implements `retier-items`; the remaining §7.10 jobs
- * (`create-partitions`, `retention`, `rollup-daily`, `cleanup-tokens`) arrive
- * with their own tasks and currently fail unrecoverably instead of silently
- * doing nothing.
+ * Spec §7.10 — the `maintenance` queue processor. Every job is idempotent and
+ * safe to run manually: partition creation is `IF NOT EXISTS`, rollups upsert,
+ * score pruning keeps the current pointer, and token cleanup is a cutoff
+ * delete. The scheduler in `scheduler.ts` owns the production cadence.
  */
+
+export interface MaintenanceRetentionOptions {
+  snapshotMonths: number;
+  scoresHourlyHours: number;
+  scoresDailyDays: number;
+}
+
+export interface MaintenanceMetrics {
+  setSnapshotsDefaultRows(rows: number): void;
+}
 
 export interface MaintenanceProcessorOptions {
   db: Db;
@@ -28,6 +48,8 @@ export interface MaintenanceProcessorOptions {
   hotMaxBySource?: HotMaxBySource;
   /** Clock override (tests). */
   now?: () => Date;
+  retention?: MaintenanceRetentionOptions;
+  metrics?: MaintenanceMetrics;
   concurrency?: number;
   settings?: NonNullable<WorkerOptions['settings']>;
 }
@@ -36,7 +58,25 @@ export interface MaintenanceResult {
   type: MaintenanceJob['type'];
   /** Present for `retier-items`. */
   retier?: RetierSummary;
+  /** Present for `create-partitions`. */
+  defaultRows?: number;
+  /** Present for `rollup-daily`. */
+  day?: string;
+  rolledUpRows?: number;
+  /** Present for `retention`. */
+  droppedPartitions?: number;
+  deletedScores?: number;
+  deletedAlertEvents?: number;
+  deletedIngestionRuns?: number;
+  /** Present for `cleanup-tokens`. */
+  deletedTokens?: number;
 }
+
+const DEFAULT_RETENTION: MaintenanceRetentionOptions = {
+  snapshotMonths: 3,
+  scoresHourlyHours: 48,
+  scoresDailyDays: 365,
+};
 
 export function createMaintenanceWorker(
   options: MaintenanceProcessorOptions,
@@ -51,24 +91,7 @@ export function createMaintenanceWorker(
           .join(', ');
         throw new UnrecoverableError(`invalid maintenance job payload: ${problems}`);
       }
-
-      switch (parsed.data.type) {
-        case 'retier-items': {
-          const retier = await runRetierItems({
-            db: options.db,
-            ...(options.logger === undefined ? {} : { logger: options.logger }),
-            ...(options.hotMaxBySource === undefined
-              ? {}
-              : { hotMaxBySource: options.hotMaxBySource }),
-            ...(options.now === undefined ? {} : { now: options.now }),
-          });
-          return { type: parsed.data.type, retier };
-        }
-        default:
-          throw new UnrecoverableError(
-            `maintenance job "${parsed.data.type}" is not implemented yet`,
-          );
-      }
+      return runMaintenanceJob(options, parsed.data);
     },
     {
       connection: options.connection,
@@ -84,4 +107,91 @@ export function createMaintenanceWorker(
     attachDeadLetter(worker, options.deadLetter, options.logger);
   }
   return worker;
+}
+
+/** Pure-ish dispatch for the worker and the manual maintenance CLI. */
+export async function runMaintenanceJob(
+  options: MaintenanceProcessorOptions,
+  data: MaintenanceJob,
+): Promise<MaintenanceResult> {
+  const now = options.now?.() ?? new Date();
+  switch (data.type) {
+    case 'create-partitions': {
+      await ensurePartitions(options.db, 0, 3);
+      const defaultRows = await countSnapshotsDefault(options.db);
+      const metrics = options.metrics ?? {
+        setSnapshotsDefaultRows: (rows: number) => {
+          snapshotsDefaultRows.set(rows);
+        },
+      };
+      metrics.setSnapshotsDefaultRows(defaultRows);
+      options.logger?.info({ defaultRows }, 'snapshot partitions ensured');
+      return { type: data.type, defaultRows };
+    }
+    case 'rollup-daily': {
+      const day = previousUtcDay(now);
+      const rolledUpRows = await rollupDailyMetrics(options.db, day);
+      options.logger?.info({ day, rolledUpRows }, 'daily metrics rolled up');
+      return { type: data.type, day, rolledUpRows };
+    }
+    case 'retention': {
+      const retention = options.retention ?? DEFAULT_RETENTION;
+      const droppedPartitions = await dropOldPartitions(options.db, retention.snapshotMonths);
+      const deletedScores = await pruneScores(
+        options.db,
+        retention.scoresHourlyHours,
+        retention.scoresDailyDays,
+      );
+      // Order matters: alert events reference score runs, so remove the
+      // 180-day-old events before the 30-day run sweep can see those runs.
+      const deletedAlertEvents = await pruneAlertEvents(
+        options.db,
+        new Date(now.getTime() - 180 * 86_400_000),
+      );
+      const deletedIngestionRuns = await pruneIngestionRuns(
+        options.db,
+        new Date(now.getTime() - 30 * 86_400_000),
+      );
+      options.logger?.info(
+        {
+          droppedPartitions,
+          deletedScores,
+          deletedAlertEvents,
+          deletedIngestionRuns,
+        },
+        'retention pass finished',
+      );
+      return {
+        type: data.type,
+        droppedPartitions,
+        deletedScores,
+        deletedAlertEvents,
+        deletedIngestionRuns,
+      };
+    }
+    case 'cleanup-tokens': {
+      const deletedTokens = await deleteExpiredAuthTokens(
+        options.db,
+        new Date(now.getTime() - 7 * 86_400_000),
+      );
+      options.logger?.info({ deletedTokens }, 'expired auth tokens cleaned up');
+      return { type: data.type, deletedTokens };
+    }
+    case 'retier-items': {
+      const retier = await runRetierItems({
+        db: options.db,
+        ...(options.logger === undefined ? {} : { logger: options.logger }),
+        ...(options.hotMaxBySource === undefined ? {} : { hotMaxBySource: options.hotMaxBySource }),
+        ...(options.now === undefined ? {} : { now: options.now }),
+      });
+      return { type: data.type, retier };
+    }
+  }
+}
+
+/** Previous UTC calendar day as `YYYY-MM-DD`, the rollup input (§7.10). */
+export function previousUtcDay(now: Date): string {
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - 1))
+    .toISOString()
+    .slice(0, 10);
 }

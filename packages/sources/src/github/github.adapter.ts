@@ -7,6 +7,7 @@ import {
   UpstreamError,
   type FetchJsonMetricsSink,
   type ItemFlag,
+  type RateLimitWaitObserver,
 } from '@trendr/core';
 import type { Redis } from 'ioredis';
 
@@ -86,15 +87,19 @@ export function createRedisEtagStore(redis: Redis): GitHubEtagStore {
   };
 }
 
-export function createGitHubBuckets(redis: Redis, tokenCount: number): GitHubBuckets {
+export function createGitHubBuckets(
+  redis: Redis,
+  tokenCount: number,
+  onWait?: RateLimitWaitObserver,
+): GitHubBuckets {
   const count = Math.max(1, tokenCount);
   return {
     core: Array.from(
       { length: count },
-      (_, index) => new RedisTokenBucket(redis, githubCoreBucketSpec(index)),
+      (_, index) => new RedisTokenBucket(redis, githubCoreBucketSpec(index), onWait),
     ),
-    search: createBucket(redis, 'github:search'),
-    graphql: createBucket(redis, 'github:graphql'),
+    search: createBucket(redis, 'github:search', onWait === undefined ? {} : { onWait }),
+    graphql: createBucket(redis, 'github:graphql', onWait === undefined ? {} : { onWait }),
   };
 }
 

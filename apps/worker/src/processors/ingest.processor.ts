@@ -45,7 +45,7 @@ import {
   persistDailySeries,
   persistNormalizedItems,
 } from '../ingestion/upsert.js';
-import { sourceApiMetrics } from '../metrics.js';
+import { ingestionDuration, ingestionItems, rateLimitWait, sourceApiMetrics } from '../metrics.js';
 import { enqueueScoringRun, workerSettings, type Queues, type ScoringResult } from '../queues.js';
 
 type DiscoverJob = Extract<IngestJob, { type: 'discover' }>;
@@ -114,6 +114,7 @@ export async function processIngestJob(
   }
   const data = parsed.data;
   const now = deps.now ?? (() => new Date());
+  const startedAt = performance.now();
   const recorder = await RunRecorder.start(deps.db, {
     jobId: job.id ?? `${data.source}.${data.type}`,
     attempt: job.attemptsMade + 1,
@@ -129,11 +130,16 @@ export async function processIngestJob(
       jobId: job.id,
       runId: recorder.runId.toString(),
     });
+    const observeWait = (bucket: string, seconds: number): void => {
+      rateLimitWait.observe({ bucket }, seconds);
+    };
     const context: AdapterContext = {
       logger: log,
       bucket: createBucket(deps.redis, SOURCE_PRIMARY_BUCKET[data.source], {
         ...(deps.hfRatePer5Min === undefined ? {} : { hfRatePer5Min: deps.hfRatePer5Min }),
+        onWait: observeWait,
       }),
+      onRateLimitWait: observeWait,
       signal: signal ?? new AbortController().signal,
       now,
       runId: recorder.runId,
@@ -178,15 +184,19 @@ export async function processIngestJob(
     await runJob({ deps, data, adapter, context, recorder, tick: job.timestamp });
   } catch (error) {
     if (error instanceof AdapterNotRegisteredError && data.trigger === 'schedule') {
-      return skipScheduledJob(deps, recorder, data, error);
+      const result = await skipScheduledJob(deps, recorder, data, error);
+      recordIngestMetrics(data, recorder, result.status, startedAt);
+      return result;
     }
     await failRun(recorder, error);
+    recordIngestMetrics(data, recorder, 'failed', startedAt);
     throw asJobError(error);
   }
 
   const status =
     recorder.itemsFailed === 0 && recorder.itemsIncomplete === 0 ? 'succeeded' : 'partial';
   await recorder.finish(status);
+  recordIngestMetrics(data, recorder, status, startedAt);
   deps.logger.info(
     {
       source: data.source,
@@ -620,6 +630,22 @@ async function skipScheduledJob(
     itemsFailed: 0,
     itemsIncomplete: 0,
   };
+}
+
+function recordIngestMetrics(
+  data: IngestJob,
+  recorder: RunRecorder,
+  status: IngestResult['status'] | 'failed',
+  startedAt: number,
+): void {
+  const labels = { source: data.source, job_type: data.type };
+  ingestionDuration.observe(
+    { ...labels, status },
+    Math.max(0, performance.now() - startedAt) / 1000,
+  );
+  ingestionItems.inc({ ...labels, result: 'upserted' }, recorder.itemsUpserted);
+  ingestionItems.inc({ ...labels, result: 'failed' }, recorder.itemsFailed);
+  ingestionItems.inc({ ...labels, result: 'not_modified' }, recorder.notModified);
 }
 
 async function failRun(recorder: RunRecorder, error: unknown): Promise<void> {

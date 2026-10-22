@@ -9,6 +9,7 @@ import type { EmailSender } from '@trendr/email';
 import { registerApiKey } from './plugins/api-key.js';
 import { registerAuth } from './plugins/auth.js';
 import { registerCache } from './plugins/cache.js';
+import { registerCsrf } from './plugins/csrf.js';
 import { registerDb } from './plugins/db.js';
 import { registerErrors } from './plugins/errors.js';
 import { registerEtag } from './plugins/etag.js';
@@ -81,7 +82,15 @@ export interface BuildAppDeps {
 export async function buildApp(deps: BuildAppDeps = {}): Promise<FastifyInstance> {
   const app = Fastify({
     trustProxy: deps.trustProxy ?? false,
+    // Spec §15: reject oversized bodies before validation or handlers run.
+    bodyLimit: 64 * 1024,
+    // Spec §14.3: accept the caller's correlation id and echo it back.
+    requestIdHeader: 'x-request-id',
     ...(deps.loggerInstance ? { loggerInstance: deps.loggerInstance } : {}),
+  });
+  app.addHook('onSend', async (request, reply, payload) => {
+    reply.header('x-request-id', request.id);
+    return payload;
   });
 
   let queues: ApiQueues | undefined;
@@ -96,6 +105,7 @@ export async function buildApp(deps: BuildAppDeps = {}): Promise<FastifyInstance
   await registerSecurity(app, deps);
   registerErrors(app);
   await app.register(cookie);
+  registerCsrf(app);
 
   if (deps.db) {
     await app.register(registerDb, { connection: deps.db });
@@ -105,6 +115,8 @@ export async function buildApp(deps: BuildAppDeps = {}): Promise<FastifyInstance
       redis: deps.redis,
       ...(deps.redisSub ? { redisSub: deps.redisSub } : {}),
     });
+    // The metrics plugin registers later; the cache plugin resolves the
+    // observer decorator at request time, so no explicit callback is needed.
     await app.register(registerCache);
   }
   if (deps.apiKeyPepper !== undefined && deps.db !== undefined) {

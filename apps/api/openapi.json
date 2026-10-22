@@ -1486,7 +1486,8 @@
                         "maximum": 5000
                       }
                     },
-                    "required": ["type", "source"]
+                    "required": ["type", "source"],
+                    "additionalProperties": false
                   },
                   {
                     "type": "object",
@@ -1498,7 +1499,8 @@
                       },
                       "tier": { "type": "string", "enum": ["hot", "warm", "cold", "archived"] }
                     },
-                    "required": ["type", "source", "tier"]
+                    "required": ["type", "source", "tier"],
+                    "additionalProperties": false
                   },
                   {
                     "type": "object",
@@ -1509,7 +1511,8 @@
                         "enum": ["github", "npm", "pypi", "huggingface", "arxiv", "mcp"]
                       }
                     },
-                    "required": ["type", "source"]
+                    "required": ["type", "source"],
+                    "additionalProperties": false
                   },
                   {
                     "type": "object",
@@ -1522,7 +1525,8 @@
                       "itemId": { "type": "string", "pattern": "^\\d{1,19}$" },
                       "days": { "default": 60, "type": "integer", "minimum": 1, "maximum": 365 }
                     },
-                    "required": ["type", "source", "itemId"]
+                    "required": ["type", "source", "itemId"],
+                    "additionalProperties": false
                   },
                   {
                     "type": "object",
@@ -1534,7 +1538,8 @@
                       },
                       "itemId": { "type": "string", "pattern": "^\\d{1,19}$" }
                     },
-                    "required": ["type", "source", "itemId"]
+                    "required": ["type", "source", "itemId"],
+                    "additionalProperties": false
                   }
                 ]
               }
@@ -1577,7 +1582,8 @@
                     ]
                   }
                 },
-                "required": ["source"]
+                "required": ["source"],
+                "additionalProperties": false
               }
             }
           }
@@ -2286,7 +2292,8 @@
                       ]
                     }
                   }
-                }
+                },
+                "additionalProperties": false
               }
             }
           }
@@ -2341,7 +2348,8 @@
                     "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
                   }
                 },
-                "required": ["email"]
+                "required": ["email"],
+                "additionalProperties": false
               }
             }
           }
@@ -2372,7 +2380,8 @@
               "schema": {
                 "type": "object",
                 "properties": { "token": { "type": "string", "minLength": 16, "maxLength": 512 } },
-                "required": ["token"]
+                "required": ["token"],
+                "additionalProperties": false
               }
             }
           }
@@ -2600,7 +2609,8 @@
                       { "type": "null" }
                     ]
                   }
-                }
+                },
+                "additionalProperties": false
               }
             }
           }
@@ -2723,7 +2733,8 @@
               "schema": {
                 "type": "object",
                 "properties": { "name": { "type": "string", "minLength": 1, "maxLength": 80 } },
-                "required": ["name"]
+                "required": ["name"],
+                "additionalProperties": false
               }
             }
           }
@@ -2770,7 +2781,8 @@
               "schema": {
                 "type": "object",
                 "properties": { "name": { "type": "string", "minLength": 1, "maxLength": 80 } },
-                "required": ["name"]
+                "required": ["name"],
+                "additionalProperties": false
               }
             }
           }
@@ -3300,7 +3312,8 @@
                     ]
                   }
                 },
-                "required": ["params"]
+                "required": ["params"],
+                "additionalProperties": false
               }
             }
           }
@@ -3417,7 +3430,8 @@
                   },
                   "cooldownHours": { "type": "integer", "minimum": 1, "maximum": 720 },
                   "enabled": { "type": "boolean" }
-                }
+                },
+                "additionalProperties": false
               }
             }
           }
@@ -3724,7 +3738,8 @@
                   "includeWatchlist": { "default": true, "type": "boolean" },
                   "dayOfWeek": { "default": 1, "type": "integer", "minimum": 0, "maximum": 6 },
                   "enabled": { "default": true, "type": "boolean" }
-                }
+                },
+                "additionalProperties": false
               }
             }
           }
@@ -3892,7 +3907,8 @@
                   "name": { "type": "string", "minLength": 1, "maxLength": 60 },
                   "expiresInDays": { "type": "integer", "minimum": 1, "maximum": 365 }
                 },
-                "required": ["name"]
+                "required": ["name"],
+                "additionalProperties": false
               }
             }
           }

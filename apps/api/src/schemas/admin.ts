@@ -18,28 +18,28 @@ export const ADMIN_PAGE_SIZE = 50;
 const ITEM_ID = z.string().regex(/^\d{1,19}$/);
 
 export const AdminIngestBody = z.discriminatedUnion('type', [
-  z.object({
+  z.strictObject({
     type: z.literal('discover'),
     source: SourceSchema,
     strategy: z.string().min(1).max(80).default('new-hot'),
     maxItems: z.number().int().min(1).max(5_000).default(500),
   }),
-  z.object({
+  z.strictObject({
     type: z.literal('snapshot'),
     source: SourceSchema,
     tier: TierSchema,
   }),
-  z.object({
+  z.strictObject({
     type: z.literal('daily'),
     source: SourceSchema,
   }),
-  z.object({
+  z.strictObject({
     type: z.literal('backfill'),
     source: SourceSchema,
     itemId: ITEM_ID,
     days: z.number().int().min(1).max(365).default(60),
   }),
-  z.object({
+  z.strictObject({
     type: z.literal('refresh-item'),
     source: SourceSchema,
     itemId: ITEM_ID,
@@ -52,7 +52,7 @@ export const AdminIngestResponse = z.object({
   queue: z.string(),
 });
 
-export const AdminScoreBody = z.object({
+export const AdminScoreBody = z.strictObject({
   source: z.union([SourceSchema, z.literal('all')]),
 });
 export const AdminScoreJob = z.object({
@@ -166,7 +166,7 @@ export const AdminRateLimitsResponse = z.object({
 });
 
 export const AdminItemPatchBody = z
-  .object({
+  .strictObject({
     tier: TierSchema.optional(),
     addFlags: z.array(ItemFlagSchema).max(20).optional(),
     removeFlags: z.array(ItemFlagSchema).max(20).optional(),

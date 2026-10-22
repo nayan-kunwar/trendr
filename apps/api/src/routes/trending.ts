@@ -638,6 +638,7 @@ async function loadSqlPage(
     redisKeys.queryCache(canonicalQuery(query)),
     QUERY_CACHE_TTL_SECONDS,
     load,
+    'query',
   );
 }
 
@@ -683,20 +684,24 @@ export function registerTrendingRoutes(app: FastifyInstance): void {
       }
 
       const breakerOpen = app.hasDecorator('cache') && app.cache.breakerState().open;
-      if (
-        meta !== null &&
+      const boardCandidate =
         !hasSqlFilters(query) &&
         (query.lang === undefined || query.lang === '_all') &&
-        !breakerOpen
-      ) {
+        !breakerOpen;
+      if (meta !== null && boardCandidate) {
         try {
-          return withNextLink(await loadRedisPage(app, query, meta));
+          const body = await loadRedisPage(app, query, meta);
+          if (app.hasDecorator('observeCache')) app.observeCache('leaderboard', 'hit');
+          return withNextLink(body);
         } catch (error) {
           if (error instanceof AppError) {
             throw error;
           }
+          if (app.hasDecorator('observeCache')) app.observeCache('leaderboard', 'miss');
           request.log.warn({ err: error }, 'redis trending read failed; degrading to SQL');
         }
+      } else if (meta === null && boardCandidate && app.hasDecorator('observeCache')) {
+        app.observeCache('leaderboard', 'miss');
       }
       return withNextLink(await loadSqlPage(app, query));
     },

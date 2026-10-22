@@ -313,13 +313,37 @@ export interface MaintenanceSchedule {
   data: MaintenanceJob;
 }
 
-/** Spec §7.2 maintenance rows implemented so far (retier-items, task 4.5). */
+/** Spec §7.2 maintenance rows (UTC). */
 export const MAINTENANCE_SCHEDULES: readonly MaintenanceSchedule[] = [
+  {
+    id: 'rollup-daily',
+    name: 'rollup-daily',
+    pattern: '20 0 * * *',
+    data: { type: 'rollup-daily' },
+  },
+  {
+    id: 'create-partitions',
+    name: 'create-partitions',
+    pattern: '0 1 * * *',
+    data: { type: 'create-partitions' },
+  },
+  {
+    id: 'retention',
+    name: 'retention',
+    pattern: '30 3 * * *',
+    data: { type: 'retention' },
+  },
   {
     id: 'retier-items',
     name: 'retier-items',
     pattern: '0 5 * * *',
     data: { type: 'retier-items' },
+  },
+  {
+    id: 'cleanup-tokens',
+    name: 'cleanup-tokens',
+    pattern: '0 4 * * 0',
+    data: { type: 'cleanup-tokens' },
   },
 ];
 

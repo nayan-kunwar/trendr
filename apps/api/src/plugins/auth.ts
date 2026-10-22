@@ -65,6 +65,13 @@ export const registerAuth = fp<AuthPluginOptions>(
       if (header === undefined) {
         return;
       }
+      // Spec §14.5: `/metrics` is guarded by METRICS_TOKEN, not a JWT, and
+      // Prometheus sends `Authorization: Bearer <METRICS_TOKEN>` — verifying
+      // that as an access token would make every scrape 401 (observed against
+      // the Compose stack, where jwtSecret is always set).
+      if (request.url.split('?', 1)[0] === '/metrics') {
+        return;
+      }
       const [scheme, token] = header.split(' ', 2);
       if (scheme !== 'Bearer' || token === undefined || token.length === 0) {
         throw new UnauthorizedError('invalid authorization header');

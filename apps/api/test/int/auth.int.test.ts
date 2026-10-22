@@ -47,6 +47,7 @@ beforeAll(async () => {
       webPublicUrl: 'http://localhost:3000',
       adminEmails: [ADMIN_EMAIL],
       authRateLimitMax: 1_000,
+      cookieSecure: true,
     },
   });
   await app.ready();
@@ -169,6 +170,7 @@ describe('magic-link auth and refresh rotation (task 7.1)', () => {
     expect(setCookie).toContain('Path=/v1/auth');
     expect(setCookie).toContain('HttpOnly');
     expect(setCookie).toContain('SameSite=Lax');
+    expect(setCookie).toContain('Secure');
 
     const me = await app.inject({
       method: 'GET',
@@ -195,7 +197,7 @@ describe('magic-link auth and refresh rotation (task 7.1)', () => {
     const rotated = await app.inject({
       method: 'POST',
       url: '/v1/auth/refresh',
-      headers: { cookie: `dt_refresh=${cookie}` },
+      headers: { cookie: `dt_refresh=${cookie}`, 'x-requested-with': 'trendr' },
     });
     expect(rotated.statusCode, rotated.body).toBe(200);
     const rotatedCookie = refreshCookie(rotated);
@@ -205,21 +207,21 @@ describe('magic-link auth and refresh rotation (task 7.1)', () => {
     const oldAgain = await app.inject({
       method: 'POST',
       url: '/v1/auth/refresh',
-      headers: { cookie: `dt_refresh=${cookie}` },
+      headers: { cookie: `dt_refresh=${cookie}`, 'x-requested-with': 'trendr' },
     });
     expect(oldAgain.statusCode).toBe(401);
 
     const newestNow = await app.inject({
       method: 'POST',
       url: '/v1/auth/refresh',
-      headers: { cookie: `dt_refresh=${rotatedCookie}` },
+      headers: { cookie: `dt_refresh=${rotatedCookie}`, 'x-requested-with': 'trendr' },
     });
     expect(newestNow.statusCode).toBe(401);
 
     const freshNewest = await app.inject({
       method: 'POST',
       url: '/v1/auth/refresh',
-      headers: { cookie: 'dt_refresh=not-a-real-token' },
+      headers: { cookie: 'dt_refresh=not-a-real-token', 'x-requested-with': 'trendr' },
     });
     expect(freshNewest.statusCode).toBe(401);
   });
@@ -258,14 +260,14 @@ describe('magic-link auth and refresh rotation (task 7.1)', () => {
     const logout = await app.inject({
       method: 'POST',
       url: '/v1/auth/logout',
-      headers: { cookie: `dt_refresh=${cookie}` },
+      headers: { cookie: `dt_refresh=${cookie}`, 'x-requested-with': 'trendr' },
     });
     expect(logout.statusCode).toBe(204);
 
     const refresh = await app.inject({
       method: 'POST',
       url: '/v1/auth/refresh',
-      headers: { cookie: `dt_refresh=${cookie}` },
+      headers: { cookie: `dt_refresh=${cookie}`, 'x-requested-with': 'trendr' },
     });
     expect(refresh.statusCode).toBe(401);
   });

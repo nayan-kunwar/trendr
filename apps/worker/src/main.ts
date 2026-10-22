@@ -9,8 +9,11 @@ import { createLogger } from '@trendr/logger';
 import { effectiveHfRatePer5Min } from '@trendr/sources';
 
 import { registerIngestAdapters } from './ingestion/adapters.js';
+import { instrumentWorker, meteredEmailSender } from './instrumentation.js';
 import { startMetricsServer } from './metrics-server.js';
-import { registry } from './metrics.js';
+import { rateLimitWait, registry, setDbPoolStats, snapshotsDefaultRows } from './metrics.js';
+import { startFreshnessPoller } from './pollers/freshness.js';
+import { startQueueDepthPoller } from './pollers/queue-depth.js';
 import { createIngestWorker } from './processors/ingest.processor.js';
 import { createMaintenanceWorker } from './processors/maintenance.processor.js';
 import { createDigestWorker } from './processors/digest.processor.js';
@@ -41,7 +44,8 @@ if (roles.includes('scheduler') && env.SCHEDULER_ENABLED) {
 const workers: Worker[] = [];
 let db: Connection | null = null;
 if (roles.includes('scoring') || roles.includes('ingest') || roles.includes('notify')) {
-  db = createDb(env.DATABASE_URL);
+  db = createDb(env.DATABASE_URL, { max: env.DATABASE_POOL_MAX });
+  setDbPoolStats(db.pool);
 
   if (roles.includes('scoring')) {
     const scoringWorker = createScoringWorker({
@@ -67,6 +71,16 @@ if (roles.includes('scoring') || roles.includes('ingest') || roles.includes('not
         github: env.TRACKED_HOT_MAX_GITHUB,
         huggingface: env.TRACKED_HOT_MAX_HUGGINGFACE,
       },
+      retention: {
+        snapshotMonths: env.SNAPSHOT_RETENTION_MONTHS,
+        scoresHourlyHours: env.SCORES_HOURLY_RETENTION_HOURS,
+        scoresDailyDays: env.SCORES_DAILY_RETENTION_DAYS,
+      },
+      metrics: {
+        setSnapshotsDefaultRows: (rows: number) => {
+          snapshotsDefaultRows.set(rows);
+        },
+      },
     });
     maintenanceWorker.on('completed', () => {
       lastJobByQueue[QUEUE.maintenance] = new Date().toISOString();
@@ -75,12 +89,14 @@ if (roles.includes('scoring') || roles.includes('ingest') || roles.includes('not
   }
 
   if (roles.includes('notify')) {
-    const sender = createEmailSender({
-      provider: env.EMAIL_PROVIDER,
-      from: env.EMAIL_FROM,
-      smtpUrl: env.SMTP_URL,
-      ...(env.RESEND_API_KEY === undefined ? {} : { resendApiKey: env.RESEND_API_KEY }),
-    });
+    const sender = meteredEmailSender(
+      createEmailSender({
+        provider: env.EMAIL_PROVIDER,
+        from: env.EMAIL_FROM,
+        smtpUrl: env.SMTP_URL,
+        ...(env.RESEND_API_KEY === undefined ? {} : { resendApiKey: env.RESEND_API_KEY }),
+      }),
+    );
     const notifyWorker = createNotifyWorker({
       db: db.db,
       redis,
@@ -117,7 +133,11 @@ if (roles.includes('scoring') || roles.includes('ingest') || roles.includes('not
   }
 
   if (roles.includes('ingest')) {
-    registerIngestAdapters(redis, logger);
+    registerIngestAdapters(redis, logger, {
+      onRateLimitWait: (bucket, seconds) => {
+        rateLimitWait.observe({ bucket }, seconds);
+      },
+    });
     const hfTokenPresent = (env.HF_TOKEN?.trim() ?? '') !== '';
     for (const source of SOURCES) {
       const ingestWorker = createIngestWorker(source, {
@@ -142,6 +162,10 @@ if (roles.includes('scoring') || roles.includes('ingest') || roles.includes('not
   }
 }
 
+for (const worker of workers) {
+  instrumentWorker(worker);
+}
+
 const metricsServer = await startMetricsServer({
   port: env.WORKER_METRICS_PORT,
   metricsToken: env.METRICS_TOKEN,
@@ -154,6 +178,16 @@ const metricsServer = await startMetricsServer({
   }),
 });
 
+const queuePoller = startQueueDepthPoller({ queues, logger });
+const freshnessPoller =
+  db === null
+    ? undefined
+    : startFreshnessPoller({
+        db: db.db,
+        logger,
+        now: () => new Date(),
+      });
+
 logger.info({ port: metricsServer.port, roles, schedulers: schedulerIds }, 'worker started');
 
 let shuttingDown = false;
@@ -164,6 +198,8 @@ async function shutdown(signal: string): Promise<void> {
   shuttingDown = true;
   logger.info({ signal }, 'worker stopping');
   try {
+    queuePoller.stop();
+    freshnessPoller?.stop();
     await metricsServer.close();
     for (const worker of workers) {
       await worker.close();

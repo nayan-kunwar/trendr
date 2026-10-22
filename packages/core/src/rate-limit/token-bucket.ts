@@ -19,6 +19,9 @@ export interface BucketSpec {
   refillPerSec: number;
 }
 
+/** §14.1 `trendr_rate_limit_wait_seconds{bucket}` — one observation per blocked `take`. */
+export type RateLimitWaitObserver = (bucket: string, seconds: number) => void;
+
 declare module 'ioredis' {
   interface Redis {
     /**
@@ -41,12 +44,14 @@ export class RedisTokenBucket {
   constructor(
     private readonly redis: Redis,
     private readonly spec: BucketSpec,
+    private readonly onWait?: RateLimitWaitObserver,
   ) {
     redis.defineCommand('takeToken', { numberOfKeys: 2, lua: LUA });
   }
 
   /** Blocks (async) until `cost` tokens are available or the signal aborts. */
   async take(cost = 1, signal?: AbortSignal): Promise<void> {
+    let waitStarted: number | undefined;
     for (;;) {
       signal?.throwIfAborted();
       const [allowed, waitMs] = await this.redis.takeToken(
@@ -59,8 +64,12 @@ export class RedisTokenBucket {
         3_600_000,
       );
       if (allowed === 1) {
+        if (waitStarted !== undefined) {
+          this.onWait?.(this.spec.name, (Date.now() - waitStarted) / 1000);
+        }
         return;
       }
+      waitStarted ??= Date.now();
       // Spec §7.4: wait the script's advertised delay plus jitter, capped at 60 s.
       await sleep(
         Math.min(waitMs + Math.floor(Math.random() * 50), 60_000),

@@ -19,7 +19,7 @@ export const ApiKeyDto = z.object({
 
 export const ApiKeysResponse = z.object({ apiKeys: z.array(ApiKeyDto) });
 
-export const CreateApiKeyBody = z.object({
+export const CreateApiKeyBody = z.strictObject({
   name: z.string().trim().min(1).max(60),
   expiresInDays: z.number().int().min(1).max(365).optional(),
 });

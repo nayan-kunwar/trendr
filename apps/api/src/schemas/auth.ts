@@ -5,11 +5,11 @@ import { z } from 'zod';
  * authenticated profile surface. All auth responses are private/no-store.
  */
 
-export const MagicLinkBody = z.object({
+export const MagicLinkBody = z.strictObject({
   email: z.email().max(320),
 });
 
-export const VerifyMagicLinkBody = z.object({
+export const VerifyMagicLinkBody = z.strictObject({
   token: z.string().min(16).max(512),
 });
 
@@ -36,7 +36,7 @@ export const AuthMessageResponse = z.object({
 
 export const MeResponse = AuthUserDto;
 
-export const MePatchBody = z.object({
+export const MePatchBody = z.strictObject({
   /** `null` clears the display name; omitted leaves it unchanged. */
   displayName: z.string().trim().min(1).max(80).nullable().optional(),
 });

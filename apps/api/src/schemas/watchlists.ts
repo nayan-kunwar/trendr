@@ -14,7 +14,7 @@ export const WatchlistItemParam = z.object({
   itemId: z.string().regex(/^\d{1,19}$/),
 });
 
-export const CreateWatchlistBody = z.object({ name: z.string().trim().min(1).max(80) });
+export const CreateWatchlistBody = z.strictObject({ name: z.string().trim().min(1).max(80) });
 export const RenameWatchlistBody = CreateWatchlistBody;
 
 export const WatchlistDto = z.object({

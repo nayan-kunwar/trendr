@@ -25,3 +25,13 @@ export async function dropOldPartitions(db: Db, keepMonths: number): Promise<num
   );
   return result.rows[0]?.dropped ?? 0;
 }
+
+/**
+ * ISS-7/§14.1: `snapshots_default` must stay empty or partition creation for
+ * that date range fails. The maintenance job reports this on every daily run.
+ */
+export async function countSnapshotsDefault(db: Db): Promise<number> {
+  const result = await db.execute<{ count: string }>(sql`
+    SELECT count(*)::text AS count FROM snapshots_default`);
+  return Number(result.rows[0]?.count ?? 0);
+}

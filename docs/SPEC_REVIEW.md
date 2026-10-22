@@ -1556,6 +1556,55 @@ be re-checked later. Decisions with alternatives get an ADR in [`docs/adr/`](./a
 | R-39 | §11 resources/prompt | §11 lists optional resources and a `weekly_briefing` prompt; task 8.2/8.3 acceptance only requires five tools and README configuration. | Deferred to keep Phase 8 scoped. The tool schemas and server instructions leave room to add them without changing the REST boundary. |
 | R-40 | §18 task 8.3 | The spec's Claude Desktop snippet uses `npx @trendr/mcp`, but the workspace package is private and not published. | Added the `trendr-mcp` bin and shebang, but README uses an absolute `node apps/mcp/dist/main.js` path for a checkout and documents `npx` as post-publish only. |
 
+## Phase 9 notes
+
+- **Task 9.1.** Both processes expose a token-guarded `/metrics` built with `prom-client` and the
+  `trendr_` prefix. The API owns HTTP, cache, SSE and pool series; the worker owns ingestion,
+  upstream-error, rate-limit, queue, job, scoring, freshness, alert, email, snapshot-partition and
+  token-expiry series. `Queue.getJobCounts` is polled every 15 s and `items.last_snapshot_at` every
+  60 s. `trendr_rate_limit_wait_seconds` is observed around the Redis token bucket's blocked
+  `take()`, so the wait histogram is real rather than inferred from retry counts. The API's global
+  JWT hook exempts `/metrics`: a scrape bearer is `METRICS_TOKEN`, not an access token, and without
+  the exemption Compose (where `jwtSecret` is always set) answered 401 before the route guard ran.
+- **Task 9.2.** `infra/prometheus/alerts.yml` implements the six §14.2 rules; CI runs `promtool
+  check rules` against the same Prometheus image Compose uses. Prometheus, Grafana and Jaeger
+  images are pinned. Prometheus does **not** expand environment variables inside config files
+  (governance vote, prometheus/prometheus#2357; `--config.expand-env` is not a Prometheus flag), so
+  Compose renders `${METRICS_TOKEN}` with `configs.content` into a read-only
+  `/etc/prometheus/metrics.token` that both jobs read through
+  `authorization.credentials_file` — the token is still never committed. Grafana provisions the
+  **Trendr
+  Overview** dashboard (API, ingestion, upstream limits, queues, scoring, cache, email, DB pool and
+  runtime panels) from JSON. The Compose `obs` profile starts Prometheus, Grafana and Jaeger;
+  `scripts/obs-smoke.mjs` asserts that rules loaded, both scrape targets are `up`, and the
+  dashboard is visible.
+- **Task 9.3.** API Helmet now emits a deny-all CSP; the web middleware emits a nonce-based CSP that
+  Next applies to its scripts. Cookie-authenticated unsafe methods require
+  `X-Requested-With: trendr`; the web refresh/logout paths and auth integration tests send it.
+  Public `/v1/*` GETs get wildcard CORS without credentials, private prefixes keep the allowlist.
+  Request bodies are capped at 64 KB and body schemas are strict. CI keeps gitleaks and
+  `pnpm audit --prod --audit-level high`, and an aggregate test walks every source `__fixtures__`
+  directory for GitHub/HF/npm/PyPI token shapes and auth headers. ESLint bans `sql.raw`.
+- **Task 9.4.** The `maintenance` queue now dispatches `create-partitions`, `rollup-daily`,
+  `retention`, `cleanup-tokens` and `retier-items`. Retention drops old snapshot partitions, prunes
+  scores to the §6.5 hourly/daily policy, removes alert events after 180 days, and deletes
+  unreferenced ingestion runs after 30 days in bounded batches. `maintenance-cli.ts` enqueues the
+  real job so a running worker updates `trendr_snapshots_default_rows`; the runbook documents both
+  that path and the direct-SQL fallback, score-retention verification, partition checks, token
+  rotation and incident checklists.
+- **Task 9.5.** OpenTelemetry is optional and deferred (R-41). Jaeger remains provisioned in the
+  `obs` profile for a future SDK integration.
+
+### Phase 9 deviations
+
+| # | Spec location | Finding | Resolution |
+| --- | --- | --- | --- |
+| R-41 | §9.5 / §14.6 | The spec marks OpenTelemetry tracing optional; enabling it means a new SDK, exporter lifecycle, sampling policy and trace-context propagation through BullMQ. | Deferred for Phase 9; no tracing SDK is loaded, Jaeger is available in the `obs` profile. Recorded in ADR-0019. |
+| R-42 | §9.3 / §15 | Turnstile is explicitly optional; the existing magic-link endpoint already has per-IP and per-email limits plus a generic 202 response. | Not added. Adding an external challenge would require a new env secret, web widget and fail-open/fail-closed policy; the current rate limits are the active mitigation. |
+| R-43 | §14.1 freshness | A literal `max(last_snapshot_at)` over `items` includes soft-deleted and upstream-archived rows, so a healthy tier could stay permanently stale because of a dead project. | `trendr_data_freshness_seconds` excludes `is_deleted` and `is_archived` rows; the alert measures what the scheduler can still refresh. |
+| R-44 | §7.10 / 9.4 manual runs | Executing maintenance directly in an operator shell would leave the worker's `trendr_snapshots_default_rows` gauge stale. | `maintenance-cli.ts` enqueues the job onto `maintenance` and waits for the worker result; direct SQL is documented only as an emergency fallback. |
+| R-45 | §15 body size | The spec requires a 64 KB cap but does not define the error body. | Fastify's 413 is mapped through the existing RFC 7807 error handler; the cap applies to JSON and URL-encoded bodies globally, including public auth routes. |
+
 ## Environment quirks worth knowing
 
 

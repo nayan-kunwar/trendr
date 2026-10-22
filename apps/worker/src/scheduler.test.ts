@@ -88,11 +88,27 @@ describe('registerSchedulers (spec §7.2)', () => {
 
     const maintenanceCalls = calls.filter((call) => call.queue === 'maintenance');
     expect(maintenanceCalls.map((call) => [call.id, call.pattern])).toEqual([
+      ['rollup-daily', '20 0 * * *'],
+      ['create-partitions', '0 1 * * *'],
+      ['retention', '30 3 * * *'],
       ['retier-items', '0 5 * * *'],
+      ['cleanup-tokens', '0 4 * * 0'],
     ]);
-    expect(maintenanceCalls[0]?.tz).toBe('UTC');
-    expect(maintenanceCalls[0]?.name).toBe('retier-items');
-    expect(maintenanceCalls[0]?.data).toEqual({ type: 'retier-items' });
+    expect(maintenanceCalls.every((call) => call.tz === 'UTC')).toBe(true);
+    expect(maintenanceCalls.map((call) => call.name)).toEqual([
+      'rollup-daily',
+      'create-partitions',
+      'retention',
+      'retier-items',
+      'cleanup-tokens',
+    ]);
+    expect(maintenanceCalls.map((call) => call.data)).toEqual([
+      { type: 'rollup-daily' },
+      { type: 'create-partitions' },
+      { type: 'retention' },
+      { type: 'retier-items' },
+      { type: 'cleanup-tokens' },
+    ]);
   });
 
   it('registers the six GitHub rows with their §7.2 crons and payloads', async () => {

@@ -7,6 +7,7 @@ export * from './repositories/auth-tokens.repo.js';
 export * from './repositories/cards.repo.js';
 export * from './repositories/digest.repo.js';
 export * from './repositories/items.repo.js';
+export * from './repositories/retention.repo.js';
 export * from './repositories/runs.repo.js';
 export * from './repositories/scores.repo.js';
 export * from './repositories/search.repo.js';

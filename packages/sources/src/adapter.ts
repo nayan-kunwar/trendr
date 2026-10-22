@@ -120,6 +120,8 @@ export interface AdapterContext {
   metrics?: FetchJsonMetricsSink;
   /** §7.4: last observed rate-limit state (gauge + `rate_limit_remaining` on the run). */
   onRateLimit?: (info: RateLimitInfo) => void;
+  /** §14.1: time blocked inside a token bucket's `take`. */
+  onRateLimitWait?: (bucket: string, seconds: number) => void;
   /** GAP-8: PAT expiry reported by GitHub responses. */
   onTokenExpiry?: (info: TokenExpiryInfo) => void;
   /**

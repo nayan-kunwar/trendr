@@ -1,9 +1,13 @@
+import Fastify from 'fastify';
+import type { Redis } from 'ioredis';
 import { describe, expect, it, vi, type Mock } from 'vitest';
 
 import {
   CACHE_BREAKER_COOLDOWN_MS,
   CACHE_BREAKER_THRESHOLD,
+  cacheKindForKey,
   createCache,
+  registerCache,
   type CacheStore,
 } from './cache.js';
 
@@ -149,5 +153,67 @@ describe('createCache (spec §9.3)', () => {
     await cache.invalidate('item:1');
     expect(del).not.toHaveBeenCalled();
     expect({ get: get.mock.calls.length, set: set.mock.calls.length }).toEqual(counts);
+  });
+
+  it('maps cache keys to the four §14.1 namespaces', () => {
+    expect(cacheKindForKey('item:42')).toBe('item');
+    expect(cacheKindForKey('hist:42:stars:hour:range')).toBe('history');
+    expect(cacheKindForKey('lb:github:24h:all')).toBe('leaderboard');
+    expect(cacheKindForKey('lbmeta:github:24h:all')).toBe('leaderboard');
+    expect(cacheKindForKey('q:search:abc')).toBe('query');
+  });
+
+  it('reports exactly one hit or miss per read', async () => {
+    const { store, get, set } = stubStore();
+    const events: [string, string][] = [];
+    const cache = createCache({ store, onResult: (kind, result) => events.push([kind, result]) });
+
+    await cache.readThrough('item:1', 300, sqlLoader());
+    get.mockResolvedValue(JSON.stringify('cached'));
+    await cache.readThrough('item:1', 300, sqlLoader());
+    get.mockRejectedValue(new Error('redis down'));
+    await cache.readThrough('item:2', 300, sqlLoader());
+    expect(events).toEqual([
+      ['item', 'miss'],
+      ['item', 'hit'],
+      ['item', 'miss'],
+    ]);
+    expect(set).toHaveBeenCalledTimes(1);
+  });
+
+  it('reports a miss when the breaker skips Redis', async () => {
+    const { store, get } = stubStore();
+    const events: string[] = [];
+    get.mockRejectedValue(new Error('redis down'));
+    const cache = createCache({ store, onResult: (_kind, result) => events.push(result) });
+    for (let i = 0; i < CACHE_BREAKER_THRESHOLD; i += 1) {
+      await cache.readThrough(`item:${i}`, 300, sqlLoader());
+    }
+    events.length = 0;
+    await cache.readThrough('item:open', 300, sqlLoader());
+    expect(events).toEqual(['miss']);
+  });
+});
+
+describe('registerCache (fastify composition)', () => {
+  it('observes each result exactly once when the metrics decorator exists', async () => {
+    const app = Fastify();
+    const { store } = stubStore();
+    const observed: [string, string][] = [];
+    app.decorate('observeCache', (cache: string, result: string) => {
+      observed.push([cache, result]);
+    });
+    // registerCache only touches get/set/del; the store stub satisfies the slice.
+    app.decorate('redis', store as unknown as Redis);
+    await app.register(registerCache);
+
+    await app.cache.readThrough('item:1', 300, sqlLoader());
+    await app.cache.readThrough('lb:github:24h:all', 60, sqlLoader());
+
+    expect(observed).toEqual([
+      ['item', 'miss'],
+      ['leaderboard', 'miss'],
+    ]);
+    await app.close();
   });
 });

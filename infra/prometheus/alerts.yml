@@ -1,3 +1,51 @@
-# Alert rules arrive with the observability phase (spec §14.5); the file must
-# exist so the compose `obs` profile mounts resolve.
-groups: []
+# Spec §14.2 — alert rules. Validate with:
+#   docker run --rm -v "$PWD/infra/prometheus:/etc/prometheus" \
+#     --entrypoint promtool prom/prometheus:v2.55.1 check rules /etc/prometheus/alerts.yml
+groups:
+  - name: trendr
+    rules:
+      - alert: IngestionStale
+        expr: trendr_data_freshness_seconds{tier="hot"} > 3 * 3600
+        for: 15m
+        labels: { severity: warning }
+        annotations:
+          summary: 'Hot tier for {{ $labels.source }} is stale'
+          description: 'Newest hot snapshot is {{ $value | humanizeDuration }} old.'
+      - alert: UpstreamRateLimited
+        expr: increase(trendr_source_api_errors_total{kind="rate_limited"}[15m]) > 5
+        labels: { severity: warning }
+        annotations:
+          summary: 'Upstream rate limits are being hit for {{ $labels.source }}'
+          description: 'More than five rate-limited responses in 15 minutes.'
+      - alert: DeadLetterGrowing
+        expr: trendr_queue_depth{queue="dead-letter",state="waiting"} > 20
+        labels: { severity: critical }
+        annotations:
+          summary: 'Dead-letter queue holds {{ $value }} jobs'
+          description: 'Inspect `/v1/admin/dlq` and replay or fix the failing job class.'
+      - alert: ApiHighErrorRate
+        expr: |
+          sum(rate(trendr_http_requests_total{status=~"5.."}[5m]))
+          / sum(rate(trendr_http_requests_total[5m])) > 0.02
+        for: 10m
+        labels: { severity: critical }
+        annotations:
+          summary: 'Trendr API 5xx rate is above 2%'
+          description: '5xx ratio over the last 5 minutes is {{ $value | humanizePercentage }}.'
+      - alert: ApiSlowLeaderboard
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum by (le) (rate(trendr_http_request_duration_seconds_bucket{route="/v1/trending"}[5m]))
+          ) > 0.2
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: 'Trendr leaderboard p95 is above 200 ms'
+          description: 'Current p95 is {{ $value | humanizeDuration }}.'
+      - alert: SnapshotsDefaultNotEmpty
+        expr: trendr_snapshots_default_rows > 0
+        labels: { severity: critical }
+        annotations:
+          summary: 'snapshots_default holds {{ $value }} rows'
+          description: 'Creating a partition for that range will fail (spec 6.3); run create-partitions and inspect.'

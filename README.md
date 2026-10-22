@@ -22,8 +22,8 @@ an MCP server for agents.
 | 6     | Web frontend                                     | ✅ done |
 | 7     | Accounts, watchlists, alerts, digest             | ✅ done |
 | 8     | MCP server                                       | ✅ done |
-| 9     | Observability, security, operations              | ⏳ next |
-| 10    | Deployment and polish                            | ⏳      |
+| 9     | Observability, security, operations              | ✅ done |
+| 10    | Deployment and polish                            | ⏳ next |
 
 ## Stack
 
@@ -74,17 +74,21 @@ docker compose up --build --wait postgres redis migrate api worker web mcp
 | Grafana (profile `obs`)    | http://localhost:3001                                                    |
 | Jaeger (profile `obs`)     | http://localhost:16686                                                   |
 
+Operational details — metrics, alert rules, manual maintenance jobs, retention
+policy and incident checklists — live in the [runbook](./docs/runbook.md).
+
 ## Commands
 
-| Command                                                 | What it does                                   |
-| ------------------------------------------------------- | ---------------------------------------------- |
-| `pnpm dev` / `pnpm build`                               | Turbo: run / build every workspace             |
-| `pnpm lint` / `pnpm typecheck`                          | ESLint (type-checked) / `tsc --noEmit`         |
-| `pnpm test` / `pnpm test:coverage` / `pnpm test:int`    | Vitest unit / unit + coverage / integration    |
-| `CONTRACT=1 pnpm test:contract`                         | Live upstream schema probes (nightly CI)       |
-| `pnpm db:generate` / `pnpm db:migrate` / `pnpm db:seed` | Drizzle migrations and seed data               |
-| `pnpm fixtures:record`                                  | Record upstream API fixtures for adapter tests |
-| `pnpm ingest:bootstrap` / `pnpm worker:score`           | Manual ingestion / scoring triggers            |
+| Command                                                 | What it does                                          |
+| ------------------------------------------------------- | ----------------------------------------------------- |
+| `pnpm dev` / `pnpm build`                               | Turbo: run / build every workspace                    |
+| `pnpm lint` / `pnpm typecheck`                          | ESLint (type-checked) / `tsc --noEmit`                |
+| `pnpm test` / `pnpm test:coverage` / `pnpm test:int`    | Vitest unit / unit + coverage / integration           |
+| `CONTRACT=1 pnpm test:contract`                         | Live upstream schema probes (nightly CI)              |
+| `pnpm db:generate` / `pnpm db:migrate` / `pnpm db:seed` | Drizzle migrations and seed data                      |
+| `pnpm fixtures:record`                                  | Record upstream API fixtures for adapter tests        |
+| `pnpm ingest:bootstrap` / `pnpm worker:score`           | Manual ingestion / scoring triggers                   |
+| `pnpm obs:smoke`                                        | Validate the `obs` profile: rules, targets, dashboard |
 
 ## Environment
 

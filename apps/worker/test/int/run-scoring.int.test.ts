@@ -160,6 +160,7 @@ describe('runScoring (§8.4, task 2.4)', () => {
         .where(
           and(
             SEED_MARKER,
+            // eslint-disable-next-line no-restricted-syntax -- compile-time flag literal in a test
             sql`((${scores.flags} && ${sql.raw(`ARRAY['${INELIGIBLE_FLAGS.join("', '")}']`)}) OR (${scores.finalScore} = 0))`,
           ),
         ),

@@ -118,6 +118,7 @@ export function registerSearchRoutes(app: FastifyInstance): void {
             redisKeys.queryCache(canonicalSearchQuery(query)),
             SEARCH_CACHE_TTL_SECONDS,
             load,
+            'query',
           )
         : await load();
       if (body.page.nextCursor !== null) {
