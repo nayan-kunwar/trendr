@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, isNotNull, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, isNotNull, lte, sql } from 'drizzle-orm';
 import type { Redis } from 'ioredis';
 
 import { SOURCES, type Source } from '@trendr/core';
@@ -140,6 +140,7 @@ async function mcpNewItems(db: Db, now: Date): Promise<DigestItem[]> {
         eq(items.source, 'mcp'),
         eq(items.isDeleted, false),
         gte(items.firstSeenAt, new Date(now.getTime() - WEEK_MS)),
+        lte(items.firstSeenAt, now),
       ),
     )
     .orderBy(desc(items.firstSeenAt))

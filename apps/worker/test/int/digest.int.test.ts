@@ -166,12 +166,9 @@ describe('weekly digest (task 7.4)', () => {
     if (github === undefined || arxiv === undefined || mcp === undefined) {
       throw new Error('item seed failed');
     }
-    // The full integration suite runs files concurrently; pin this fixture above
-    // any other MCP rows created at wall-clock time so the top-5 query is stable.
-    await connection.db
-      .update(items)
-      .set({ firstSeenAt: new Date('2026-10-22T00:00:00Z') })
-      .where(eq(items.id, mcp.id));
+    // The full integration suite runs files concurrently; buildDigestContent must
+    // not include MCP rows first seen after its digest timestamp.
+    await connection.db.update(items).set({ firstSeenAt: NOW }).where(eq(items.id, mcp.id));
 
     const githubRun = await startRun(connection.db, {
       source: 'github',
