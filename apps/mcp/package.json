@@ -3,6 +3,9 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "bin": {
+    "trendr-mcp": "./dist/main.js"
+  },
   "scripts": {
     "build": "tsup src/main.ts --format esm --sourcemap --clean",
     "dev": "tsx watch src/main.ts",
@@ -11,8 +14,11 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "1.32.1",
     "@trendr/config": "workspace:*",
-    "@trendr/logger": "workspace:*"
+    "@trendr/core": "workspace:*",
+    "@trendr/logger": "workspace:*",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@types/node": "^22",

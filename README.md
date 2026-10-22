@@ -21,8 +21,8 @@ an MCP server for agents.
 | 5     | npm, PyPI, Hugging Face, arXiv, MCP adapters     | ✅ done |
 | 6     | Web frontend                                     | ✅ done |
 | 7     | Accounts, watchlists, alerts, digest             | ✅ done |
-| 8     | MCP server                                       | ⏳ next |
-| 9     | Observability, security, operations              | ⏳      |
+| 8     | MCP server                                       | ✅ done |
+| 9     | Observability, security, operations              | ⏳ next |
 | 10    | Deployment and polish                            | ⏳      |
 
 ## Stack
@@ -106,7 +106,93 @@ Key variables — the full annotated list is in [`.env.example`](./.env.example)
 | `GITHUB_TOKENS` / `HF_TOKEN`    | empty                             | Upstream credentials (worker only)           |
 | `EMAIL_PROVIDER` / `SMTP_URL`   | `smtp` / `…localhost:1025`        | Email delivery (Mailpit locally)             |
 | `MCP_TRANSPORT` / `MCP_PORT`    | `http` / `4100`                   | MCP server mode and port                     |
+| `MCP_API_KEY`                   | empty                             | Read-only API key used by MCP tool calls     |
+| `MCP_HTTP_AUTH_TOKENS`          | empty                             | Comma-separated bearer tokens for `/mcp`     |
+| `API_INTERNAL_URL`              | `http://api:4000`                 | API base URL used by the MCP server          |
 | `NEXT_PUBLIC_API_URL`           | `http://localhost:4000`           | Browser-facing API base (web image only)     |
+
+## MCP server
+
+`apps/mcp` exposes the five read-only tools from spec §11:
+
+| Tool               | What it does                                                                               |
+| ------------------ | ------------------------------------------------------------------------------------------ |
+| `get_trending`     | Leaderboard rows for GitHub, npm, PyPI, Hugging Face, arXiv or MCP, or the combined board. |
+| `search_items`     | Catalog search by name, description or topic, with source/kind filters.                    |
+| `get_item_history` | Metric history and a growth summary for one item (by id, or source + externalId).          |
+| `compare_items`    | 2–5 items side by side with aligned series.                                                |
+| `whats_new_in_mcp` | New or fastest-rising MCP servers with repository/package links.                           |
+
+The server supports **stdio** (Claude Desktop, Cursor) and **stateless Streamable HTTP**
+(`http://localhost:4100/mcp`, health at `http://localhost:4100/healthz`). It never reads the
+database directly: tools call the public API with `X-API-Key: $MCP_API_KEY` when configured.
+
+Create a read-only API key in the web settings (or use the seeded local account), then set
+`MCP_API_KEY` in `.env` for Compose. Without a key, calls use the anonymous public rate limit.
+`MCP_HTTP_AUTH_TOKENS` is optional; when set, remote clients must send
+`Authorization: Bearer <one-of-the-tokens>` to `/mcp`.
+
+### Inspector
+
+With the Compose stack running:
+
+```bash
+npx @modelcontextprotocol/inspector --cli http://localhost:4100/mcp --method tools/list
+npx @modelcontextprotocol/inspector --cli http://localhost:4100/mcp --method tools/call \
+  --tool-name get_trending --tool-args-json '{"source":"npm","window":"7d","limit":3}'
+```
+
+If `MCP_HTTP_AUTH_TOKENS` is set, add
+`--header "Authorization: Bearer <token>"` to both commands. The HTTP transport intentionally
+returns 405 for GET/DELETE on `/mcp`; clients must POST Streamable HTTP messages.
+
+### Claude Desktop (stdio)
+
+Build the workspace, then point Claude at the compiled entry point. Use an absolute path; the
+package is currently private, so `npx @trendr/mcp` is only available after publishing.
+
+```json
+{
+  "mcpServers": {
+    "trendr": {
+      "command": "node",
+      "args": ["C:/absolute/path/to/trendr/apps/mcp/dist/main.js"],
+      "env": {
+        "MCP_TRANSPORT": "stdio",
+        "API_INTERNAL_URL": "http://localhost:4000",
+        "MCP_API_KEY": "dt_live_..."
+      }
+    }
+  }
+}
+```
+
+Restart Claude Desktop, then ask “What's trending on npm this week?” and confirm that it calls
+`get_trending`. Stdio logs are written to stderr so stdout stays protocol-clean.
+
+### Cursor (HTTP)
+
+Add this to `.cursor/mcp.json` (or the equivalent Cursor settings UI):
+
+```json
+{
+  "mcpServers": {
+    "trendr": {
+      "url": "http://localhost:4100/mcp"
+    }
+  }
+}
+```
+
+Add `"headers": { "Authorization": "Bearer <token>" }` when HTTP auth tokens are enabled. Ask
+Cursor to list MCP tools and call `whats_new_in_mcp`; both should work against the Compose stack.
+
+### Manual check log
+
+- **2026-10-22:** Inspector CLI listed all five tools and `get_trending` returned three structured
+  npm rows against the local Compose stack. Claude Desktop/Cursor configuration is documented
+  above; the HTTP and stdio transports are covered by `apps/mcp/test/http.test.ts` and
+  `apps/mcp/test/tools.test.ts`.
 
 ## Architecture in one paragraph
 

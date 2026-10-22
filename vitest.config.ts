@@ -6,6 +6,7 @@ import { defineConfig } from 'vitest/config';
 // sources so `pnpm test` never needs a prior build. Subpath aliases must come
 // before their parent prefix (`@trendr/db` also prefix-matches `/migrate`).
 const workspaceAliases: Record<string, string> = {
+  '@trendr/config/mcp': resolve(import.meta.dirname, 'packages/config/src/mcp.ts'),
   '@trendr/config': resolve(import.meta.dirname, 'packages/config/src/index.ts'),
   '@trendr/core': resolve(import.meta.dirname, 'packages/core/src/index.ts'),
   '@trendr/db/migrate': resolve(import.meta.dirname, 'packages/db/src/migrate.ts'),

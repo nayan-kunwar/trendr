@@ -2,7 +2,7 @@ import { spawnSync } from 'node:child_process';
 
 import { describe, expect, it } from 'vitest';
 
-import { readEnv } from './env.js';
+import { readEnv, readMcpEnv } from './env.js';
 
 const envModuleUrl = new URL('./env.ts', import.meta.url).href;
 
@@ -92,5 +92,41 @@ describe('@trendr/config env schema', () => {
     expect(child.status).toBe(1);
     expect(child.stderr).toContain('Invalid environment configuration');
     expect(child.stderr).toContain('DATABASE_URL');
+  });
+});
+
+describe('MCP-only environment', () => {
+  it('validates without API/worker secrets', () => {
+    const result = readMcpEnv({
+      MCP_TRANSPORT: 'stdio',
+      API_INTERNAL_URL: 'http://localhost:4000',
+      MCP_API_KEY: 'dt_live_test',
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+    expect(result.env.MCP_TRANSPORT).toBe('stdio');
+    expect(result.env.MCP_PORT).toBe(4100);
+    expect(result.env.MCP_API_KEY).toBe('dt_live_test');
+    expect(result.env.MCP_HTTP_AUTH_TOKENS).toBeUndefined();
+  });
+
+  it('parses HTTP auth tokens and rejects an invalid port', () => {
+    const valid = readMcpEnv({
+      MCP_HTTP_AUTH_TOKENS: 'one, two',
+      MCP_PORT: '4200',
+    });
+    expect(valid.ok).toBe(true);
+    if (valid.ok) {
+      expect(valid.env.MCP_HTTP_AUTH_TOKENS).toEqual(['one', 'two']);
+      expect(valid.env.MCP_PORT).toBe(4200);
+    }
+
+    const invalid = readMcpEnv({ MCP_PORT: 'not-a-port' });
+    expect(invalid.ok).toBe(false);
+    if (!invalid.ok) {
+      expect(invalid.message).toContain('MCP_PORT');
+    }
   });
 });

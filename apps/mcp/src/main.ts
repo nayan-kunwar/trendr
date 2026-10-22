@@ -1,40 +1,33 @@
-import { createServer } from 'node:http';
-import type { Server } from 'node:http';
+#!/usr/bin/env node
+import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 
-import { env } from '@trendr/config';
+import { mcpEnv } from '@trendr/config/mcp';
 import { createLogger } from '@trendr/logger';
 
-const logger = createLogger({ service: 'mcp', level: env.LOG_LEVEL });
+import { HttpApiClient } from './api-client.js';
+import { createMcpHttpServer, type McpHttpServerHandle } from './http.js';
+import { createTrendrMcpServer } from './server.js';
 
-// @trendr/mcp — read-only MCP server (spec §12) arrives in Phase 8. Until then
-// the stub keeps the compose service up: the HTTP transport answers 404 on
-// every path, the stdio transport just keeps the process alive.
-const server: Server | null =
-  env.MCP_TRANSPORT === 'http'
-    ? createServer((_request, response) => {
-        response.writeHead(404, { 'content-type': 'application/json; charset=utf-8' });
-        response.end(JSON.stringify({ error: 'not-found', name: 'trendr-mcp', status: 'stub' }));
-      })
-    : null;
+const transportMode = mcpEnv.MCP_TRANSPORT;
+const logger = createLogger({
+  service: 'mcp',
+  level: mcpEnv.LOG_LEVEL,
+  env: mcpEnv.NODE_ENV,
+  // stdio uses stdout for JSON-RPC; every log line must stay on stderr.
+  ...(transportMode === 'stdio' ? { destination: process.stderr } : {}),
+});
 
-if (server) {
-  await new Promise<void>((resolve, reject) => {
-    server.once('error', reject);
-    server.listen(env.MCP_PORT, '0.0.0.0', () => {
-      server.off('error', reject);
-      resolve();
-    });
-  });
-  logger.info({ port: env.MCP_PORT }, 'mcp stub listening (the real server arrives in Phase 8)');
-} else {
-  logger.info(
-    { transport: env.MCP_TRANSPORT },
-    'mcp stdio stub (the real server arrives in Phase 8)',
-  );
-  process.stdin.resume();
-}
+const apiKey = mcpEnv.MCP_API_KEY?.trim() ?? undefined;
+const api = new HttpApiClient({
+  baseUrl: mcpEnv.API_INTERNAL_URL,
+  ...(apiKey ? { apiKey } : {}),
+});
 
+let stdioServer: McpServer | undefined;
+let httpHandle: McpHttpServerHandle | undefined;
 let shuttingDown = false;
+
 async function shutdown(signal: string): Promise<void> {
   if (shuttingDown) {
     return;
@@ -42,16 +35,11 @@ async function shutdown(signal: string): Promise<void> {
   shuttingDown = true;
   logger.info({ signal }, 'mcp stopping');
   try {
-    if (server) {
-      await new Promise<void>((resolve, reject) => {
-        server.close((error) => {
-          if (error) {
-            reject(error);
-          } else {
-            resolve();
-          }
-        });
-      });
+    if (stdioServer) {
+      await stdioServer.close();
+    }
+    if (httpHandle) {
+      await httpHandle.close();
     }
     process.exit(0);
   } catch (error: unknown) {
@@ -64,4 +52,39 @@ for (const signal of ['SIGINT', 'SIGTERM'] as const) {
   process.once(signal, () => {
     void shutdown(signal);
   });
+}
+
+try {
+  if (transportMode === 'stdio') {
+    stdioServer = createTrendrMcpServer(api);
+    await stdioServer.connect(new StdioServerTransport());
+    if (!apiKey) {
+      logger.warn('MCP_API_KEY is not set; API calls will use anonymous rate limits');
+    }
+    logger.info('mcp stdio transport ready');
+  } else {
+    httpHandle = createMcpHttpServer(api, {
+      ...(mcpEnv.MCP_HTTP_AUTH_TOKENS ? { authTokens: mcpEnv.MCP_HTTP_AUTH_TOKENS } : {}),
+    });
+    await new Promise<void>((resolve, reject) => {
+      httpHandle?.server.once('error', reject);
+      httpHandle?.server.listen(mcpEnv.MCP_PORT, '0.0.0.0', () => {
+        httpHandle?.server.off('error', reject);
+        resolve();
+      });
+    });
+    if (!apiKey) {
+      logger.warn('MCP_API_KEY is not set; API calls will use anonymous rate limits');
+    }
+    if (!mcpEnv.MCP_HTTP_AUTH_TOKENS?.length) {
+      logger.warn('MCP_HTTP_AUTH_TOKENS is not set; /mcp is unauthenticated');
+    }
+    logger.info(
+      { port: mcpEnv.MCP_PORT, baseUrl: mcpEnv.API_INTERNAL_URL },
+      'mcp Streamable HTTP transport ready',
+    );
+  }
+} catch (error: unknown) {
+  logger.error({ err: error }, 'mcp failed to start');
+  process.exit(1);
 }

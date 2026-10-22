@@ -108,6 +108,8 @@ jobs:
           done
           echo "trending assertion failed after 60 s" >&2
           exit 1
+      - name: MCP tools smoke
+        run: node scripts/mcp-smoke.mjs
       - if: failure()
         run: docker compose logs --no-color > compose.log
       - if: failure()

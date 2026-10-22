@@ -4,6 +4,7 @@
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
     "paths": {
+      "@trendr/config/mcp": ["./packages/config/src/mcp.ts"],
       "@trendr/config": ["./packages/config/src/index.ts"],
       "@trendr/core": ["./packages/core/src/index.ts"],
       "@trendr/db": ["./packages/db/src/index.ts"],

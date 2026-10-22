@@ -1523,6 +1523,39 @@ be re-checked later. Decisions with alternatives get an ADR in [`docs/adr/`](./a
 | R-31 | §13.2 scheduler payload | The `build-weekly-digest` job is scheduled without a `weekStart`; the spec's processor input is not shown. | `weekStart` is optional for the build job only; the worker computes the current UTC Monday and passes the explicit value to every `send-digest` child. |
 | R-32 | §10.4 API keys | The spec's create body has `name` and `expiresInDays` but the table also has `scopes` and `rate_limit_per_min`. | User-created keys are read-only and use the 120/min default. Admin-scope keys remain seeded/operator-managed, so a normal account cannot mint its own admin credential. `expiresInDays` is converted to `expires_at` server-side. |
 
+## Phase 8 notes
+
+- **Task 8.1.** `apps/mcp` now builds a real `McpServer` with stdio and stateless Streamable HTTP
+  transports. `POST /mcp` creates a per-request server/transport pair; `GET`/`DELETE` return 405,
+  and `GET /healthz` feeds the Compose healthcheck. `ApiClient` is an interface with a typed
+  `HttpApiClient` implementation, RFC 7807 error mapping, response-schema validation, a 15 s
+  timeout, optional `X-API-Key` forwarding, and manual 302 handling for `/v1/items/lookup`.
+  `@trendr/config/mcp` validates only the MCP subset of the env (ADR-0018).
+- **Task 8.2.** The five §11 tools (`get_trending`, `search_items`, `get_item_history`,
+  `compare_items`, `whats_new_in_mcp`) register input/output schemas and read-only annotations and
+  return both structured content and compact Markdown. `whats_new_in_mcp` merges repository URLs
+  and npm/PyPI package aliases for the first 15 items; later items remain listed without aliases.
+- **Task 8.3.** The README documents Inspector, Claude Desktop stdio and Cursor HTTP configuration.
+  `scripts/mcp-smoke.mjs` exercises `initialize` → `tools/list` → `get_trending` over the Compose
+  HTTP boundary, and CI runs it after the scoring/trending assertion.
+- **Test coverage.** `apps/mcp/test/tools.test.ts` (9), `validation.test.ts` (6),
+  `api-client.test.ts` (6) and `http.test.ts` (1) cover every tool, validation failures, RFC 7807
+  errors, lookup redirects, output schemas/Markdown, bearer auth and the real HTTP transport. The
+  config test suite adds MCP-only env parsing without API/worker secrets.
+
+### Phase 8 deviations
+
+| # | Spec location | Finding | Resolution |
+| --- | --- | --- | --- |
+| R-33 | §11 / GAP-6 | The spec pins `@modelcontextprotocol/sdk` v1 while SDK v2 is available, and older v1 releases required a Zod v3 compatibility shim. | Pinned `1.32.1`; its peer range accepts Zod 4, so no shim is needed. Recorded in ADR-0018. |
+| R-34 | §14 env | `@trendr/config` validates the full API/worker environment at import time, but standalone MCP clients only have MCP + API URL variables. | Added the `@trendr/config/mcp` subpath with all MCP variables plus `API_INTERNAL_URL`; the root export is unchanged for other processes. |
+| R-35 | §11.2 | The spec requires Streamable HTTP but does not define session or GET/DELETE behaviour. | HTTP is stateless: a fresh server/transport per POST; GET/DELETE return 405 per the SDK stateless pattern. `/healthz` is additive for Compose. |
+| R-36 | §11.1 `get_item_history` | `maxDailyGain` is not defined for the three metric kinds. | cumulative: largest day-over-day increase (hourly rolled up); daily_count: largest daily value; gauge: largest positive point-to-point increase. Empty series returns zeros. |
+| R-37 | §11.1 `whats_new_in_mcp` | The API does not expose `registryName` or package metadata on `/v1/new`; aliases are the only source of repo/package links. | Derive `registryName` from the registry URL, use GitHub aliases for `repoUrl`, and npm/PyPI aliases for packages. Alias fetches are best-effort and capped at 15 per call (spec limit); later items keep an empty package list. |
+| R-38 | §11.2 auth | The spec only says tools forward `X-API-Key`; HTTP client auth is unspecified. `MCP_API_KEY` is blank in `.env.example`. | `MCP_API_KEY` is optional (anonymous public rate limit when absent); `/mcp` has optional static bearer auth via `MCP_HTTP_AUTH_TOKENS`. Production should set both. |
+| R-39 | §11 resources/prompt | §11 lists optional resources and a `weekly_briefing` prompt; task 8.2/8.3 acceptance only requires five tools and README configuration. | Deferred to keep Phase 8 scoped. The tool schemas and server instructions leave room to add them without changing the REST boundary. |
+| R-40 | §18 task 8.3 | The spec's Claude Desktop snippet uses `npx @trendr/mcp`, but the workspace package is private and not published. | Added the `trendr-mcp` bin and shebang, but README uses an absolute `node apps/mcp/dist/main.js` path for a checkout and documents `npx` as post-publish only. |
+
 ## Environment quirks worth knowing
 
 
