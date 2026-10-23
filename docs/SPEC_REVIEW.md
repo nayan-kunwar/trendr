@@ -354,11 +354,7 @@ be re-checked later. Decisions with alternatives get an ADR in [`docs/adr/`](./a
   missing or changed `r` returns 410. The int tests cover both the §16 npm-rescore stability
   promise (github pages stay readable) and same-board/combined-run swaps (stale cursors are
   rejected).
-- **`entry.score`.** Source-scope and `all`-scope card/hydrated entries carry the card's source
-  `finalScore` (the §2.5 card design); the SQL `all` path serves `z_score` per §9.1 — a
-  documented divergence of the card-based read, matching the 2.5 note. `minCurrent` filters on
-  the same hydrated `current` the response serves (up to 30 daily points; rows without a series
-  are skipped).
+- **`entry.score`.** Source-scope entries use the card's `final_score`; the combined board uses the ZSET/`z_score` on every path. The Redis path overrides source-shared card scores with the board score and hydrates missing combined entries with `z_score`, so Redis, SQL, and SSE agree. `minCurrent` filters on the same hydrated `current` the response serves (up to 30 daily points; rows without a series are skipped).
 - **SQL path.** `scores` ⋈ `score_runs_current` ⋈ `items`, ordered `(score DESC, item_id DESC)`
   with the §10.3 keyset cursor (`k` = board score) and run-pinned `r`, `topic` via
   `items.id IN (SELECT item_id FROM item_topics JOIN topics …)`, `lang` via
@@ -377,7 +373,7 @@ be re-checked later. Decisions with alternatives get an ADR in [`docs/adr/`](./a
   Testcontainers: board read with cards + hydrated entries, ETag/304, absolute-rank pagination,
   equal-score tie pagination, malformed-cursor 400, no-`lbmeta` npm fallback, topic/kind/lang
   filters + `q:` cache key, `minCurrent` top-up across pages, `newOnly` matrix, combined board
-  (z_score SQL), stability across an npm rescore, same-source and combined-board 410 paths, 410
+  (z_score Redis/SQL consistency), stability across an npm rescore, same-source and combined-board 410 paths, 410
   after a rebuild and fresh restart, 422 when `minCurrent` exhausts the scan budget. `apps/api/openapi.json` re-exported (4 paths).
 
 ### Task 3.3 notes

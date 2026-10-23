@@ -716,7 +716,7 @@ describe('GET /v1/trending over real Postgres + Redis (task 3.2)', () => {
     });
   });
 
-  it('serves the combined board from Redis and z_scores on its SQL path (spec §9.1)', async () => {
+  it('serves z_scores consistently on the combined Redis and SQL paths (spec §9.1)', async () => {
     await withApp(async (app) => {
       const board = (await trending(app, '?window=24h')).json<TrendingResponseBody>();
       expect(externalIds(board)).toEqual([
@@ -726,15 +726,27 @@ describe('GET /v1/trending over real Postgres + Redis (task 3.2)', () => {
         `${PREFIX}-c`,
       ]);
       expect(board.data.map((entry) => entry.rank)).toEqual([1, 2, 3, 4]);
-      // D has no card: hydration serves the source score the card would carry.
+      // Cards are shared with source boards and carry `final_score`; the
+      // combined read must still expose the ZSET's `z_score` for every entry.
+      expect(entryFor(board, `${PREFIX}-a`)).toMatchObject({ rank: 1, score: 3 });
       expect(entryFor(board, `${PREFIX}-d`)).toMatchObject({
         rank: 2,
-        score: 25,
+        score: 2.5,
         current: 1100,
         sparkline: [1000, 1100],
       });
+      expect(entryFor(board, `${PREFIX}-b`)).toMatchObject({ rank: 3, score: 2 });
+      expect(entryFor(board, `${PREFIX}-c`)).toMatchObject({ rank: 4, score: 1 });
 
-      // Filtered combined reads page in z_score order and serve z_scores.
+      // A filtered combined read uses the same scores and rank order.
+      const filteredAll = (
+        await trending(app, '?window=24h&minCurrent=0')
+      ).json<TrendingResponseBody>();
+      expect(
+        filteredAll.data.map((entry) => [entry.item.externalId, entry.rank, entry.score]),
+      ).toEqual(board.data.map((entry) => [entry.item.externalId, entry.rank, entry.score]));
+
+      // The selective path pages in z_score order and serves z_scores.
       const filtered = (
         await trending(app, '?window=24h&minCurrent=90')
       ).json<TrendingResponseBody>();

@@ -143,13 +143,13 @@ This document supersedes `BUGS.md`. The previous file was reviewed first; none o
 
 ## Known or accepted gaps
 
-These are real limitations, but they are documented or intentionally tested in the current tree. They are listed separately so they are not presented as newly discovered defects.
+These are real limitations, but they are documented or intentionally tested in the current tree. They are listed separately so they are not presented as newly discovered defects. `K-01` has since been resolved; the remaining entries are still accepted.
 
-### K-01 — Combined-board `entry.score` differs between HTTP paths and SSE
+### K-01 — Combined-board `entry.score` differs between HTTP paths and SSE (resolved)
 
-- **Location:** `docs/SPEC_REVIEW.md:350-354`; `apps/worker/src/scoring/publish-leaderboards.ts:323-332`; `apps/api/src/routes/trending.ts:397`; test `apps/api/test/int/trending.int.test.ts:654-679`
+- **Location:** `docs/SPEC_REVIEW.md:350-354`; `apps/worker/src/scoring/publish-leaderboards.ts:323-332`; `apps/api/src/routes/trending.ts:397`; test `apps/api/test/int/trending.int.test.ts:719-757`
 - **Behavior:** The combined board's Redis ZSET is scored by `zScore`, but the combined board is published without cards. The HTTP Redis path hydrates missing entries with `useZScore = false`, so it serves `finalScore`; the SQL filtered path serves `zScore`. The SSE snapshot reads the ZSET scores directly, so it serves `zScore`. `LeaderboardEntrySchema` says the combined board should carry `zScore` (`packages/core/src/leaderboard.ts:45-46`).
-- **Status:** Explicitly documented as a divergence and locked in by the integration test. It still means the same endpoint returns different score values depending on whether a filter/cache path is used, and SSE can disagree with HTTP. Decide whether to accept and adjust the wire contract, or fix the card/hydration path to use the board score.
+- **Status:** **Fixed 2026-10-23.** The Redis read now treats the ZSET score as authoritative for every combined-board entry, including entries whose cards came from a source board, and hydrates missing combined entries with `z_score`. The integration test asserts that Redis and SQL combined reads return identical `(externalId, rank, score)` tuples.
 
 ### K-02 — Trigram search fallback is intentionally sequential
 
@@ -190,5 +190,6 @@ These are real limitations, but they are documented or intentionally tested in t
 - `C-03` was reproduced with a minimal Fastify + `@fastify/cors` hijack route (HTTP 200, `access-control-allow-origin` absent). The fix now passes the real `apps/api/test/int/stream.int.test.ts` case against Testcontainers.
 - `C-01` and `C-02` were confirmed by code inspection at audit time and are now covered by Redis/Postgres integration tests: equal-score pagination, same-source SQL cursor rebuild, and combined-board source swap. `C-05`/`C-06` are covered by targeted integration tests, and `C-07`/`C-08` by unit/integration tests. At audit time, database/Redis-backed integration execution was not possible: native PostgreSQL on `5432` rejected the `trendr:trendr` credentials, no Docker containers were running, and no Redis was listening on `6379`.
 - During remediation, Testcontainers Postgres/Redis became available: `apps/api/test/int/trending.int.test.ts` (14 tests), `apps/api/test/int/auth.int.test.ts` (6 tests), `apps/api/test/int/stream.int.test.ts` (2 tests), and `apps/api/test/int/health.int.test.ts` (ready plus Postgres-only degraded) pass. The worker metrics-server integration test (6 tests), the full unit suite (77 files / 566 tests), and API/worker typecheck and lint pass.
+- Release-gate verification on 2026-10-23: monorepo typecheck and lint, the full unit suite (77 files / 566 tests), the full integration suite (30 files / 149 tests), and the production build pass. Contract probes were skipped by design because `CONTRACT=1` and upstream tokens were not configured. `K-01` is covered by the combined-board Redis/SQL consistency assertion.
 - The existing tests generally use small fixtures and distinct scores; the gaps noted above explain why the remaining defects were not caught.
 - `BUGS.md` has been removed and replaced by this audit.

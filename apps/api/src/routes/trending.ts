@@ -279,8 +279,8 @@ async function ranksOf(
 
 /**
  * Hydrate entries from Postgres (§9.3: cards are only minted for board heads).
- * `useZScore` is false for the Redis path, where cards carry the source score
- * (§2.5 note) — hydration stays consistent with what `card:*` would have held.
+ * `useZScore` selects the combined board's score/rank; source boards use the
+ * card's final score.
  */
 async function hydrateEntries(
   app: FastifyInstance,
@@ -407,7 +407,7 @@ async function loadRedisPage(
     byMember.set(pair.member, fromCard(card));
   });
   if (missing.length > 0) {
-    const hydrated = await hydrateEntries(app, scope, w, missing, false);
+    const hydrated = await hydrateEntries(app, scope, w, missing, scope === 'all');
     for (const [member, row] of hydrated) {
       byMember.set(member, row);
     }
@@ -419,7 +419,11 @@ async function loadRedisPage(
     if (row === undefined) {
       return;
     }
-    data.push(toEntry(row, w, ranks[index] ?? index + 1));
+    // The board score is authoritative. Source cards carry `final_score`, but
+    // the combined board is scored by `z_score`; using the ZSET score keeps the
+    // Redis, SQL, and SSE representations of the same board consistent.
+    const entry = scope === 'all' ? { ...row, score: pair.score } : row;
+    data.push(toEntry(entry, w, ranks[index] ?? index + 1));
   });
 
   const last = fetched.at(-1);
