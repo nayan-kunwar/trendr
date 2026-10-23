@@ -16,6 +16,7 @@ import {
   markAuthTokenUsed,
   markUserVerified,
   revokeAuthTokenFamily,
+  setUserRole,
   type Db,
   type UserRecord,
 } from '@trendr/db';
@@ -138,8 +139,11 @@ export async function rotateRefreshToken(
     const user = await findUserById(tx, token.userId);
     if (user === null) return null;
 
+    const role = options.adminEmails.includes(normalizeEmail(user.email)) ? 'admin' : 'user';
+    const refreshedUser = user.role === role ? user : await setUserRole(tx, user.id, role);
+
     await markAuthTokenUsed(tx, token.id, now);
-    return createRefreshSession(tx, user, now, token.familyId, options.refreshTtlDays);
+    return createRefreshSession(tx, refreshedUser, now, token.familyId, options.refreshTtlDays);
   });
 }
 

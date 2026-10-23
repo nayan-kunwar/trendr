@@ -25,6 +25,7 @@ const MAILPIT_URL = process.env.MAILPIT_URL ?? '';
 const JWT_SECRET = 'int-auth-jwt-secret-0123456789abcdef';
 const EMAIL_PREFIX = 'int-auth-';
 const ADMIN_EMAIL = `${EMAIL_PREFIX}admin@example.test`;
+const adminEmails: string[] = [ADMIN_EMAIL];
 
 let connection: Connection;
 let redis: Redis;
@@ -45,7 +46,7 @@ beforeAll(async () => {
     auth: {
       emailSender: new SmtpEmailSender('Trendr <digest@localhost>', SMTP_URL),
       webPublicUrl: 'http://localhost:3000',
-      adminEmails: [ADMIN_EMAIL],
+      adminEmails,
       authRateLimitMax: 1_000,
       cookieSecure: true,
     },
@@ -270,6 +271,39 @@ describe('magic-link auth and refresh rotation (task 7.1)', () => {
       headers: { cookie: `dt_refresh=${cookie}`, 'x-requested-with': 'trendr' },
     });
     expect(refresh.statusCode).toBe(401);
+  });
+
+  it('demotes a stored admin when the address leaves ADMIN_EMAILS', async () => {
+    const { accessToken, cookie } = await login(ADMIN_EMAIL);
+    const me = await app.inject({
+      method: 'GET',
+      url: '/v1/me',
+      headers: { authorization: `Bearer ${accessToken}` },
+    });
+    expect(me.json<{ role: string }>().role).toBe('admin');
+
+    adminEmails.splice(0, adminEmails.length);
+    try {
+      // A refresh rotates the session and re-evaluates the authoritative list.
+      const refreshed = await app.inject({
+        method: 'POST',
+        url: '/v1/auth/refresh',
+        headers: { cookie: `dt_refresh=${cookie}`, 'x-requested-with': 'trendr' },
+      });
+      expect(refreshed.statusCode, refreshed.body).toBe(200);
+      expect(refreshed.json<{ user: { role: string } }>().user.role).toBe('user');
+
+      // A fresh magic-link flow also issues a user token after demotion.
+      const demoted = await login(ADMIN_EMAIL);
+      const demotedMe = await app.inject({
+        method: 'GET',
+        url: '/v1/me',
+        headers: { authorization: `Bearer ${demoted.accessToken}` },
+      });
+      expect(demotedMe.json<{ role: string }>().role).toBe('user');
+    } finally {
+      adminEmails.push(ADMIN_EMAIL);
+    }
   });
 
   it('rejects an expired magic link', async () => {

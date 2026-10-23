@@ -15,6 +15,17 @@ export async function findUserById(db: DbExecutor, id: string): Promise<UserReco
   return rows[0] ?? null;
 }
 
+/** Set the stored role explicitly; ADMIN_EMAILS is authoritative at issuance/refresh. */
+export async function setUserRole(
+  db: DbExecutor,
+  id: string,
+  role: UserRecord['role'],
+): Promise<UserRecord> {
+  const [updated] = await db.update(users).set({ role }).where(eq(users.id, id)).returning();
+  if (updated === undefined) throw new Error('setUserRole: user not found');
+  return updated;
+}
+
 /**
  * Magic links need a `users.id` because `auth_tokens.user_id` is NOT NULL, and
  * the spec deliberately avoids account enumeration. Issuing a link therefore
@@ -27,13 +38,9 @@ export async function ensureUserForLogin(
 ): Promise<UserRecord> {
   const existing = await findUserByEmail(db, email);
   if (existing !== null) {
-    if (isAdmin && existing.role !== 'admin') {
-      const [updated] = await db
-        .update(users)
-        .set({ role: 'admin' })
-        .where(eq(users.id, existing.id))
-        .returning();
-      return updated ?? { ...existing, role: 'admin' };
+    const role = isAdmin ? 'admin' : 'user';
+    if (existing.role !== role) {
+      return setUserRole(db, existing.id, role);
     }
     return existing;
   }
@@ -61,7 +68,7 @@ export async function markUserVerified(
     .set({
       emailVerifiedAt: sql`coalesce(${users.emailVerifiedAt}, ${now})`,
       lastLoginAt: now,
-      ...(isAdmin ? { role: 'admin' as const } : {}),
+      role: isAdmin ? ('admin' as const) : ('user' as const),
     })
     .where(eq(users.id, id))
     .returning();
