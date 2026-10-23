@@ -9,6 +9,7 @@ import {
   normalizeEmail,
   randomToken,
   signUnsubscribeToken,
+  timingSafeStringEqual,
   verifyUnsubscribeToken,
   weekStartUtc,
 } from '../src/auth.js';
@@ -31,6 +32,13 @@ describe('token helpers', () => {
 
   it('normalizes emails for citext-equivalent lookups', () => {
     expect(normalizeEmail('  Person@Example.COM ')).toBe('person@example.com');
+  });
+
+  it('compares secrets without early exit and rejects length mismatches', () => {
+    expect(timingSafeStringEqual('Bearer token-0123456789', 'Bearer token-0123456789')).toBe(true);
+    expect(timingSafeStringEqual('Bearer token-0123456789', 'Bearer token-0123456788')).toBe(false);
+    expect(timingSafeStringEqual('short', 'a much longer secret')).toBe(false);
+    expect(timingSafeStringEqual('', '')).toBe(true);
   });
 });
 

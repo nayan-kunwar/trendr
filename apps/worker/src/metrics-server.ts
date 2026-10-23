@@ -1,6 +1,7 @@
 import { createServer } from 'node:http';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
+import { timingSafeStringEqual } from '@trendr/core';
 import { Registry } from 'prom-client';
 
 import type { Logger } from '@trendr/logger';
@@ -106,7 +107,11 @@ async function handleRequest(
         return;
       }
       case '/metrics': {
-        if (request.headers.authorization !== `Bearer ${options.metricsToken}`) {
+        const authorization = request.headers.authorization;
+        if (
+          authorization === undefined ||
+          !timingSafeStringEqual(authorization, `Bearer ${options.metricsToken}`)
+        ) {
           respond(
             response,
             401,

@@ -69,6 +69,11 @@ describe('worker metrics server', () => {
     const denied = await fetch(`http://127.0.0.1:${server.port}/metrics`);
     expect(denied.status).toBe(401);
 
+    const wrong = await fetch(`http://127.0.0.1:${server.port}/metrics`, {
+      headers: { authorization: 'Bearer test-metrics-tokeN' },
+    });
+    expect(wrong.status).toBe(401);
+
     const allowed = await fetch(`http://127.0.0.1:${server.port}/metrics`, {
       headers: { authorization: 'Bearer test-metrics-token' },
     });

@@ -37,6 +37,17 @@ export function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
 }
 
+/**
+ * Constant-time comparison for secret strings (bearer tokens, HMACs). The
+ * length guard keeps `timingSafeEqual` from throwing when the inputs differ in
+ * length; equal-length inputs are compared without an early exit.
+ */
+export function timingSafeStringEqual(left: string, right: string): boolean {
+  const a = Buffer.from(left, 'utf8');
+  const b = Buffer.from(right, 'utf8');
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
 export interface UnsubscribeTokenInput {
   userId: string;
   purpose: UnsubscribePurpose;
@@ -73,7 +84,7 @@ export function verifyUnsubscribeToken(
     return null;
   }
   const expected = hmacBase64Url(secret, encoded);
-  if (!safeEqual(signature, expected)) {
+  if (!timingSafeStringEqual(signature, expected)) {
     return null;
   }
 
@@ -111,10 +122,4 @@ export function weekStartUtc(date: Date): string {
 
 function hmacBase64Url(secret: string, payload: string): string {
   return createHmac('sha256', secret).update(payload).digest('base64url');
-}
-
-function safeEqual(left: string, right: string): boolean {
-  const a = Buffer.from(left);
-  const b = Buffer.from(right);
-  return a.length === b.length && timingSafeEqual(a, b);
 }

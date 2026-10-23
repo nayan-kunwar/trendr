@@ -1,7 +1,7 @@
 import { Counter, Gauge, Histogram, Registry, collectDefaultMetrics } from 'prom-client';
 import type { FastifyInstance } from 'fastify';
 
-import { UnauthorizedError } from '@trendr/core';
+import { timingSafeStringEqual, UnauthorizedError } from '@trendr/core';
 import type { Connection } from '@trendr/db';
 
 import type { CacheKind, CacheResult } from './cache.js';
@@ -89,7 +89,11 @@ export function registerMetrics(app: FastifyInstance, options: MetricsOptions = 
 
   app.get('/metrics', (request, reply) => {
     const authorization = request.headers.authorization;
-    if (options.metricsToken === undefined || authorization !== `Bearer ${options.metricsToken}`) {
+    if (
+      options.metricsToken === undefined ||
+      authorization === undefined ||
+      !timingSafeStringEqual(authorization, `Bearer ${options.metricsToken}`)
+    ) {
       throw new UnauthorizedError('metrics requires a bearer token');
     }
     reply.type(registry.contentType);
