@@ -151,7 +151,9 @@ jobs:
         run: pnpm --filter @trendr/sources test:contract
         env:
           CONTRACT: '1'
-          GITHUB_TOKENS: ${{ secrets.GITHUB_TOKENS }}
+          # GitHub reserves the GITHUB_ prefix for secret names; the workflow
+          # maps the repo secret into the env var the adapters read.
+          GITHUB_TOKENS: ${{ secrets.TRENDR_GITHUB_TOKENS }}
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
       - if: failure()
         uses: actions/github-script@v7
