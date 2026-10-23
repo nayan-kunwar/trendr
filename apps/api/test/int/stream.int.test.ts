@@ -276,9 +276,10 @@ async function withListeningApp(
 describe('SSE leaderboard stream (task 3.6)', () => {
   it('streams the snapshot first and then the published update', async () => {
     await withListeningApp(async (open) => {
-      const stream = await open();
+      const stream = await open({ origin: 'http://localhost:3000' });
       expect(stream.response.status).toBe(200);
       expect(stream.response.headers.get('content-type')).toContain('text/event-stream');
+      expect(stream.response.headers.get('access-control-allow-origin')).toBe('*');
       expect(stream.response.headers.get('cache-control')).toBe('no-cache, no-transform');
       expect(stream.response.headers.get('x-accel-buffering')).toBe('no');
 

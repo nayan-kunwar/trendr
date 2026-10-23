@@ -141,14 +141,24 @@ export function registerStreamRoutes(app: FastifyInstance, options: StreamRouteO
         app.log.warn({ err: error }, 'sse concurrency counter unavailable; failing open');
       }
 
-      reply.hijack();
-      const raw = reply.raw;
-      raw.writeHead(200, {
+      // `reply.hijack()` bypasses Fastify's normal header serialization, so
+      // copy headers set by onRequest plugins (notably @fastify/cors) before
+      // switching to the raw response.
+      const headers: Record<string, string | string[]> = {};
+      for (const [name, value] of Object.entries(reply.getHeaders())) {
+        if (value !== undefined) {
+          headers[name] = Array.isArray(value) ? value : String(value);
+        }
+      }
+      Object.assign(headers, {
         'content-type': 'text/event-stream',
         'cache-control': CACHE_CONTROL.sse,
         connection: 'keep-alive',
         'x-accel-buffering': 'no',
       });
+      reply.hijack();
+      const raw = reply.raw;
+      raw.writeHead(200, headers);
 
       let finalized = false;
       let ready = false;

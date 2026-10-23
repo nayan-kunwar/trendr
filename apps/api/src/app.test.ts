@@ -50,14 +50,33 @@ describe('apps/api', () => {
   );
 
   it(
-    'GET /readyz reports readiness with check details',
+    'GET /readyz reports degraded when dependencies are absent',
     async () => {
       await withApp(async (app) => {
+        const response = await app.inject({ method: 'GET', url: '/readyz' });
+        expect(response.statusCode).toBe(503);
+        const body = response.json<{ status: string; checks: Record<string, string> }>();
+        expect(body.status).toBe('degraded');
+        expect(body.checks).toEqual({ db: 'error', redis: 'error', migrations: 'error' });
+      });
+    },
+    TEST_TIMEOUT,
+  );
+
+  it(
+    'GET /readyz reports ready when all probes succeed',
+    async () => {
+      await withApp(async (app) => {
+        app.decorate('pool', {
+          query: () => Promise.resolve({ rowCount: 1, rows: [{}] }),
+        } as never);
+        app.decorate('redis', { ping: () => Promise.resolve('PONG') } as never);
+
         const response = await app.inject({ method: 'GET', url: '/readyz' });
         expect(response.statusCode).toBe(200);
         const body = response.json<{ status: string; checks: Record<string, string> }>();
         expect(body.status).toBe('ready');
-        expect(body.checks).toMatchObject({ db: 'ok', redis: 'ok', migrations: 'ok' });
+        expect(body.checks).toEqual({ db: 'ok', redis: 'ok', migrations: 'ok' });
       });
     },
     TEST_TIMEOUT,
