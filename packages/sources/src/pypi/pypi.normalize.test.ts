@@ -84,6 +84,28 @@ describe('normalizePypiItem — project JSON (spec §7.3.3)', () => {
     ).toBeNull();
     expect(normalizePypiItem(fetched({ kind: 'metadata', project: null }))).toBeNull();
   });
+
+  it('drops non-http homepages and falls back to a safe project URL', () => {
+    const unsafe = {
+      ...PROJECT,
+      info: { ...PROJECT.info, home_page: 'javascript:alert(1)', project_urls: {} },
+    };
+    expect(
+      normalizePypiItem(fetched({ kind: 'metadata', project: unsafe }))?.item.homepage,
+    ).toBeNull();
+
+    const fallback = {
+      ...PROJECT,
+      info: {
+        ...PROJECT.info,
+        home_page: 'data:text/html,<script>alert(1)</script>',
+        project_urls: { Homepage: 'https://safe.example/project' },
+      },
+    };
+    expect(normalizePypiItem(fetched({ kind: 'metadata', project: fallback }))?.item.homepage).toBe(
+      'https://safe.example/project',
+    );
+  });
 });
 
 describe('normalizePypiItem — downloads (spec §7.3.3)', () => {

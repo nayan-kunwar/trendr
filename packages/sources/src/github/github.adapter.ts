@@ -4,6 +4,7 @@ import {
   normalizeTopicSlugs,
   RedisTokenBucket,
   redisKeys,
+  safeHttpUrl,
   UpstreamError,
   type FetchJsonMetricsSink,
   type ItemFlag,
@@ -116,12 +117,6 @@ export interface GitHubAdapterConfig {
   etags: GitHubEtagStore;
 }
 
-function emptyToNull(value: string | null): string | null {
-  if (value === null) return null;
-  const trimmed = value.trim();
-  return trimmed === '' ? null : trimmed;
-}
-
 /**
  * Spec §5.1 `normalize` — pure payload → canonical shape. Handles both the
  * GraphQL batch shape and the REST repo shape (search items share it).
@@ -178,7 +173,7 @@ export function normalizeGitHubItem(
       displayName: externalId,
       description: raw.description,
       url: isGraphql ? raw.url : raw.html_url,
-      homepage: emptyToNull(isGraphql ? raw.homepageUrl : raw.homepage),
+      homepage: safeHttpUrl(isGraphql ? raw.homepageUrl : raw.homepage),
       language: (isGraphql ? raw.primaryLanguage?.name : raw.language) ?? null,
       license: spdx === 'NOASSERTION' ? null : spdx,
       owner,

@@ -1,4 +1,4 @@
-import { normalizeTopicSlugs, redisKeys } from '@trendr/core';
+import { normalizeTopicSlugs, redisKeys, safeHttpUrl } from '@trendr/core';
 import {
   fetchJson,
   UpstreamError,
@@ -175,12 +175,12 @@ function githubAliases(project: PypiProject): NormalizedItem['aliases'] {
 }
 
 function homepageFor(project: PypiProject): string | null {
-  const home = cleanString(project.info.home_page);
+  const home = safeHttpUrl(project.info.home_page);
   if (home !== null) return home;
   for (const [key, value] of Object.entries(project.info.project_urls ?? {})) {
     const lowered = key.toLowerCase();
     if ((lowered === 'homepage' || lowered === 'home') && value !== null) {
-      const cleaned = cleanString(value);
+      const cleaned = safeHttpUrl(value);
       if (cleaned !== null) return cleaned;
     }
   }

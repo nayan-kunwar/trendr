@@ -7,6 +7,7 @@ import {
   NotFoundError,
   paramsFor,
   redisKeys,
+  safeHttpUrl,
   type Metric,
   type ScoringParams,
   type Source,
@@ -142,7 +143,9 @@ async function readItemDetail(app: FastifyInstance, id: bigint): Promise<ItemDet
     displayName: item.displayName,
     description: item.description,
     url: item.url,
-    homepage: item.homepage,
+    // Revalidate legacy rows at the API boundary: adapters reject non-HTTP
+    // homepages, but recently stored values may predate that guard.
+    homepage: safeHttpUrl(item.homepage),
     language: item.language,
     license: item.license,
     owner: item.owner,

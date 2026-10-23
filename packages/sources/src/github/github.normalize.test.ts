@@ -113,6 +113,13 @@ describe('github normalize (spec §5.1, §7.3.1)', () => {
     ]);
   });
 
+  it('drops non-http homepages from upstream payloads', () => {
+    const normalized = normalizeGitHubItem(
+      fetched({ ...restRepo, homepage: 'javascript:alert(1)' }),
+    );
+    expect(normalized?.item.homepage).toBeNull();
+  });
+
   it('maps search items (no subscriber count → no watchers snapshot)', () => {
     const item = searchResponse.items[0];
     if (item === undefined) throw new Error('fixture item missing');

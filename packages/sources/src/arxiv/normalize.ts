@@ -1,4 +1,4 @@
-import { normalizeTopicSlugs } from '@trendr/core';
+import { normalizeTopicSlugs, safeHttpUrl } from '@trendr/core';
 
 import type { FetchedItem, NormalizedItem } from '../adapter.js';
 import { parseGitHubRepositoryUrl } from '../npm/downloads.js';
@@ -77,17 +77,6 @@ function metadataForPaper(paper: HfPaper): Record<string, unknown> {
   return metadata;
 }
 
-function safeHomepage(raw: string | null | undefined): string | null {
-  const value = cleanString(raw);
-  if (value === null) return null;
-  try {
-    const url = new URL(value);
-    return url.protocol === 'https:' || url.protocol === 'http:' ? url.href : null;
-  } catch {
-    return null;
-  }
-}
-
 function paperAliases(paper: HfPaper): NormalizedItem['aliases'] {
   const repository = parseGitHubRepositoryUrl(paper.githubRepo);
   if (repository === null) return [];
@@ -156,7 +145,7 @@ function normalizePaper(refExternalId: string, paper: HfPaper): NormalizedItem |
       displayName: title,
       description: summary === null ? null : summary.slice(0, 1_000),
       url: arxivAbstractUrl(externalId),
-      homepage: safeHomepage(paper.projectPage),
+      homepage: safeHttpUrl(paper.projectPage),
       language: null,
       license: null,
       owner: null,

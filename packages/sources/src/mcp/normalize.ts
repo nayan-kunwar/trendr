@@ -5,6 +5,7 @@ import {
   normalizeNpmPackage,
   normalizePyPiName,
   normalizeTopicSlugs,
+  safeHttpUrl,
   type ItemFlag,
 } from '@trendr/core';
 
@@ -383,17 +384,6 @@ function cleanString(value: string | null | undefined): string | null {
 function cleanDescription(value: string | null | undefined): string | null {
   const cleaned = cleanString(value);
   return cleaned === null ? null : cleaned.slice(0, 2_000);
-}
-
-function safeHttpUrl(value: string | null | undefined): string | null {
-  const cleaned = cleanString(value);
-  if (cleaned === null) return null;
-  try {
-    const url = new URL(cleaned);
-    return url.protocol === 'http:' || url.protocol === 'https:' ? cleaned : null;
-  } catch {
-    return null;
-  }
 }
 
 function dateOrNull(value: string | null | undefined): Date | null {

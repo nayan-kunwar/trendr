@@ -176,7 +176,7 @@ beforeAll(async () => {
   await db.update(ingestionRuns).set({ startedAt: H2 }).where(eq(ingestionRuns.id, runH2));
 
   const upserted = await upsertItems(db, [
-    itemFixture(`${PREFIX}-a`),
+    itemFixture(`${PREFIX}-a`, { homepage: 'javascript:alert(1)' }),
     itemFixture(`${PREFIX}-b`, {
       source: 'npm',
       kind: 'package',
@@ -344,6 +344,8 @@ describe('item endpoints over real Postgres + Redis (task 3.3)', () => {
         kind: 'repo',
         externalId: `${PREFIX}-a`,
         displayName: `${PREFIX}-a`,
+        // The fixture stores `javascript:alert(1)`; the API drops it.
+        homepage: null,
         language: 'TypeScript',
         topics: [TOPIC],
         primaryMetric: 'stars',

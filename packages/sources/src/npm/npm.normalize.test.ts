@@ -132,6 +132,14 @@ describe('normalizeNpmItem — packument (spec §7.3.2)', () => {
     expect(normalized?.item.language).toBe('typescript');
   });
 
+  it('drops non-http homepages from packuments', () => {
+    const unsafe = { ...PACKUMENT, homepage: 'javascript:alert(1)' };
+    const normalized = normalizeNpmItem(
+      fetched({ kind: 'packument', packument: unsafe }, 'is-number'),
+    );
+    expect(normalized?.item.homepage).toBeNull();
+  });
+
   it('returns null for a 404 / not-modified payload', () => {
     expect(
       normalizeNpmItem({
