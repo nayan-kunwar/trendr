@@ -7,7 +7,7 @@
 
 This document supersedes `BUGS.md`. The previous file was reviewed first; none of its entries were confirmed as written against the current tree, so its claims were not carried forward. Findings below are independently evidenced.
 
-> **Remediation status (2026-10-23):** `C-03` and `C-04` were fixed after the baseline audit below. The finding text describes the pre-fix code; their `Status` lines record the fixes and test coverage. The remaining findings are unchanged.
+> **Audit status (2026-10-23): complete.** All eight confirmed findings (`C-01`–`C-08`) and `K-01`, `K-03`–`K-05` are fixed, with coverage recorded below. `K-02` is accepted and deferred pending scale/benchmark evidence; the hardening notes remain operational guidance, not open defects. Contract probes were not run because their credentials were unavailable; skipped probes are not failures. The finding text describes the pre-fix code; the `Status` lines record the remediation.
 
 ## Severity scale
 
@@ -143,7 +143,7 @@ This document supersedes `BUGS.md`. The previous file was reviewed first; none o
 
 ## Known or accepted gaps
 
-These are real limitations, but they are documented or intentionally tested in the current tree. They are listed separately so they are not presented as newly discovered defects. `K-01` and `K-03`–`K-05` have since been resolved; `K-02` remains accepted.
+These are real limitations, but they are documented or intentionally tested in the current tree. They are listed separately so they are not presented as newly discovered defects. `K-01` and `K-03`–`K-05` have since been resolved; `K-02` is accepted and deferred, and the audit is otherwise closed.
 
 ### K-01 — Combined-board `entry.score` differs between HTTP paths and SSE (resolved)
 
@@ -155,6 +155,7 @@ These are real limitations, but they are documented or intentionally tested in t
 
 - **Location:** `packages/db/src/repositories/search.repo.ts` (trigram fallback); `docs/SPEC_REVIEW.md:472-480`
 - **Behavior:** The fallback uses `word_similarity(lower($q), lower(display_name)) > 0` and excludes FTS matches. The documentation states that this scan is sequential by design and should be revisited as the item count grows. It is a scaling/availability risk for unusual low-hit queries, not an unnoticed functional bug.
+- **Status:** **Accepted 2026-10-23; deferred.** No functional defect and no code change: the sequential scan is documented, and the fix depends on item volume. Revisit when benchmarks or `EXPLAIN` show the fallback is material, then choose an index or a materialized search path.
 
 ### K-03 — Some upstream homepages are stored as raw URLs (resolved)
 
