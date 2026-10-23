@@ -31,7 +31,8 @@ export interface RunningMetricsServer {
 }
 
 /**
- * Worker observability endpoint (spec §14.4): `:9464/healthz` is open and
+ * Worker observability endpoint (spec §14.4): `:9464/healthz` is open liveness,
+ * `:9464/readyz` is open dependency readiness (503 when Redis is down), and
  * `:9464/metrics` requires `Authorization: Bearer ${METRICS_TOKEN}`.
  * The port is exposed to the Docker network only, never published on the host.
  */
@@ -90,6 +91,17 @@ async function handleRequest(
           200,
           'application/json; charset=utf-8',
           JSON.stringify({ status: 'ok', ...options.getHealth() }),
+        );
+        return;
+      }
+      case '/readyz': {
+        const health = options.getHealth();
+        const ready = health.redis === 'connected';
+        respond(
+          response,
+          ready ? 200 : 503,
+          'application/json; charset=utf-8',
+          JSON.stringify({ status: ready ? 'ready' : 'degraded', ...health }),
         );
         return;
       }

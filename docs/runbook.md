@@ -12,7 +12,7 @@ repository root and the Compose stack from §17.
 | Surface | URL / access |
 | --- | --- |
 | API metrics | `http://localhost:4000/metrics` with `Authorization: Bearer $METRICS_TOKEN` |
-| Worker health | `docker compose exec worker node -e "fetch('http://localhost:9464/healthz').then(r=>process.exit(r.ok?0:1))"` |
+| Worker health | `/healthz` liveness; `/readyz` readiness (503 when Redis is down): `docker compose exec worker node -e "fetch('http://localhost:9464/readyz').then(r=>process.exit(r.ok?0:1))"` |
 | Worker metrics | internal only; Prometheus scrapes `worker:9464` with `METRICS_TOKEN` |
 | Prometheus | `http://localhost:9090` (profile `obs`) |
 | Grafana | `http://localhost:3001`; dashboard **Trendr Overview** |
@@ -236,7 +236,7 @@ in Prometheus and `pnpm obs:smoke` passes.
 
 ### Worker down / queue backlog
 
-1. `docker compose exec worker ... /healthz`; logs for `worker error`.
+1. `docker compose exec worker ... /readyz`; logs for `worker error`.
 2. `trendr_queue_depth{state="waiting"}` and
    `trendr_queue_depth{queue="dead-letter",state="waiting"}`.
 3. Check upstream errors (`rate_limited`, `network`, `server`) and

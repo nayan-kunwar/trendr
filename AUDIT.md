@@ -28,10 +28,10 @@ This document supersedes `BUGS.md`. The previous file was reviewed first; none o
 | C-04 | High     | API / operations     | `/readyz` reports hardcoded success without probing dependencies            | Fixed  |
 | C-05 | Medium   | API / availability   | `minCurrent` can force an unbounded full-board scan                         | Open   |
 | C-06 | Medium   | Auth / admin         | Removing an email from `ADMIN_EMAILS` never demotes the stored admin role   | Open   |
-| C-07 | Low      | Worker / operations  | `/healthz` always returns HTTP 200, even when Redis is disconnected         | Open   |
-| C-08 | Low      | Auth / rate limiting | Auth guard uses `request.ip` instead of the shared trusted-client-IP helper | Open   |
+| C-07 | Low      | Worker / operations  | `/healthz` always returns HTTP 200, even when Redis is disconnected         | Fixed  |
+| C-08 | Low      | Auth / rate limiting | Auth guard uses `request.ip` instead of the shared trusted-client-IP helper | Fixed  |
 
-`C-01`–`C-05` are ordinary defects. `C-06`–`C-08` are deployment/policy-sensitive; they are still confirmed code behavior, not speculation.
+`C-01`–`C-05` are ordinary defects. `C-06`–`C-08` are deployment/policy-sensitive; C-07 and C-08 are now fixed, and C-06 remains open pending a policy decision.
 
 ## Confirmed findings
 
@@ -126,6 +126,7 @@ This document supersedes `BUGS.md`. The previous file was reviewed first; none o
 - **Impact:** A worker that has lost Redis (and therefore cannot process BullMQ jobs) remains "healthy" to Compose and will not be restarted or flagged. Monitoring must parse the body rather than rely on the healthcheck.
 - **Verification:** Confirmed in code; the existing worker test explicitly expects a 200 when `redis` is `'disconnected'` (`apps/worker/test/int/metrics-server.int.test.ts:36-43`), so the behavior is intentional/liveness-oriented but is used as dependency health in Compose.
 - **Recommended fix:** Decide whether this is liveness or readiness. If it is readiness, return 503 when Redis is disconnected or the scheduler is not registered, and add a separate liveness endpoint if needed. Update the Compose check accordingly.
+- **Status:** **Fixed 2026-10-23.** `/healthz` remains liveness and still reports the structured state; a new `/readyz` returns 200 only when Redis is connected and 503 `degraded` otherwise. Compose now checks `/readyz`, and `apps/worker/test/int/metrics-server.int.test.ts` covers both readiness states while retaining the `/healthz` liveness expectations. Scheduler registration is reported in the body; it is not used as a readiness gate because non-scheduler worker roles legitimately register none.
 
 ### C-08 — Auth rate limiting does not use the shared trusted-client-IP helper
 
@@ -136,6 +137,7 @@ This document supersedes `BUGS.md`. The previous file was reviewed first; none o
 - **Impact:** With a proxy and `TRUST_PROXY=false`, all users can collapse into one 5-requests/minute bucket (availability). With `trustProxy=true` and insufficient proxy hygiene, forwarding headers can be used to rotate identities and bypass the auth limit (abuse, including magic-link email spam). The per-email limit still limits messages to any one address, but does not stop broad enumeration/spam.
 - **Verification:** Confirmed by code inspection; no live proxy setup was available to reproduce either direction.
 - **Recommended fix:** Pass the same `trustProxy` setting into the auth route and key the guard with `clientIp(request, trustProxy)`, matching the general limiter. Document the required proxy header behavior and add tests for both trusted and untrusted modes.
+- **Status:** **Fixed 2026-10-23.** `registerAuthRoutes` now receives the app's `trustProxy` setting and uses `clientIp()` for both the auth guard key and the magic-link audit IP instead of raw `request.ip`. `apps/api/src/app.test.ts` verifies that distinct trusted `CF-Connecting-IP` values get separate buckets and that the header is ignored when the proxy is untrusted. `docs/SPEC_REVIEW.md` documents the shared derivation.
 
 ## Known or accepted gaps
 
@@ -184,7 +186,7 @@ These are real limitations, but they are documented or intentionally tested in t
 
 - Repository state at audit baseline: `986d31d`; no application source files were modified during the audit. The `C-01`–`C-04` fixes and their tests were added afterward.
 - `C-03` was reproduced with a minimal Fastify + `@fastify/cors` hijack route (HTTP 200, `access-control-allow-origin` absent). The fix now passes the real `apps/api/test/int/stream.int.test.ts` case against Testcontainers.
-- `C-01` and `C-02` were confirmed by code inspection at audit time and are now covered by Redis/Postgres integration tests: equal-score pagination, same-source SQL cursor rebuild, and combined-board source swap. `C-05`, `C-06`, `C-07`, and `C-08` remain code-confirmed. At audit time, database/Redis-backed integration execution was not possible: native PostgreSQL on `5432` rejected the `trendr:trendr` credentials, no Docker containers were running, and no Redis was listening on `6379`.
-- During remediation, Testcontainers Postgres/Redis became available: `apps/api/test/int/trending.int.test.ts` (13 tests), `apps/api/test/int/stream.int.test.ts` (2 tests), and `apps/api/test/int/health.int.test.ts` (ready plus Postgres-only degraded) pass. The full unit suite (77 files / 565 tests), API typecheck, and API lint also pass.
+- `C-01` and `C-02` were confirmed by code inspection at audit time and are now covered by Redis/Postgres integration tests: equal-score pagination, same-source SQL cursor rebuild, and combined-board source swap. `C-07`/`C-08` are covered by unit/integration tests. `C-05` and `C-06` remain code-confirmed. At audit time, database/Redis-backed integration execution was not possible: native PostgreSQL on `5432` rejected the `trendr:trendr` credentials, no Docker containers were running, and no Redis was listening on `6379`.
+- During remediation, Testcontainers Postgres/Redis became available: `apps/api/test/int/trending.int.test.ts` (13 tests), `apps/api/test/int/stream.int.test.ts` (2 tests), and `apps/api/test/int/health.int.test.ts` (ready plus Postgres-only degraded) pass. The worker metrics-server integration test (6 tests), the full unit suite (77 files / 566 tests), and API/worker typecheck and lint pass.
 - The existing tests generally use small fixtures and distinct scores; the gaps noted above explain why the remaining defects were not caught.
 - `BUGS.md` has been removed and replaced by this audit.

@@ -13,6 +13,7 @@ import { deleteUser, findUserById, updateUserDisplayName, type UserRecord } from
 
 import { requireUser } from '../plugins/auth.js';
 import { CACHE_CONTROL } from '../plugins/etag.js';
+import { clientIp } from '../plugins/rate-limit.js';
 import {
   AuthMessageResponse,
   AuthSessionResponse,
@@ -60,12 +61,15 @@ export interface AuthRoutesOptions {
   cookieSecure?: boolean;
   /** Spec §10.5 auth tier: 5 requests/min per IP across `/v1/auth/*`. */
   authRateLimitMax?: number;
+  /** Env TRUST_PROXY: use the same trusted-client-IP derivation as the global limiter. */
+  trustProxy?: boolean;
   /** Injectable clock (tests). */
   now?: () => Date;
 }
 
 export function registerAuthRoutes(app: FastifyInstance, options: AuthRoutesOptions = {}): void {
   const server = app.withTypeProvider<ZodTypeProvider>();
+  const trustProxy = options.trustProxy ?? false;
 
   const serviceOptions = (): AuthServiceOptions => {
     if (!app.hasDecorator('db') || options.emailSender === undefined) {
@@ -112,7 +116,8 @@ export function registerAuthRoutes(app: FastifyInstance, options: AuthRoutesOpti
   };
 
   const authRequestGuard = async (request: FastifyRequest): Promise<void> => {
-    if (!(await allowAuthRequest(app, request.ip, options.authRateLimitMax ?? 5))) {
+    const ip = clientIp(request, trustProxy);
+    if (!(await allowAuthRequest(app, ip, options.authRateLimitMax ?? 5))) {
       throw new RateLimitedError('too many authentication requests; try again in a minute');
     }
   };
@@ -137,7 +142,7 @@ export function registerAuthRoutes(app: FastifyInstance, options: AuthRoutesOpti
       try {
         await issueMagicLink(serviceOptions(), {
           email,
-          ip: request.ip,
+          ip: clientIp(request, trustProxy),
           userAgent: request.headers['user-agent'] ?? null,
         });
       } catch (error) {

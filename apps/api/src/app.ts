@@ -155,7 +155,7 @@ export async function buildApp(deps: BuildAppDeps = {}): Promise<FastifyInstance
   registerStatsRoutes(app);
   registerStreamRoutes(app, { trustProxy: deps.trustProxy ?? false });
   registerAdminRoutes(app, queues === undefined ? {} : { queues });
-  registerAuthRoutes(app, deps.auth ?? {});
+  registerAuthRoutes(app, { ...(deps.auth ?? {}), trustProxy: deps.trustProxy ?? false });
   registerWatchlistRoutes(app, queues === undefined ? {} : { queues });
   registerAlertRoutes(app);
   registerDigestRoutes(app);

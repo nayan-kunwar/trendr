@@ -42,6 +42,28 @@ describe('worker metrics server', () => {
     expect((await response.json()) as WorkerHealth).toMatchObject({ redis: 'disconnected' });
   });
 
+  it('serves /readyz as readiness when redis is connected', async () => {
+    const server = await start();
+    const response = await fetch(`http://127.0.0.1:${server.port}/readyz`);
+    expect(response.status).toBe(200);
+    expect((await response.json()) as WorkerHealth & { status: string }).toMatchObject({
+      status: 'ready',
+      redis: 'connected',
+    });
+  });
+
+  it('returns 503 from /readyz when redis is disconnected', async () => {
+    const server = await start({
+      getHealth: () => ({ redis: 'disconnected', schedulerRegistered: false, lastJobByQueue: {} }),
+    });
+    const response = await fetch(`http://127.0.0.1:${server.port}/readyz`);
+    expect(response.status).toBe(503);
+    expect((await response.json()) as WorkerHealth & { status: string }).toMatchObject({
+      status: 'degraded',
+      redis: 'disconnected',
+    });
+  });
+
   it('requires the bearer token for /metrics', async () => {
     const server = await start();
     const denied = await fetch(`http://127.0.0.1:${server.port}/metrics`);

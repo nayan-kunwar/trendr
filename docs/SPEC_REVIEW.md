@@ -241,8 +241,9 @@ be re-checked later. Decisions with alternatives get an ADR in [`docs/adr/`](./a
   `scheduler` *and* `SCHEDULER_ENABLED` is true.
 - `main.ts` starts processors by role: `scheduler` registers the schedulers, `scoring` starts the
   worker wired to `queues.notify` (the `evaluate-alerts` fan-out target) and
-  `queues.deadLetter`; `/healthz` now reports a real `schedulerRegistered` flag and
-  `lastJobByQueue` (updated on completed scoring jobs), and shutdown closes the worker, queues,
+  `queues.deadLetter`; `/healthz` is liveness and reports a real `schedulerRegistered` flag and
+  `lastJobByQueue` (updated on completed scoring jobs); `/readyz` is dependency readiness and
+  returns 503 when Redis is disconnected (Compose uses it). Shutdown closes the worker, queues,
   the db pool and Redis in that order.
 - `worker:score` (`apps/worker/src/score-cli.ts`) is a thin producer: parse `--source` (required,
   one of §2's sources) and optional `--windows 24h,7d` (defaults to all), enqueue with trigger
@@ -1463,8 +1464,11 @@ be re-checked later. Decisions with alternatives get an ADR in [`docs/adr/`](./a
   the httpOnly cookie on load.
 - **Rate limits.** `/v1/auth/*` has a shared 5 requests/minute per-IP counter
   (`apirl:auth:{ip}`) plus the spec's 3 magic links/hour per email (`apirl:magic:{sha256(email)}`).
-  Both fail closed with 429 and `Retry-After`; the email counter is per normalized address, so
-  unknown addresses are indistinguishable.
+  The per-IP key uses the same `clientIp(request, TRUST_PROXY)` helper as the global limiter
+  (Cloudflare's `CF-Connecting-IP` only when the proxy is trusted, otherwise the socket peer);
+  the magic-link audit IP uses the same derivation. Both counters fail closed with 429 and
+  `Retry-After`; the email counter is per normalized address, so unknown addresses are
+  indistinguishable.
 
 - **Task 7.2.** `/v1/me|watchlists` implements create/list/rename/delete, item list with
   current 24h/7d summaries, idempotent PUT/DELETE, and the §15 caps (20 lists, 500 items).

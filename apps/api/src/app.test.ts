@@ -2,8 +2,13 @@ import type { FastifyInstance } from 'fastify';
 import { describe, expect, it } from 'vitest';
 
 import { NotFoundError } from '@trendr/core';
+import type { EmailSender } from '@trendr/email';
 
 import { buildApp } from './app.js';
+
+const NOOP_EMAIL_SENDER: EmailSender = {
+  send: () => Promise.resolve({ id: 'test-message' }),
+};
 
 interface ProblemBody {
   type: string;
@@ -78,6 +83,54 @@ describe('apps/api', () => {
         expect(body.status).toBe('ready');
         expect(body.checks).toEqual({ db: 'ok', redis: 'ok', migrations: 'ok' });
       });
+    },
+    TEST_TIMEOUT,
+  );
+
+  it(
+    'uses the shared trusted-client-IP helper for auth rate limits',
+    async () => {
+      const trusted = await buildApp({
+        ...TEST_DEPS,
+        trustProxy: true,
+        auth: { emailSender: NOOP_EMAIL_SENDER, authRateLimitMax: 1 },
+      });
+      try {
+        const request = (ip: string, email: string) =>
+          trusted.inject({
+            method: 'POST',
+            url: '/v1/auth/magic-link',
+            headers: { 'cf-connecting-ip': ip },
+            payload: { email },
+          });
+
+        expect((await request('198.51.100.10', 'trusted-a@example.test')).statusCode).toBe(202);
+        expect((await request('198.51.100.10', 'trusted-b@example.test')).statusCode).toBe(429);
+        expect((await request('198.51.100.11', 'trusted-c@example.test')).statusCode).toBe(202);
+      } finally {
+        await trusted.close();
+      }
+
+      const untrusted = await buildApp({
+        ...TEST_DEPS,
+        trustProxy: false,
+        auth: { emailSender: NOOP_EMAIL_SENDER, authRateLimitMax: 1 },
+      });
+      try {
+        const request = (ip: string, email: string) =>
+          untrusted.inject({
+            method: 'POST',
+            url: '/v1/auth/magic-link',
+            remoteAddress: '192.0.2.44',
+            headers: { 'cf-connecting-ip': ip },
+            payload: { email },
+          });
+
+        expect((await request('198.51.100.12', 'untrusted-a@example.test')).statusCode).toBe(202);
+        expect((await request('198.51.100.13', 'untrusted-b@example.test')).statusCode).toBe(429);
+      } finally {
+        await untrusted.close();
+      }
     },
     TEST_TIMEOUT,
   );
