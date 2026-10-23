@@ -143,7 +143,7 @@ This document supersedes `BUGS.md`. The previous file was reviewed first; none o
 
 ## Known or accepted gaps
 
-These are real limitations, but they are documented or intentionally tested in the current tree. They are listed separately so they are not presented as newly discovered defects. `K-01` has since been resolved; the remaining entries are still accepted.
+These are real limitations, but they are documented or intentionally tested in the current tree. They are listed separately so they are not presented as newly discovered defects. `K-01` and `K-03`–`K-05` have since been resolved; `K-02` remains accepted.
 
 ### K-01 — Combined-board `entry.score` differs between HTTP paths and SSE (resolved)
 
@@ -156,21 +156,24 @@ These are real limitations, but they are documented or intentionally tested in t
 - **Location:** `packages/db/src/repositories/search.repo.ts` (trigram fallback); `docs/SPEC_REVIEW.md:472-480`
 - **Behavior:** The fallback uses `word_similarity(lower($q), lower(display_name)) > 0` and excludes FTS matches. The documentation states that this scan is sequential by design and should be revisited as the item count grows. It is a scaling/availability risk for unusual low-hit queries, not an unnoticed functional bug.
 
-### K-03 — Some upstream homepages are stored as raw URLs
+### K-03 — Some upstream homepages are stored as raw URLs (resolved)
 
-- **Location:** `packages/sources/src/npm/npm.adapter.ts:222`, `:271`; `packages/sources/src/pypi/pypi.adapter.ts:177-188`, `:237`; `packages/sources/src/github/github.adapter.ts:181`; API schema `apps/api/src/schemas/items.ts:40`; render `apps/web/src/components/item/item-facts.tsx:52-56`
+- **Location:** `packages/sources/src/npm/npm.adapter.ts:223`, `:272`; `packages/sources/src/pypi/pypi.adapter.ts:178-188`, `:237`; `packages/sources/src/github/github.adapter.ts:176`; API schema `apps/api/src/schemas/items.ts:40`; render `apps/web/src/components/item/item-facts.tsx:52-56`
 - **Behavior:** These adapters pass the upstream homepage through `cleanString()` but do not require an `http:`/`https:` scheme. The API exposes it as a nullable plain string, and the web renders it as an anchor. React 19 blocks `javascript:` execution and the web CSP is restrictive, so the practical impact is limited to unusual-scheme navigation/phishing rather than script execution. arXiv and MCP already use `safeHomepage`/`safeHttpUrl`; GitHub/npm/PyPI do not.
 - **Recommendation:** Reuse an `http:`/`https:` URL validator for every adapter and reject everything else; add `rel="noopener noreferrer"` where links open a new tab (the item-facts link already has it).
+- **Status:** **Fixed 2026-10-23.** `safeHttpUrl` in `@trendr/core` now requires an absolute `http:`/`https:` URL. Every adapter (GitHub, npm, PyPI, arXiv and MCP) uses it, and the item-detail API revalidates legacy stored values before serving them. Adapter, API integration and helper tests cover rejection of `javascript:`, `data:`, `ftp:`, scheme-relative, relative and malformed values.
 
-### K-04 — Metrics bearer tokens are compared with `!==`
+### K-04 — Metrics bearer tokens are compared with `!==` (resolved)
 
 - **Location:** `apps/api/src/plugins/metrics.ts:92`; `apps/worker/src/metrics-server.ts:97`
 - **Behavior:** The metrics endpoints compare the full `Authorization` string directly. The tokens are supposed to be high-entropy, so a practical timing attack is unlikely; use `crypto.timingSafeEqual` with a length guard as defense-in-depth.
+- **Status:** **Fixed 2026-10-23.** Both endpoints compare the header with `timingSafeStringEqual` (`@trendr/core`), which keeps the length guard around `crypto.timingSafeEqual`. API and worker tests cover denied, wrong-token and allowed requests.
 
-### K-05 — Compose development defaults are not safe for public exposure
+### K-05 — Compose development defaults are not safe for public exposure (resolved)
 
 - **Location:** `docker-compose.yml:19-31` (Postgres/Redis published), `:116` (MCP published); optional MCP auth at `apps/mcp/src/http.ts:52-61`; `.env.example:22`
 - **Behavior:** The development stack publishes Postgres `5432`, Redis `6379`, and MCP `4100` on the host and uses development credentials/configuration. Redis has no authentication and can inject leaderboard events or manipulate queues/cache if reachable; Postgres exposes all data. This is documented local-development configuration, not a code defect, but it must not be used as a production deployment topology.
+- **Status:** **Fixed 2026-10-23.** Compose binds Postgres, Redis and MCP to `127.0.0.1` only; the MCP server refuses to start outside `NODE_ENV=development` without `MCP_HTTP_AUTH_TOKENS`; and README, `.env.example` and the runbook state that this topology and its default credentials are local-only.
 
 ## Hardening recommendations
 
@@ -180,9 +183,9 @@ These are real limitations, but they are documented or intentionally tested in t
 4. **Public query bounds (C-05 addressed):** The SQL top-up loop is capped at 2,000 scanned rows and returns 422 `query-too-broad` when a selective filter exhausts the budget. Keep large-board coverage and revisit the budget if the public board grows.
 5. **Search scaling:** Revisit the documented sequential trigram fallback before large item counts; use `EXPLAIN` to confirm index use.
 6. **Rate limiting:** Use one trusted-client-IP implementation for all tiers; document proxy requirements. Note that the general limiter is fail-open when Redis is unavailable (`docs/SPEC_REVIEW.md:301-305`).
-7. **Link hygiene:** Restrict stored/rendered URLs to `http`/`https`.
-8. **Deployment:** Do not expose Postgres, Redis, or the MCP port publicly; require MCP authentication outside local development and keep the default credentials out of shared environments.
-9. **Metrics:** Use constant-time bearer comparison even though the token is high-entropy.
+7. **Link hygiene (K-03 addressed):** All adapters and the item-detail API restrict stored/rendered homepages to `http`/`https`.
+8. **Deployment (K-05 addressed):** Compose publishes Postgres, Redis and MCP on loopback only; require MCP authentication outside development and keep the default credentials out of shared environments.
+9. **Metrics (K-04 addressed):** Use constant-time bearer comparison even though the token is high-entropy.
 
 ## Verification notes and limitations
 
@@ -191,5 +194,6 @@ These are real limitations, but they are documented or intentionally tested in t
 - `C-01` and `C-02` were confirmed by code inspection at audit time and are now covered by Redis/Postgres integration tests: equal-score pagination, same-source SQL cursor rebuild, and combined-board source swap. `C-05`/`C-06` are covered by targeted integration tests, and `C-07`/`C-08` by unit/integration tests. At audit time, database/Redis-backed integration execution was not possible: native PostgreSQL on `5432` rejected the `trendr:trendr` credentials, no Docker containers were running, and no Redis was listening on `6379`.
 - During remediation, Testcontainers Postgres/Redis became available: `apps/api/test/int/trending.int.test.ts` (14 tests), `apps/api/test/int/auth.int.test.ts` (6 tests), `apps/api/test/int/stream.int.test.ts` (2 tests), and `apps/api/test/int/health.int.test.ts` (ready plus Postgres-only degraded) pass. The worker metrics-server integration test (6 tests), the full unit suite (77 files / 566 tests), and API/worker typecheck and lint pass.
 - Release-gate verification on 2026-10-23: monorepo typecheck and lint, the full unit suite (77 files / 566 tests), the full integration suite (30 files / 149 tests), and the production build pass. Contract probes were skipped by design because `CONTRACT=1` and upstream tokens were not configured. `K-01` is covered by the combined-board Redis/SQL consistency assertion.
+- `K-03`–`K-05` verification on 2026-10-23: monorepo typecheck and lint, the full unit suite (78 files / 573 tests), the full integration suite (30 files / 149 tests) and `pnpm build` pass. `docker compose config --quiet` accepts the loopback bindings, and the compiled MCP server exits 1 in `NODE_ENV=production` without `MCP_HTTP_AUTH_TOKENS`.
 - The existing tests generally use small fixtures and distinct scores; the gaps noted above explain why the remaining defects were not caught.
 - `BUGS.md` has been removed and replaced by this audit.
