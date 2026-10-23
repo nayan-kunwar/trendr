@@ -535,6 +535,52 @@ describe('GET /v1/trending over real Postgres + Redis (task 3.2)', () => {
     });
   });
 
+  it('paginates equal-score board members without skipping tied entries', async () => {
+    await withApp(async (app) => {
+      const key = redisKeys.leaderboard('github', '24h');
+      const restoredScores: [string, string, ...string[]] = [
+        '30',
+        String(idOf(`${PREFIX}-a`)),
+        '20',
+        String(idOf(`${PREFIX}-b`)),
+        '10',
+        String(idOf(`${PREFIX}-c`)),
+      ];
+      try {
+        await redis.zadd(
+          key,
+          '10',
+          String(idOf(`${PREFIX}-a`)),
+          '10',
+          String(idOf(`${PREFIX}-b`)),
+          '10',
+          String(idOf(`${PREFIX}-c`)),
+        );
+
+        const pages: TrendingResponseBody[] = [];
+        let cursor: string | null = null;
+        do {
+          const suffix: string = cursor === null ? '' : `&cursor=${encodeURIComponent(cursor)}`;
+          const body: TrendingResponseBody = (
+            await trending(app, `?scope=github&window=24h&limit=1${suffix}`)
+          ).json<TrendingResponseBody>();
+          pages.push(body);
+          cursor = body.page.nextCursor;
+        } while (cursor !== null && pages.length < 5);
+
+        const entries = pages.flatMap((page) => page.data);
+        expect(entries).toHaveLength(3);
+        expect(entries.map((entry) => entry.item.externalId).sort()).toEqual(
+          [`${PREFIX}-a`, `${PREFIX}-b`, `${PREFIX}-c`].sort(),
+        );
+        expect(entries.map((entry) => entry.rank)).toEqual([1, 2, 3]);
+        expect(cursor).toBeNull();
+      } finally {
+        await redis.zadd(key, ...restoredScores);
+      }
+    });
+  });
+
   it('rejects an undecodable cursor with 400 problem+json (spec §10.2)', async () => {
     await withApp(async (app) => {
       const response = await trending(app, '?scope=github&window=24h&cursor=%21%21%21');
@@ -718,6 +764,75 @@ describe('GET /v1/trending over real Postgres + Redis (task 3.2)', () => {
       expect(await redis.hget(redisKeys.leaderboardMeta('github', '24h'), 'runId')).toBe(
         String(githubRun),
       );
+    });
+  });
+
+  it('returns 410 for a filtered cursor from an earlier run of the same board', async () => {
+    await withApp(async (app) => {
+      try {
+        const page1 = (
+          await trending(app, '?scope=github&window=24h&kind=repo&limit=1')
+        ).json<TrendingResponseBody>();
+        const cursor = page1.page.nextCursor;
+        expect(typeof cursor).toBe('string');
+
+        // Unlike the npm-only test above, this swaps the same filtered board's
+        // current run. The SQL cursor must not silently follow the new run.
+        await swapCurrentRun(db, {
+          source: 'github',
+          window: '24h',
+          runId: githubRun2,
+          computedAt: COMPUTED_AT_2,
+        });
+
+        const stale = await trending(
+          app,
+          `?scope=github&window=24h&kind=repo&limit=1&cursor=${cursor ?? ''}`,
+        );
+        expect(stale.statusCode).toBe(410);
+        expect(stale.json<{ type: string }>().type).toBe(
+          'https://trendr.dev/problems/cursor-expired',
+        );
+      } finally {
+        await swapCurrentRun(db, {
+          source: 'github',
+          window: '24h',
+          runId: githubRun,
+          computedAt: COMPUTED_AT,
+        });
+      }
+    });
+  });
+
+  it('returns 410 for a combined cursor when a source run changes', async () => {
+    await withApp(async (app) => {
+      try {
+        const page1 = (
+          await trending(app, '?window=24h&minCurrent=90&limit=1')
+        ).json<TrendingResponseBody>();
+        const cursor = page1.page.nextCursor;
+        expect(typeof cursor).toBe('string');
+
+        await swapCurrentRun(db, {
+          source: 'github',
+          window: '24h',
+          runId: githubRun2,
+          computedAt: COMPUTED_AT_2,
+        });
+
+        const stale = await trending(
+          app,
+          `?window=24h&minCurrent=90&limit=1&cursor=${cursor ?? ''}`,
+        );
+        expect(stale.statusCode).toBe(410);
+      } finally {
+        await swapCurrentRun(db, {
+          source: 'github',
+          window: '24h',
+          runId: githubRun,
+          computedAt: COMPUTED_AT,
+        });
+      }
     });
   });
 

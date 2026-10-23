@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 
-import { and, desc, eq, gte, inArray, isNotNull, lt, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, inArray, isNotNull, lt, or, sql } from 'drizzle-orm';
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import type { Redis } from 'ioredis';
@@ -134,14 +134,18 @@ function decodeLeaderboardCursor(raw: string): { r: string; s: number; i: string
   }
 }
 
-function decodeKeysetCursor(raw: string): { score: number; itemId: bigint } {
+function decodeKeysetCursor(raw: string): {
+  score: number;
+  itemId: bigint;
+  runId: string | undefined;
+} {
   try {
     const cursor = decodeCursor(raw, KeysetCursor);
     const score = typeof cursor.k === 'string' ? Number(cursor.k) : cursor.k;
     if (!Number.isFinite(score) || !/^\d{1,19}$/.test(cursor.i)) {
       throw new Error('malformed cursor');
     }
-    return { score, itemId: BigInt(cursor.i) };
+    return { score, itemId: BigInt(cursor.i), runId: cursor.r };
   } catch {
     throw new ValidationError('Invalid cursor');
   }
@@ -335,7 +339,7 @@ async function loadRedisPage(
   const { scope, window: w, limit } = query;
   const key = redisKeys.leaderboard(scope, w, query.lang ?? '_all');
 
-  let cursor: { s: number; i: string } | undefined;
+  let start = 0;
   if (query.cursor !== undefined) {
     const decoded = decodeLeaderboardCursor(query.cursor);
     if (decoded.r !== meta.runId) {
@@ -343,22 +347,20 @@ async function loadRedisPage(
         'The leaderboard was rebuilt while this cursor was in use; restart pagination.',
       );
     }
-    cursor = decoded;
+    // Rank-based continuation is tie-safe: equal scores are ordered by member
+    // lexicographically, and the cursor member's rank locates the next entry
+    // even when the whole page shares one score.
+    const cursorRank = await app.redis.zrevrank(key, decoded.i);
+    if (cursorRank === null) {
+      throw new CursorExpiredError(
+        'The leaderboard changed while this cursor was in use; restart pagination.',
+      );
+    }
+    start = cursorRank + 1;
   }
 
-  // Descending read from the top: the first page starts at `+inf`; deeper
-  // pages continue strictly below the last entry's board score (exclusive
-  // bound), which keeps pages ordered even if another scope's board is rebuilt.
-  const max = cursor === undefined ? '+inf' : `(${cursor.s}`;
-  const raw = await app.redis.zrevrangebyscore(
-    key,
-    max,
-    '-inf',
-    'WITHSCORES',
-    'LIMIT',
-    0,
-    limit + 1,
-  );
+  // Fetch one extra row after the cursor; ranks stay absolute board ranks.
+  const raw = await app.redis.zrevrange(key, start, start + limit, 'WITHSCORES');
   const pairs: BoardPair[] = [];
   for (let i = 0; i + 1 < raw.length; i += 2) {
     const member = raw[i];
@@ -444,26 +446,54 @@ interface BuiltSqlEntry {
   entry: LeaderboardEntry;
 }
 
-async function loadCurrentRun(
+async function loadCurrentRunSnapshot(
   db: Db,
   scope: LeaderboardScope,
   window: Window,
-): Promise<{ runId: string; computedAt: string }> {
+): Promise<{
+  runId: string;
+  computedAt: string;
+  runIds: bigint[];
+  signature: string;
+}> {
   const conditions = [eq(scoreRunsCurrent.window, window)];
   if (scope !== 'all') {
     conditions.push(eq(scoreRunsCurrent.source, scope));
   }
   const rows = await db
-    .select({ runId: scoreRunsCurrent.runId, computedAt: scoreRunsCurrent.computedAt })
+    .select({
+      source: scoreRunsCurrent.source,
+      runId: scoreRunsCurrent.runId,
+      computedAt: scoreRunsCurrent.computedAt,
+    })
     .from(scoreRunsCurrent)
     .where(and(...conditions))
-    .orderBy(desc(scoreRunsCurrent.computedAt))
-    .limit(1);
-  const row = rows[0];
-  if (row === undefined) {
-    return { runId: '0', computedAt: EPOCH_ISO };
+    .orderBy(desc(scoreRunsCurrent.computedAt), asc(scoreRunsCurrent.source));
+  const latest = rows[0];
+  if (latest === undefined) {
+    return { runId: '0', computedAt: EPOCH_ISO, runIds: [], signature: '0' };
   }
-  return { runId: String(row.runId), computedAt: row.computedAt.toISOString() };
+  // A scoped cursor names its source's run. The combined `all` scope spans one
+  // current run per source, so its signature is a fingerprint of that set;
+  // the captured run ids pin the SQL query even if a swap races the request.
+  const signature =
+    scope === 'all'
+      ? createHash('sha1')
+          .update(
+            rows
+              .map((row) => `${row.source}:${String(row.runId)}`)
+              .sort()
+              .join('|'),
+          )
+          .digest('hex')
+          .slice(0, 16)
+      : String(latest.runId);
+  return {
+    runId: String(latest.runId),
+    computedAt: latest.computedAt.toISOString(),
+    runIds: rows.map((row) => row.runId),
+    signature,
+  };
 }
 
 async function buildSqlEntries(
@@ -520,6 +550,17 @@ async function querySqlPage(
   const useZScore = scope === 'all';
   const scoreExpr = useZScore ? scores.zScore : scores.finalScore;
   const initialScan = query.cursor === undefined ? undefined : decodeKeysetCursor(query.cursor);
+  const run = await loadCurrentRunSnapshot(db, scope, w);
+  if (initialScan !== undefined && initialScan.runId !== run.signature) {
+    throw new CursorExpiredError(
+      'The leaderboard was rebuilt while this cursor was in use; restart pagination.',
+    );
+  }
+  const collected: BuiltSqlEntry[] = [];
+  let scan: { score: number; itemId: bigint } | undefined =
+    initialScan === undefined
+      ? undefined
+      : { score: initialScan.score, itemId: initialScan.itemId };
 
   const conditions = [
     eq(scores.window, w),
@@ -542,10 +583,6 @@ async function querySqlPage(
             .where(eq(topics.slug, query.topic)),
         ),
   ];
-
-  const run = await loadCurrentRun(db, scope, w);
-  const collected: BuiltSqlEntry[] = [];
-  let scan = initialScan;
 
   for (;;) {
     const rows = await db
@@ -573,6 +610,7 @@ async function querySqlPage(
       .where(
         and(
           ...conditions,
+          run.runIds.length === 0 ? sql`false` : inArray(scores.runId, run.runIds),
           scan === undefined
             ? undefined
             : or(
@@ -619,7 +657,11 @@ async function querySqlPage(
     page: {
       nextCursor:
         hasMore && lastReturned !== undefined
-          ? encodeCursor({ k: lastReturned.boardScore, i: String(lastReturned.itemId) })
+          ? encodeCursor({
+              r: run.signature,
+              k: lastReturned.boardScore,
+              i: String(lastReturned.itemId),
+            })
           : null,
       limit,
     },

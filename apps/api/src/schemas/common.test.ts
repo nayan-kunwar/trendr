@@ -27,6 +27,14 @@ describe('cursor codecs (spec §10.2)', () => {
     });
   });
 
+  it('carries an optional run id for the trending SQL keyset', () => {
+    expect(decodeCursor(encodeCursor({ r: '81234', k: 7.5, i: '42' }), KeysetCursor)).toEqual({
+      r: '81234',
+      k: 7.5,
+      i: '42',
+    });
+  });
+
   it('rejects garbage', () => {
     expect(() => decodeCursor('not-base64-json!', KeysetCursor)).toThrow();
     expect(() => decodeCursor(encodeCursor({ nope: true }), KeysetCursor)).toThrow();

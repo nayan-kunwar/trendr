@@ -328,32 +328,38 @@ be re-checked later. Decisions with alternatives get an ADR in [`docs/adr/`](./a
 - **Read-path selection (spec §9.3).** The board path is taken only when: `lbmeta:{scope}:{window}`
   exists, no `topic`/`kind`/`minCurrent` filter, `newOnly` is false, `lang` is absent or `_all`,
   and the cache breaker is closed; anything else — and any Redis failure or missing meta — goes
-  to SQL (with one `warn` log on degrade). The board read is
-  `ZREVRANGEBYSCORE key (score +inf -inf WITHSCORES LIMIT 0 limit+1` — descending, exclusive
-  `(`-bound continuation — then pipelined `ZREVRANK` for absolute ranks and `MGET card:*`;
-  cards that are missing or fail `LeaderboardCardSchema` hydrate from Postgres in one
-  items+series+scores pass, exactly as the worker would have minted them. The first Redis
-  implementation used ascending `ZRANGEBYSCORE` (the int test caught the reversed board).
+  to SQL (with one `warn` log on degrade). The board read starts with
+  `ZREVRANGE key 0 limit WITHSCORES` and continues from the cursor member's
+  `ZREVRANK + 1` with `ZREVRANGE ... WITHSCORES`, then pipelines `ZREVRANK` for absolute
+  ranks and `MGET card:*`; cards that are missing or fail `LeaderboardCardSchema` hydrate
+  from Postgres in one items+series+scores pass, exactly as the worker would have minted
+  them. Rank-based continuation is tie-safe: equal scores are ordered by member and all tied
+  entries remain reachable. A cursor member that is no longer on the board returns 410
+  `cursor-expired` instead of skipping entries. The first Redis implementation used ascending
+  `ZRANGEBYSCORE` (the int test caught the reversed board).
 - **ETag before any board read (spec §9.3, §9.4):** `W/"lb-{scope}-{window}-{version}-{sha1(
   canonicalQuery).slice(0,8)}"` from `lbmeta` (`canonicalQuery` = the §10.3 parameter set
   including the cursor); a matching `If-None-Match` returns 304 *before* the ZSET/cards are
   touched. Without `lbmeta` the route sets no ETag and the §9.4 plugin mints the body hash, so a
   filtered or fallback response still gets conditional-GET support. The 304 keeps the route's
   `Cache-Control`.
-- **Run-pinned cursors (§16).** `LeaderboardCursor {r,s,i}`/`KeysetCursor {k,i}` are base64url
-  JSON (§10.2). A board cursor whose `r` differs from the current `lbmeta.runId` → **410
-  `https://trendr.dev/problems/cursor-expired`** (new `CursorExpiredError` in core; 410 `Gone`
-  title in `plugins/errors.ts`) so a rebuilt/thinned board never mixes runs into one page list;
-  undecodable or malformed cursors are 400 `validation-error`. The int test also pins the §16
-  stability promise: an npm scoring run (new current run + scores swapped) leaves github pages
-  readable through their cursors.
+- **Run-pinned cursors (§16).** `LeaderboardCursor {r,s,i}`/`KeysetCursor {r?,k,i}` are
+  base64url JSON (§10.2). A board cursor whose `r` differs from the current `lbmeta.runId` →
+  **410 `https://trendr.dev/problems/cursor-expired`** (new `CursorExpiredError` in core; 410
+  `Gone` title in `plugins/errors.ts`) so a rebuilt/thinned board never mixes runs into one
+  page list; undecodable or malformed cursors are 400 `validation-error`. Filtered SQL cursors
+  also carry `r`: the source run id for a scoped query, or a fingerprint of the per-source
+  current-run set for `scope=all`; the SQL read is pinned to those captured run ids and a
+  missing or changed `r` returns 410. The int tests cover both the §16 npm-rescore stability
+  promise (github pages stay readable) and same-board/combined-run swaps (stale cursors are
+  rejected).
 - **`entry.score`.** Source-scope and `all`-scope card/hydrated entries carry the card's source
   `finalScore` (the §2.5 card design); the SQL `all` path serves `z_score` per §9.1 — a
   documented divergence of the card-based read, matching the 2.5 note. `minCurrent` filters on
   the same hydrated `current` the response serves (up to 30 daily points; rows without a series
   are skipped).
 - **SQL path.** `scores` ⋈ `score_runs_current` ⋈ `items`, ordered `(score DESC, item_id DESC)`
-  with the §10.3 keyset cursor (`k` = board score), `topic` via
+  with the §10.3 keyset cursor (`k` = board score) and run-pinned `r`, `topic` via
   `items.id IN (SELECT item_id FROM item_topics JOIN topics …)`, `lang` via
   `lower(language) = $1`, `newOnly` via `upstream_created_at >= now() - 30 d`, and a
   limit+1 top-up loop so `minCurrent` never returns a short page while deeper rows exist. Pages
@@ -363,12 +369,12 @@ be re-checked later. Decisions with alternatives get an ADR in [`docs/adr/`](./a
   epoch `computedAt`.
 - `@trendr/api` gained a direct `drizzle-orm` dependency (the route builds its own queries).
 - Tests: unit 16 new — the `newOnly` matrix, defaults/coercions, cursor round-trip/garbage,
-  `canonicalQuery`/`trendingEtag`/`hasSqlFilters`; int `trending.int.test.ts` (10) over
+  `canonicalQuery`/`trendingEtag`/`hasSqlFilters`; int `trending.int.test.ts` (13) over
   Testcontainers: board read with cards + hydrated entries, ETag/304, absolute-rank pagination,
-  malformed-cursor 400, no-`lbmeta` npm fallback, topic/kind/lang filters + `q:` cache key,
-  `minCurrent` top-up across pages, `newOnly` matrix, combined board (z_score SQL), stability
-  across an npm rescore, 410 after a rebuild and fresh restart. `apps/api/openapi.json`
-  re-exported (4 paths).
+  equal-score tie pagination, malformed-cursor 400, no-`lbmeta` npm fallback, topic/kind/lang
+  filters + `q:` cache key, `minCurrent` top-up across pages, `newOnly` matrix, combined board
+  (z_score SQL), stability across an npm rescore, same-source and combined-board 410 paths, 410
+  after a rebuild and fresh restart. `apps/api/openapi.json` re-exported (4 paths).
 
 ### Task 3.3 notes
 

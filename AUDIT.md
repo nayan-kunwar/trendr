@@ -22,8 +22,8 @@ This document supersedes `BUGS.md`. The previous file was reviewed first; none o
 
 | ID   | Severity | Area                 | Finding                                                                     | Status |
 | ---- | -------- | -------------------- | --------------------------------------------------------------------------- | ------ |
-| C-01 | Medium   | API / Redis trending | Cursor pagination drops items tied at the page boundary                     | Open   |
-| C-02 | Medium   | API / SQL trending   | Filtered cursors are not pinned to a scoring run                            | Open   |
+| C-01 | Medium   | API / Redis trending | Cursor pagination drops items tied at the page boundary                     | Fixed  |
+| C-02 | Medium   | API / SQL trending   | Filtered cursors are not pinned to a scoring run                            | Fixed  |
 | C-03 | High     | API / SSE            | Hijacked SSE response omits `Access-Control-Allow-Origin`                   | Fixed  |
 | C-04 | High     | API / operations     | `/readyz` reports hardcoded success without probing dependencies            | Fixed  |
 | C-05 | Medium   | API / availability   | `minCurrent` can force an unbounded full-board scan                         | Open   |
@@ -52,6 +52,7 @@ This document supersedes `BUGS.md`. The previous file was reviewed first; none o
 - **Impact:** A board with more than `limit` items sharing the boundary score cannot be fully paginated; the remaining tied items are silently skipped. This is most likely with normalized/low-cardinality scores and is a correctness failure of the public pagination contract.
 - **Verification:** Confirmed by code inspection. The existing integration test at `apps/api/test/int/trending.int.test.ts:508-536` uses distinct scores and does not exercise ties. A Redis instance was not available for a live reproduction.
 - **Recommended fix:** Add the member tie-break to the read: fetch the boundary score inclusively and discard members that sort at or before the last returned member, or use a rank/lexicographic cursor that carries both `(score, member)`. Add an integration test with at least `limit + 1` equal scores.
+- **Status:** **Fixed 2026-10-23.** The Redis path now uses the cursor member's `ZREVRANK` and continues with `ZREVRANGE` at `rank + 1`, which is tie-safe even when an entire page shares one score. A missing cursor member returns `410 cursor-expired` instead of silently skipping it. `apps/api/test/int/trending.int.test.ts` now paginates a three-item equal-score board one item at a time and verifies all three unique entries and absolute ranks.
 
 ### C-02 — Filtered SQL leaderboard cursors are not pinned to a scoring run
 
@@ -62,6 +63,7 @@ This document supersedes `BUGS.md`. The previous file was reviewed first; none o
 - **Impact:** A scoring swap between pages can mix two runs into one logical page sequence. Items can be skipped or duplicated, `runId`/`computedAt` can change mid-pagination, and the documented 410 `cursor-expired` behavior is not honored for filtered requests.
 - **Verification:** Confirmed by code inspection. The existing stability test (`trending.int.test.ts:682-722`) rescored **npm** while reading **github** pages, so it does not cover a rebuild of the same board. No database-backed execution was available.
 - **Recommended fix:** Add the run id to the SQL cursor (or use a common cursor shape) and return `CursorExpiredError` when it differs from the current run. Alternatively, pin the SQL query to the cursor's run id. Add a same-scope rebuild test for `topic`/`kind`/`minCurrent`/`newOnly` filters.
+- **Status:** **Fixed 2026-10-23.** The SQL cursor now carries `r` (the scoring-run identity); `querySqlPage` resolves the current run before reading and returns `410 cursor-expired` when the cursor's run differs. For `scope=all`, which spans one run per source, `r` is a fingerprint of the current per-source run set and the query is pinned to that captured set of run ids. Legacy cursors without `r` fail closed rather than being evaluated against a possibly different run. `apps/api/test/int/trending.int.test.ts` covers both a same-source rebuild (`kind=repo`) and a combined-board source swap (`minCurrent=90`), restores the fixture run in each case, and verifies the 410 response.
 
 ### C-03 — SSE responses bypass CORS headers
 
@@ -180,9 +182,9 @@ These are real limitations, but they are documented or intentionally tested in t
 
 ## Verification notes and limitations
 
-- Repository state at audit baseline: `986d31d`; no application source files were modified during the audit. The `C-03`/`C-04` fixes and their tests were added afterward.
+- Repository state at audit baseline: `986d31d`; no application source files were modified during the audit. The `C-01`–`C-04` fixes and their tests were added afterward.
 - `C-03` was reproduced with a minimal Fastify + `@fastify/cors` hijack route (HTTP 200, `access-control-allow-origin` absent). The fix now passes the real `apps/api/test/int/stream.int.test.ts` case against Testcontainers.
-- `C-01`, `C-02`, `C-05`, `C-06`, `C-07`, and `C-08` are code-confirmed. At audit time, database/Redis-backed integration execution was not possible: native PostgreSQL on `5432` rejected the `trendr:trendr` credentials, no Docker containers were running, and no Redis was listening on `6379`.
-- During remediation, Testcontainers Postgres/Redis became available for targeted runs: `apps/api/test/int/stream.int.test.ts` (2 tests) and `apps/api/test/int/health.int.test.ts` (ready plus Postgres-only degraded) pass. The full unit suite (77 files / 564 tests), API typecheck, and API lint also pass.
+- `C-01` and `C-02` were confirmed by code inspection at audit time and are now covered by Redis/Postgres integration tests: equal-score pagination, same-source SQL cursor rebuild, and combined-board source swap. `C-05`, `C-06`, `C-07`, and `C-08` remain code-confirmed. At audit time, database/Redis-backed integration execution was not possible: native PostgreSQL on `5432` rejected the `trendr:trendr` credentials, no Docker containers were running, and no Redis was listening on `6379`.
+- During remediation, Testcontainers Postgres/Redis became available: `apps/api/test/int/trending.int.test.ts` (13 tests), `apps/api/test/int/stream.int.test.ts` (2 tests), and `apps/api/test/int/health.int.test.ts` (ready plus Postgres-only degraded) pass. The full unit suite (77 files / 565 tests), API typecheck, and API lint also pass.
 - The existing tests generally use small fixtures and distinct scores; the gaps noted above explain why the remaining defects were not caught.
 - `BUGS.md` has been removed and replaced by this audit.

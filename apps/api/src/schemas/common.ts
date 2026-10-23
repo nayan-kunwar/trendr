@@ -9,7 +9,16 @@ export const IdParam = z.object({ id: z.string().regex(/^\d{1,19}$/) });
 
 /** Opaque cursor = base64url(JSON). Encodes the run id so pages stay consistent across scoring runs. */
 export const LeaderboardCursor = z.object({ r: z.string(), s: z.number(), i: z.string() }); // runId, score, itemId
-export const KeysetCursor = z.object({ k: z.union([z.string(), z.number()]), i: z.string() });
+/**
+ * Keyset cursor shared by `/v1/new` and the trending SQL path. Trending adds
+ * `r`; older trending cursors without it are rejected as expired rather than
+ * being silently evaluated against a different scoring run.
+ */
+export const KeysetCursor = z.object({
+  r: z.string().optional(),
+  k: z.union([z.string(), z.number()]),
+  i: z.string(),
+});
 
 export const encodeCursor = (c: unknown): string =>
   Buffer.from(JSON.stringify(c)).toString('base64url');
