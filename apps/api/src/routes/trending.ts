@@ -9,6 +9,7 @@ import {
   AppError,
   CursorExpiredError,
   LeaderboardCardSchema,
+  QueryTooBroadError,
   ValidationError,
   redisKeys,
   type LeaderboardCard,
@@ -60,6 +61,16 @@ const NEW_ITEM_DAYS = 30;
 const DAY_MS = 86_400_000;
 /** Spec §9.1: `q:{sha1}` filtered-result cache lives 60 s. */
 const QUERY_CACHE_TTL_SECONDS = 60;
+/**
+ * Public SQL top-up budget: a filter may scan this many score rows before the
+ * route returns 422 instead of walking an arbitrarily large board.
+ */
+export const MAX_SQL_SCAN_ROWS = 2_000;
+
+export interface TrendingRoutesOptions {
+  /** Override the SQL scan budget (tests); production uses MAX_SQL_SCAN_ROWS. */
+  maxSqlScanRows?: number;
+}
 
 interface BoardMeta {
   runId: string;
@@ -544,6 +555,7 @@ async function buildSqlEntries(
 async function querySqlPage(
   app: FastifyInstance,
   query: TrendingQueryInput,
+  maxSqlScanRows: number,
 ): Promise<TrendingResponseBody> {
   const db = app.db;
   const { scope, window: w, limit } = query;
@@ -557,6 +569,7 @@ async function querySqlPage(
     );
   }
   const collected: BuiltSqlEntry[] = [];
+  let scannedRows = 0;
   let scan: { score: number; itemId: bigint } | undefined =
     initialScan === undefined
       ? undefined
@@ -625,6 +638,7 @@ async function querySqlPage(
     if (rows.length === 0) {
       break;
     }
+    scannedRows += rows.length;
 
     const batch = await buildSqlEntries(db, w, rows, useZScore, query.minCurrent);
     for (const built of batch) {
@@ -642,6 +656,11 @@ async function querySqlPage(
 
     if (collected.length > limit || rows.length < limit + 1) {
       break;
+    }
+    if (scannedRows >= maxSqlScanRows) {
+      throw new QueryTooBroadError(
+        'The requested trending filter is too selective for the scan budget; narrow it with a source, topic, kind, or lower minCurrent.',
+      );
     }
   }
 
@@ -671,8 +690,9 @@ async function querySqlPage(
 async function loadSqlPage(
   app: FastifyInstance,
   query: TrendingQueryInput,
+  maxSqlScanRows: number,
 ): Promise<TrendingResponseBody> {
-  const load = (): Promise<TrendingResponseBody> => querySqlPage(app, query);
+  const load = (): Promise<TrendingResponseBody> => querySqlPage(app, query, maxSqlScanRows);
   if (!app.hasDecorator('cache')) {
     return load();
   }
@@ -684,8 +704,12 @@ async function loadSqlPage(
   );
 }
 
-export function registerTrendingRoutes(app: FastifyInstance): void {
+export function registerTrendingRoutes(
+  app: FastifyInstance,
+  options: TrendingRoutesOptions = {},
+): void {
   const server = app.withTypeProvider<ZodTypeProvider>();
+  const maxSqlScanRows = options.maxSqlScanRows ?? MAX_SQL_SCAN_ROWS;
 
   server.get(
     '/v1/trending',
@@ -745,7 +769,7 @@ export function registerTrendingRoutes(app: FastifyInstance): void {
       } else if (meta === null && boardCandidate && app.hasDecorator('observeCache')) {
         app.observeCache('leaderboard', 'miss');
       }
-      return withNextLink(await loadSqlPage(app, query));
+      return withNextLink(await loadSqlPage(app, query, maxSqlScanRows));
     },
   );
 }

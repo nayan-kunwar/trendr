@@ -32,7 +32,7 @@ import { registerSearchRoutes } from './routes/search.js';
 import { registerStatsRoutes } from './routes/stats.js';
 import { registerStreamRoutes } from './routes/stream.js';
 import { registerTopicRoutes } from './routes/topics.js';
-import { registerTrendingRoutes } from './routes/trending.js';
+import { registerTrendingRoutes, type TrendingRoutesOptions } from './routes/trending.js';
 import { registerWatchlistRoutes } from './routes/watchlists.js';
 
 export interface BuildAppDeps {
@@ -65,6 +65,8 @@ export interface BuildAppDeps {
   queueConnection?: Redis;
   /** Anonymous rate-limit tier (spec §10.5); `false` disables limiting for tooling. */
   rateLimit?: { max?: number; timeWindowMs?: number } | false;
+  /** Trending SQL scan-budget override for tests; production uses the route default. */
+  trending?: TrendingRoutesOptions;
   /** UNSUBSCRIBE_SECRET for the §13.4 one-click links; absent in tooling builds. */
   unsubscribeSecret?: string;
   /** Scores-retention bounds for `/v1/items/:id/scores` (env: SCORES_*; §10.4). */
@@ -146,7 +148,7 @@ export async function buildApp(deps: BuildAppDeps = {}): Promise<FastifyInstance
   // After the OpenAPI plugin so `/metrics` is collected into the document.
   registerMetrics(app, deps);
   registerHealthRoutes(app);
-  registerTrendingRoutes(app);
+  registerTrendingRoutes(app, deps.trending ?? {});
   registerItemRoutes(app, deps.scoresRetention ? { scoresRetention: deps.scoresRetention } : {});
   registerSearchRoutes(app);
   registerNewRoutes(app);

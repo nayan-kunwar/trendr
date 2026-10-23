@@ -406,13 +406,17 @@ afterAll(async () => {
   await connection.pool.end();
 });
 
-async function withApp(run: (app: FastifyInstance) => Promise<void>): Promise<void> {
+async function withApp(
+  run: (app: FastifyInstance) => Promise<void>,
+  trendingOptions: { maxSqlScanRows?: number } = {},
+): Promise<void> {
   const app = await buildApp({
     corsOrigins: ['http://localhost:3000'],
     metricsToken: 'int-trending-token',
     rateLimit: false,
     db: connection,
     redis,
+    trending: trendingOptions,
   });
   try {
     await run(app);
@@ -670,6 +674,21 @@ describe('GET /v1/trending over real Postgres + Redis (task 3.2)', () => {
       expect(externalIds(page2)).toEqual([`${PREFIX}-b`]);
       expect(page2.page.nextCursor).toBeNull();
     });
+  });
+
+  it('returns 422 when a selective SQL filter exhausts the scan budget', async () => {
+    await withApp(
+      async (app) => {
+        const response = await trending(app, '?window=24h&minCurrent=1000000&limit=1');
+        expect(response.statusCode).toBe(422);
+        expect(response.headers['content-type']).toContain('application/problem+json');
+        const body = response.json<{ type: string; status: number; detail?: string }>();
+        expect(body.type).toBe('https://trendr.dev/problems/query-too-broad');
+        expect(body.status).toBe(422);
+        expect(body.detail).toContain('scan budget');
+      },
+      { maxSqlScanRows: 2 },
+    );
   });
 
   it('parses newOnly=true/false/1/0 and rejects newOnly=yes (spec §10.3, §16)', async () => {

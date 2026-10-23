@@ -48,6 +48,12 @@ export class CursorExpiredError extends AppError {
   override readonly type = 'cursor-expired';
 }
 
+/** A valid filter that would require an unbounded scan/hydration pass. */
+export class QueryTooBroadError extends AppError {
+  override readonly status = 422;
+  override readonly type = 'query-too-broad';
+}
+
 export class RateLimitedError extends AppError {
   override readonly status = 429;
   override readonly type = 'rate-limited';
