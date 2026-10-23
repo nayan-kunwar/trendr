@@ -17,7 +17,7 @@ services:
       POSTGRES_USER: trendr
       POSTGRES_PASSWORD: trendr
       POSTGRES_DB: trendr
-    ports: ['5432:5432']
+    ports: ['127.0.0.1:5432:5432'] # loopback only: never publish the dev database
     volumes: [pgdata:/var/lib/postgresql/data]
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U trendr -d trendr']
@@ -28,7 +28,7 @@ services:
   redis:
     image: redis:7-alpine
     command: ['redis-server', '--appendonly', 'yes', '--maxmemory-policy', 'noeviction'] # BullMQ requires noeviction
-    ports: ['6379:6379']
+    ports: ['127.0.0.1:6379:6379'] # loopback only: Redis has no authentication
     volumes: [redisdata:/data]
     healthcheck:
       test: ['CMD', 'redis-cli', 'ping']
@@ -113,7 +113,7 @@ services:
       MCP_TRANSPORT: http
       MCP_PORT: '4100'
     env_file: [.env]
-    ports: ['4100:4100']
+    ports: ['127.0.0.1:4100:4100'] # loopback only; production must set MCP_HTTP_AUTH_TOKENS
     depends_on:
       api: { condition: service_healthy }
     healthcheck:

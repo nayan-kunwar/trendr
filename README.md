@@ -74,6 +74,10 @@ docker compose up --build --wait postgres redis migrate api worker web mcp
 | Grafana (profile `obs`)    | http://localhost:3001                                                    |
 | Jaeger (profile `obs`)     | http://localhost:16686                                                   |
 
+Compose publishes Postgres, Redis, and MCP on `127.0.0.1` only. These are
+local-development defaults; do not reuse this topology or its default
+credentials in a shared or production environment (see the runbook).
+
 Operational details — metrics, alert rules, manual maintenance jobs, retention
 policy and incident checklists — live in the [runbook](./docs/runbook.md).
 
@@ -133,8 +137,9 @@ database directly: tools call the public API with `X-API-Key: $MCP_API_KEY` when
 
 Create a read-only API key in the web settings (or use the seeded local account), then set
 `MCP_API_KEY` in `.env` for Compose. Without a key, calls use the anonymous public rate limit.
-`MCP_HTTP_AUTH_TOKENS` is optional; when set, remote clients must send
-`Authorization: Bearer <one-of-the-tokens>` to `/mcp`.
+`MCP_HTTP_AUTH_TOKENS` is optional in development; when set, remote clients must send
+`Authorization: Bearer <one-of-the-tokens>` to `/mcp`. Outside `NODE_ENV=development` the
+server refuses to start without it.
 
 ### Inspector
 

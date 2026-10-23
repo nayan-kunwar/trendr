@@ -63,6 +63,9 @@ try {
     }
     logger.info('mcp stdio transport ready');
   } else {
+    if (mcpEnv.NODE_ENV !== 'development' && !mcpEnv.MCP_HTTP_AUTH_TOKENS?.length) {
+      throw new Error('MCP_HTTP_AUTH_TOKENS is required when NODE_ENV is not development');
+    }
     httpHandle = createMcpHttpServer(api, {
       ...(mcpEnv.MCP_HTTP_AUTH_TOKENS ? { authTokens: mcpEnv.MCP_HTTP_AUTH_TOKENS } : {}),
     });

@@ -276,3 +276,17 @@ docker compose exec -T postgres pg_restore -U trendr -d trendr --clean --if-exis
 
 Redis is a cache/queue, not a source of truth: back up Postgres only. Losing
 Redis means boards rebuild on the next scoring run and queued jobs are lost.
+
+## 6. Compose exposure and production boundaries
+
+`docker-compose.yml` is a local-development topology. Postgres, Redis, and the
+MCP HTTP port are published on `127.0.0.1` only, and the database uses
+development credentials. Do not expose them on `0.0.0.0` or reuse this file as
+a production deployment:
+
+- Reach Postgres/Redis through `docker compose exec …` or an SSH tunnel.
+- Keep `MCP_HTTP_AUTH_TOKENS` unset only for local work; the MCP server refuses
+  to start in any `NODE_ENV` other than `development` without it.
+- Put production secrets in the platform secret store, never in a shared `.env`.
+- Publish only the API/web ingress in production. Keep Redis off untrusted
+  networks, because this topology does not configure Redis authentication.
