@@ -363,19 +363,22 @@ be re-checked later. Decisions with alternatives get an ADR in [`docs/adr/`](./a
   with the §10.3 keyset cursor (`k` = board score) and run-pinned `r`, `topic` via
   `items.id IN (SELECT item_id FROM item_topics JOIN topics …)`, `lang` via
   `lower(language) = $1`, `newOnly` via `upstream_created_at >= now() - 30 d`, and a
-  limit+1 top-up loop so `minCurrent` never returns a short page while deeper rows exist. Pages
-  are cached under `q:{sha1(canonicalQuery)}` for 60 s via `app.cache` (§9.1). `newOnly` parses
+  limit+1 top-up loop so `minCurrent` never returns a short page while deeper rows exist. The
+  loop is bounded at `MAX_SQL_SCAN_ROWS = 2_000` score rows; if the budget is exhausted before
+  the page fills, the route returns **422 `https://trendr.dev/problems/query-too-broad`** rather
+  than scanning the whole board, and the caller must narrow the filter or lower `minCurrent`.
+  Pages are cached under `q:{sha1(canonicalQuery)}` for 60 s via `app.cache` (§9.1). `newOnly` parses
   the `'true'|'false'|'1'|'0'` enum explicitly (ISS-2: `Boolean('false')` is `true`; `'yes'` →
   400, absent → false). A missing current run yields an empty page with `runId "0"` and the
   epoch `computedAt`.
 - `@trendr/api` gained a direct `drizzle-orm` dependency (the route builds its own queries).
 - Tests: unit 16 new — the `newOnly` matrix, defaults/coercions, cursor round-trip/garbage,
-  `canonicalQuery`/`trendingEtag`/`hasSqlFilters`; int `trending.int.test.ts` (13) over
+  `canonicalQuery`/`trendingEtag`/`hasSqlFilters`; int `trending.int.test.ts` (14) over
   Testcontainers: board read with cards + hydrated entries, ETag/304, absolute-rank pagination,
   equal-score tie pagination, malformed-cursor 400, no-`lbmeta` npm fallback, topic/kind/lang
   filters + `q:` cache key, `minCurrent` top-up across pages, `newOnly` matrix, combined board
   (z_score SQL), stability across an npm rescore, same-source and combined-board 410 paths, 410
-  after a rebuild and fresh restart. `apps/api/openapi.json` re-exported (4 paths).
+  after a rebuild and fresh restart, 422 when `minCurrent` exhausts the scan budget. `apps/api/openapi.json` re-exported (4 paths).
 
 ### Task 3.3 notes
 
@@ -1455,8 +1458,11 @@ be re-checked later. Decisions with alternatives get an ADR in [`docs/adr/`](./a
 - **Task 7.1.** `packages/email` centralizes the `EmailSender` boundary (ADR-0017); the API sends
   the `${WEB_PUBLIC_URL}/auth/verify?token=…` link through SMTP to Mailpit in development.
   Magic links are single-use 15-minute rows whose SHA-256 is stored; verification creates an
-  unverified user when needed, sets `email_verified_at`/`last_login_at`, promotes `ADMIN_EMAILS`,
-  and returns a 15-minute JWT plus a rotating 30-day `dt_refresh` cookie. Reusing a consumed
+  unverified user when needed, sets `email_verified_at`/`last_login_at`, synchronizes the role
+  from the authoritative `ADMIN_EMAILS` list (promoting or demoting), and returns a 15-minute
+  JWT plus a rotating 30-day `dt_refresh` cookie. The same role sync runs on magic-link issuance
+  and refresh, so removing an address demotes the stored user before the next refresh; already
+  signed access JWTs retain their role until the 15-minute TTL expires. Reusing a consumed
   refresh token revokes the entire family (theft detection), and logout revokes the family.
   The integration suite adds an `axllent/mailpit` Testcontainer (`test/global-setup.ts`) and reads
   the real message through the Mailpit API; `scripts/auth-smoke.mjs` repeats the flow against the

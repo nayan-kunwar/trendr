@@ -26,12 +26,12 @@ This document supersedes `BUGS.md`. The previous file was reviewed first; none o
 | C-02 | Medium   | API / SQL trending   | Filtered cursors are not pinned to a scoring run                            | Fixed  |
 | C-03 | High     | API / SSE            | Hijacked SSE response omits `Access-Control-Allow-Origin`                   | Fixed  |
 | C-04 | High     | API / operations     | `/readyz` reports hardcoded success without probing dependencies            | Fixed  |
-| C-05 | Medium   | API / availability   | `minCurrent` can force an unbounded full-board scan                         | Open   |
-| C-06 | Medium   | Auth / admin         | Removing an email from `ADMIN_EMAILS` never demotes the stored admin role   | Open   |
+| C-05 | Medium   | API / availability   | `minCurrent` can force an unbounded full-board scan                         | Fixed  |
+| C-06 | Medium   | Auth / admin         | Removing an email from `ADMIN_EMAILS` never demotes the stored admin role   | Fixed  |
 | C-07 | Low      | Worker / operations  | `/healthz` always returns HTTP 200, even when Redis is disconnected         | Fixed  |
 | C-08 | Low      | Auth / rate limiting | Auth guard uses `request.ip` instead of the shared trusted-client-IP helper | Fixed  |
 
-`C-01`–`C-05` are ordinary defects. `C-06`–`C-08` are deployment/policy-sensitive; C-07 and C-08 are now fixed, and C-06 remains open pending a policy decision.
+`C-01`–`C-05` are ordinary defects. `C-06`–`C-08` are deployment/policy-sensitive; all confirmed findings now have a remediation in the tree.
 
 ## Confirmed findings
 
@@ -106,6 +106,7 @@ This document supersedes `BUGS.md`. The previous file was reviewed first; none o
 - **Impact:** An unauthenticated caller can issue requests such as `?minCurrent=1000000000&limit=100` and make the API scan and hydrate the whole current board. At scale this is a cheap denial-of-service primitive against the public endpoint and its database.
 - **Verification:** Confirmed by code inspection. The integration test at `trending.int.test.ts:604-627` uses a small board and a value that filters only one item, so it does not exercise the unbounded path. No database-backed load test was available.
 - **Recommended fix:** Put a reasonable maximum on `minCurrent`, pre-filter in SQL using the current series value rather than filtering after hydration, or impose a bounded scan/time budget and return a clear error rather than scanning the whole board. Add a large-board test with a value above every current metric.
+- **Status:** **Fixed 2026-10-23.** `apps/api/src/routes/trending.ts` now caps the SQL top-up loop at `MAX_SQL_SCAN_ROWS = 2_000` and throws a new `QueryTooBroadError` (`422`, `query-too-broad`) when the budget is exhausted before a page fills. The budget is injectable for tests; `apps/api/test/int/trending.int.test.ts` uses a two-row budget with `minCurrent=1000000` and asserts the problem+json response, while the existing top-up coverage still verifies the normal path. `docs/SPEC_REVIEW.md` documents the budget and the narrower-filter remedy.
 
 ### C-06 — Admin role is never revoked when an email is removed from `ADMIN_EMAILS`
 
@@ -116,6 +117,7 @@ This document supersedes `BUGS.md`. The previous file was reviewed first; none o
 - **Impact:** If `ADMIN_EMAILS` is the source of truth for administrator access, removing an address does not revoke that account's admin API and job controls. Access persists until the role is changed manually or the row is deleted. This is a revocation failure, not merely a display issue.
 - **Verification:** Confirmed by code inspection; no demotion path exists in the reviewed repositories/routes.
 - **Recommended fix:** Treat the configured email list as authoritative on issuance/verification and set the role explicitly to `admin` or `user` each time, or provide a separate explicit role grant/revoke workflow and document that removing an email does not revoke a stored role. If demotion is added, consider invalidating active access tokens (currently valid for the configured 15-minute TTL).
+- **Status:** **Fixed 2026-10-23.** `ADMIN_EMAILS` is now authoritative: `ensureUserForLogin()` and `markUserVerified()` explicitly set `admin`/`user`, and `rotateRefreshToken()` re-evaluates the list and calls the new `setUserRole()` before minting the refreshed session. `apps/api/test/int/auth.int.test.ts` verifies both refresh-time and fresh magic-link demotion. Existing access JWTs keep their signed role until the 15-minute TTL expires; this is documented in `docs/SPEC_REVIEW.md`.
 
 ### C-07 — Worker `/healthz` always returns HTTP 200
 
@@ -174,8 +176,8 @@ These are real limitations, but they are documented or intentionally tested in t
 
 1. **SSE headers (C-03 addressed):** The fix copies plugin headers before hijacking. Retain that behavior and add `Vary: Origin` if the public policy ever reflects an origin; keep security headers in the copied set.
 2. **Readiness (C-04 addressed):** Keep the dependency probes fail-closed and retain degraded/503 coverage as dependencies evolve. Keep liveness and readiness distinct.
-3. **Auth/admin revocation:** Make `ADMIN_EMAILS` authoritative if that is the intended policy; otherwise provide an explicit revoke path. Consider token invalidation on role changes.
-4. **Public query bounds:** Add maxima/budgets for `minCurrent` and other top-up loops; test expensive filters against a large board.
+3. **Auth/admin revocation (C-06 addressed):** `ADMIN_EMAILS` is authoritative on issuance, verification, and refresh. Existing access JWTs retain their role until the 15-minute TTL; add token-family invalidation if immediate revocation is required.
+4. **Public query bounds (C-05 addressed):** The SQL top-up loop is capped at 2,000 scanned rows and returns 422 `query-too-broad` when a selective filter exhausts the budget. Keep large-board coverage and revisit the budget if the public board grows.
 5. **Search scaling:** Revisit the documented sequential trigram fallback before large item counts; use `EXPLAIN` to confirm index use.
 6. **Rate limiting:** Use one trusted-client-IP implementation for all tiers; document proxy requirements. Note that the general limiter is fail-open when Redis is unavailable (`docs/SPEC_REVIEW.md:301-305`).
 7. **Link hygiene:** Restrict stored/rendered URLs to `http`/`https`.
@@ -186,7 +188,7 @@ These are real limitations, but they are documented or intentionally tested in t
 
 - Repository state at audit baseline: `986d31d`; no application source files were modified during the audit. The `C-01`–`C-04` fixes and their tests were added afterward.
 - `C-03` was reproduced with a minimal Fastify + `@fastify/cors` hijack route (HTTP 200, `access-control-allow-origin` absent). The fix now passes the real `apps/api/test/int/stream.int.test.ts` case against Testcontainers.
-- `C-01` and `C-02` were confirmed by code inspection at audit time and are now covered by Redis/Postgres integration tests: equal-score pagination, same-source SQL cursor rebuild, and combined-board source swap. `C-07`/`C-08` are covered by unit/integration tests. `C-05` and `C-06` remain code-confirmed. At audit time, database/Redis-backed integration execution was not possible: native PostgreSQL on `5432` rejected the `trendr:trendr` credentials, no Docker containers were running, and no Redis was listening on `6379`.
-- During remediation, Testcontainers Postgres/Redis became available: `apps/api/test/int/trending.int.test.ts` (13 tests), `apps/api/test/int/stream.int.test.ts` (2 tests), and `apps/api/test/int/health.int.test.ts` (ready plus Postgres-only degraded) pass. The worker metrics-server integration test (6 tests), the full unit suite (77 files / 566 tests), and API/worker typecheck and lint pass.
+- `C-01` and `C-02` were confirmed by code inspection at audit time and are now covered by Redis/Postgres integration tests: equal-score pagination, same-source SQL cursor rebuild, and combined-board source swap. `C-05`/`C-06` are covered by targeted integration tests, and `C-07`/`C-08` by unit/integration tests. At audit time, database/Redis-backed integration execution was not possible: native PostgreSQL on `5432` rejected the `trendr:trendr` credentials, no Docker containers were running, and no Redis was listening on `6379`.
+- During remediation, Testcontainers Postgres/Redis became available: `apps/api/test/int/trending.int.test.ts` (14 tests), `apps/api/test/int/auth.int.test.ts` (6 tests), `apps/api/test/int/stream.int.test.ts` (2 tests), and `apps/api/test/int/health.int.test.ts` (ready plus Postgres-only degraded) pass. The worker metrics-server integration test (6 tests), the full unit suite (77 files / 566 tests), and API/worker typecheck and lint pass.
 - The existing tests generally use small fixtures and distinct scores; the gaps noted above explain why the remaining defects were not caught.
 - `BUGS.md` has been removed and replaced by this audit.
