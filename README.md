@@ -240,4 +240,5 @@ builds the whole stack, waits for health, seeds the database, triggers a scoring
 - [`CLAUDE.md`](./CLAUDE.md) — agent/contributor operating rules (spec Section 0)
 - [`docs/adr/`](./docs/adr) — architecture decision records
 - [`docs/SPEC_REVIEW.md`](./docs/SPEC_REVIEW.md) — deviations, verified gaps, deferred steps
+- [`docs/REMEDIATION_PLAN.md`](./docs/REMEDIATION_PLAN.md) — CI remediation and Phase 10 plan
 - [`docs/mockups/`](./docs/mockups) — UI mockups (reference for Phase 6)
