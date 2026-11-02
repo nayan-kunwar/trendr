@@ -12,10 +12,16 @@ out/
 # Turborepo
 .turbo/
 
-# Env & secrets (never commit; keep .env.example)
+# Env & secrets (never commit; keep the examples)
 .env
 .env.*
 !.env.example
+!.env.production.example
+
+# Production TLS private material (Cloudflare Origin Certificate)
+infra/nginx/certs/*
+!infra/nginx/certs/.gitkeep
+!infra/nginx/certs/README.md
 
 # Logs
 *.log

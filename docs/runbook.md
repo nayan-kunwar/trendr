@@ -1,9 +1,10 @@
 # Trendr operations runbook
 
-This runbook covers the Phase 9 operational surface: metrics, dashboards, alerts,
-retention/rollup jobs, partition checks, credential rotation, and common
-incidents. All times are **UTC** unless stated otherwise. Commands assume the
-repository root and the Compose stack from §17.
+This runbook covers the operational surface: metrics, dashboards, alerts,
+retention/rollup jobs, partition checks, credential rotation, common incidents,
+production deployment, and backup/restore. All times are **UTC** unless stated
+otherwise. Commands assume the repository root and the local Compose stack from
+§17; production commands use `docker-compose.prod.yml` as shown in §6.
 
 ## 1. Observability
 
@@ -264,29 +265,181 @@ letters never disappear on their own; the queue is a triage surface.
 Treat as critical: new snapshot inserts for that date range may be misrouted.
 Run `create-partitions`, inspect `snapshots_default`, and follow §2 above.
 
-## 5. Backups and restore (preview)
+## 5. Backups and restore
 
-Phase 10 adds the complete backup story. Until then, before risky maintenance:
+Production backups are logical `pg_dump -Fc` archives taken by
+`infra/scripts/backup.sh`. `trendr-backup.timer` runs the script daily at
+**02:30 UTC**; `Persistent=true` catches up after downtime.
+
+The script:
+
+1. writes `trendr-<UTC timestamp>.dump` atomically under `BACKUP_DIR`;
+2. encrypts it with `age` when `BACKUP_AGE_RECIPIENT` is set, otherwise gzips it;
+3. uploads to `S3_URI` with `--sse AES256` when configured;
+4. deletes local archives older than `BACKUP_RETENTION_DAYS` (mirror that with
+   an object-storage lifecycle rule).
+
+Configuration is read from `.env.production` by the systemd unit:
 
 ```bash
-docker compose exec -T postgres pg_dump -U trendr -d trendr -Fc > trendr-$(date +%F).dump
-# restore (empty database)
-docker compose exec -T postgres pg_restore -U trendr -d trendr --clean --if-exists < trendr-YYYY-MM-DD.dump
+sudo systemctl list-timers trendr-backup.timer
+sudo systemctl start trendr-backup.service
+journalctl -u trendr-backup.service -n 50 --no-pager
+ls -lh /opt/trendr/backups
+```
+
+### Restore drill
+
+Never restore over the live database. Create a scratch database from the same
+Postgres container, restore into it, verify, then drop it:
+
+```bash
+cd /opt/trendr
+COMPOSE='docker compose --env-file .env.production -f docker-compose.prod.yml'
+
+$COMPOSE exec -T postgres createdb -U trendr trendr_restore
+
+# gzip archive (default):
+gunzip -c backups/trendr-YYYYMMDDTHHMMSSZ.dump.gz |
+  $COMPOSE exec -T postgres pg_restore -U trendr -d trendr_restore --clean --if-exists --no-owner
+
+# age-encrypted archive instead:
+# age --decrypt --identity ~/age-key.txt backups/trendr-*.dump.age |
+#   $COMPOSE exec -T postgres pg_restore -U trendr -d trendr_restore --clean --if-exists --no-owner
+
+$COMPOSE exec -T postgres psql -U trendr -d trendr_restore -c \
+  "SELECT (SELECT count(*) FROM items) AS items, (SELECT count(*) FROM snapshots) AS snapshots;"
+$COMPOSE exec -T postgres dropdb -U trendr trendr_restore
 ```
 
 Redis is a cache/queue, not a source of truth: back up Postgres only. Losing
 Redis means boards rebuild on the next scoring run and queued jobs are lost.
+Document the date and result of each restore drill.
 
-## 6. Compose exposure and production boundaries
+## 6. Production deployment
+
+The production topology is `docker-compose.prod.yml`: images come from GHCR,
+only nginx publishes host ports, and Postgres/Redis/API/web/MCP stay on the
+private Compose network. `infra/nginx/trendr.conf` terminates TLS with a
+Cloudflare Origin Certificate and proxies `/v1`, `/mcp` and the web app.
+
+### One-time prerequisites
+
+| Item | Where |
+| --- | --- |
+| Domain proxied by Cloudflare, SSL mode **Full (strict)** | Cloudflare dashboard |
+| VPS (Debian/Ubuntu), SSH access, Docker allowed | Provider |
+| Cloudflare Origin Certificate | SSL/TLS → Origin Server |
+| GHCR packages (public, or a PAT with `read:packages`) | GitHub |
+| Secrets for `.env.production` | Password manager / secret store |
+| Backup bucket + lifecycle rule | S3/R2/B2 |
+
+The web image bakes `NEXT_PUBLIC_API_URL` at build time. Set the repository
+variable `API_PUBLIC_URL` (Settings → Secrets and variables → Actions →
+Variables) to the same origin as `API_PUBLIC_URL` in `.env.production` before
+publishing web.
+
+### First deploy
+
+```bash
+# 1. Publish a release tag (runs .github/workflows/publish.yml).
+git tag v1.0.0
+git push origin v1.0.0
+
+# 2. On the VPS, bootstrap Docker, the deploy user, firewall and backup timer.
+#    Clone the repo somewhere first so the script is available.
+git clone https://github.com/nayan-kunwar/trendr.git
+cd trendr
+sudo ./infra/scripts/bootstrap-vps.sh
+
+# 3. Fill the production environment (the script created it mode 600).
+sudo -u deploy nano /opt/trendr/.env.production
+#    Generate secrets with: openssl rand -hex 24 / openssl rand -base64 48
+#    Set TRENDR_TAG=v1.0.0, API_PUBLIC_URL and WEB_PUBLIC_URL.
+
+# 4. Install the Cloudflare Origin Certificate.
+sudo -u deploy cp origin.pem origin-key.pem /opt/trendr/infra/nginx/certs/
+sudo chmod 600 /opt/trendr/infra/nginx/certs/origin-key.pem
+
+# 5. Re-run bootstrap to log in to GHCR (optional), pull and start.
+sudo GHCR_USER=<github-user> GHCR_TOKEN=<read:packages-pat> \
+  ./infra/scripts/bootstrap-vps.sh
+```
+
+Bootstrap is idempotent. Without the certificate or required secrets it stops
+after host setup and prints what is missing.
+
+### Verify
+
+```bash
+cd /opt/trendr
+COMPOSE='docker compose --env-file .env.production -f docker-compose.prod.yml'
+
+$COMPOSE ps
+$COMPOSE logs --tail=100 migrate api worker nginx
+
+curl -fsS https://<host>/readyz
+curl -fsS 'https://<host>/v1/trending?scope=all&window=7d' | jq '.data | length'
+curl -N 'https://<host>/v1/stream/leaderboard?scope=all&window=7d&limit=5'
+```
+
+The SSE command must stream the snapshot and then updates without buffering.
+`/mcp` must reject requests without an `Authorization` header in production.
+
+### Deploy a new release
+
+```bash
+cd /opt/trendr
+git fetch --tags
+sudo -u deploy sed -i 's/^TRENDR_TAG=.*/TRENDR_TAG=v1.1.0/' .env.production
+COMPOSE='docker compose --env-file .env.production -f docker-compose.prod.yml'
+$COMPOSE pull
+$COMPOSE up -d --wait --wait-timeout 300
+$COMPOSE ps -a migrate   # must exit 0
+curl -fsS https://<host>/readyz
+```
+
+Migrations run automatically in the one-shot `migrate` service before the API
+and worker start. Migrations are forward-only: rolling back the image tag is
+only safe while the schema remains compatible with the older code.
+
+### Rollback
+
+```bash
+sudo -u deploy sed -i 's/^TRENDR_TAG=.*/TRENDR_TAG=v1.0.0/' .env.production
+COMPOSE='docker compose --env-file .env.production -f docker-compose.prod.yml'
+$COMPOSE pull
+$COMPOSE up -d --wait --wait-timeout 300
+curl -fsS https://<host>/readyz
+```
+
+If the release added a migration, restore the pre-deploy backup into a scratch
+database first and decide whether a schema rollback is required.
+
+### Nginx changes
+
+```bash
+docker compose --env-file .env.production -f docker-compose.prod.yml \
+  exec nginx nginx -t
+docker compose --env-file .env.production -f docker-compose.prod.yml \
+  exec nginx nginx -s reload
+```
+
+Cloudflare IP ranges in `infra/nginx/trendr.conf` are used by `real_ip` so API
+rate limits key on the client, not the edge. Refresh them when Cloudflare
+announces a range change, then validate and reload.
+
+## 7. Local Compose exposure and production boundaries
 
 `docker-compose.yml` is a local-development topology. Postgres, Redis, and the
 MCP HTTP port are published on `127.0.0.1` only, and the database uses
 development credentials. Do not expose them on `0.0.0.0` or reuse this file as
 a production deployment:
 
-- Reach Postgres/Redis through `docker compose exec …` or an SSH tunnel.
+- Use `docker-compose.prod.yml` on the VPS; only nginx publishes `80`/`443`.
+- Reach local Postgres/Redis through `docker compose exec …` or an SSH tunnel.
 - Keep `MCP_HTTP_AUTH_TOKENS` unset only for local work; the MCP server refuses
   to start in any `NODE_ENV` other than `development` without it.
-- Put production secrets in the platform secret store, never in a shared `.env`.
-- Publish only the API/web ingress in production. Keep Redis off untrusted
-  networks, because this topology does not configure Redis authentication.
+- Put production secrets in `.env.production`, never in a shared `.env` or git.
+- Keep Redis off untrusted networks, because this topology does not configure
+  Redis authentication.

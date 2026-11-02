@@ -1,0 +1,20 @@
+[Unit]
+Description=Trendr Postgres logical backup
+Documentation=file:/opt/trendr/docs/runbook.md
+After=docker.service network-online.target
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=oneshot
+User=deploy
+Group=deploy
+WorkingDirectory=/opt/trendr
+EnvironmentFile=-/opt/trendr/.env.production
+ExecStart=/opt/trendr/infra/scripts/backup.sh
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+NoNewPrivileges=true
+PrivateTmp=true
+TimeoutStartSec=1h

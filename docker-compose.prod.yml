@@ -1,0 +1,235 @@
+# Production topology (spec §17.1, task 10.1).
+#
+#   docker compose --env-file .env.production -f docker-compose.prod.yml up -d
+#
+# Differences from docker-compose.yml (local development):
+#   - images come from GHCR instead of `build:`
+#   - only nginx publishes host ports; Postgres, Redis, API, web and MCP stay on
+#     the private Compose network
+#   - every service uses the production env file with fail-fast secrets
+#   - restart policies, log rotation and resource limits are set explicitly
+#
+# Run this stack on a dedicated VPS. Do not co-locate it with the development
+# compose project (both use the `trendr` project name and volume names).
+
+name: trendr
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: '10m'
+    max-file: '5'
+
+x-node-env: &node-env
+  NODE_ENV: production
+  LOG_LEVEL: ${LOG_LEVEL:-info}
+  # The password is generated with `openssl rand -hex 24`, so it is safe inside
+  # a URL. Set it once in .env.production (POSTGRES_PASSWORD).
+  DATABASE_URL: postgres://trendr:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env.production}@postgres:5432/trendr
+  REDIS_URL: redis://redis:6379
+  API_PUBLIC_URL: ${API_PUBLIC_URL:?set API_PUBLIC_URL in .env.production}
+  API_INTERNAL_URL: http://api:4000
+  WEB_PUBLIC_URL: ${WEB_PUBLIC_URL:?set WEB_PUBLIC_URL in .env.production}
+  CORS_ORIGINS: ${WEB_PUBLIC_URL:?set WEB_PUBLIC_URL in .env.production}
+  # nginx terminates TLS and forwards the client address; Fastify must trust it
+  # or rate limiting sees every request as the proxy.
+  TRUST_PROXY: 'true'
+
+x-node-service: &node-service
+  env_file: [.env.production]
+  environment: { <<: *node-env }
+  logging: *default-logging
+  restart: unless-stopped
+  security_opt: ['no-new-privileges:true']
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    command:
+      ['postgres', '-c', 'timezone=UTC', '-c', 'shared_buffers=256MB', '-c', 'max_connections=100']
+    environment:
+      POSTGRES_USER: trendr
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env.production}
+      POSTGRES_DB: trendr
+    volumes: [pgdata:/var/lib/postgresql/data]
+    logging: *default-logging
+    restart: unless-stopped
+    shm_size: 256mb
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U trendr -d trendr']
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    deploy:
+      resources:
+        limits: { cpus: '2.0', memory: 2G }
+
+  redis:
+    image: redis:7-alpine
+    command: ['redis-server', '--appendonly', 'yes', '--maxmemory-policy', 'noeviction']
+    volumes: [redisdata:/data]
+    logging: *default-logging
+    restart: unless-stopped
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    deploy:
+      resources:
+        limits: { cpus: '1.0', memory: 512M }
+
+  migrate:
+    image: ghcr.io/${GHCR_OWNER:-nayan-kunwar}/trendr-api:${TRENDR_TAG:-latest}
+    command: ['node', 'packages/db/dist/migrate.js']
+    env_file: [.env.production]
+    environment: { <<: *node-env }
+    depends_on:
+      postgres: { condition: service_healthy }
+    logging: *default-logging
+    restart: 'no'
+    security_opt: ['no-new-privileges:true']
+    deploy:
+      resources:
+        limits: { cpus: '1.0', memory: 1G }
+
+  api:
+    <<: *node-service
+    image: ghcr.io/${GHCR_OWNER:-nayan-kunwar}/trendr-api:${TRENDR_TAG:-latest}
+    expose: ['4000']
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      redis: { condition: service_healthy }
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://localhost:4000/readyz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    deploy:
+      resources:
+        limits: { cpus: '1.0', memory: 1G }
+
+  worker:
+    <<: *node-service
+    image: ghcr.io/${GHCR_OWNER:-nayan-kunwar}/trendr-worker:${TRENDR_TAG:-latest}
+    environment:
+      <<: *node-env
+      WORKER_ROLES: ${WORKER_ROLES:-scheduler,ingest,scoring,notify}
+      WORKER_METRICS_PORT: '9464'
+    expose: ['9464']
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      redis: { condition: service_healthy }
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://localhost:9464/readyz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 20s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    deploy:
+      resources:
+        limits: { cpus: '2.0', memory: 2G }
+
+  web:
+    image: ghcr.io/${GHCR_OWNER:-nayan-kunwar}/trendr-web:${TRENDR_TAG:-latest}
+    environment:
+      NODE_ENV: production
+      API_INTERNAL_URL: http://api:4000
+      # Baked into the image by the publish workflow; kept in sync at runtime so
+      # the Next.js middleware CSP connect-src matches the public API origin.
+      NEXT_PUBLIC_API_URL: ${API_PUBLIC_URL:?set API_PUBLIC_URL in .env.production}
+      PORT: '3000'
+      HOSTNAME: 0.0.0.0
+    expose: ['3000']
+    depends_on:
+      api: { condition: service_healthy }
+    logging: *default-logging
+    restart: unless-stopped
+    security_opt: ['no-new-privileges:true']
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://localhost:3000/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 20s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    deploy:
+      resources:
+        limits: { cpus: '1.0', memory: 1G }
+
+  mcp:
+    image: ghcr.io/${GHCR_OWNER:-nayan-kunwar}/trendr-mcp:${TRENDR_TAG:-latest}
+    environment:
+      NODE_ENV: production
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      API_INTERNAL_URL: http://api:4000
+      MCP_TRANSPORT: http
+      MCP_PORT: '4100'
+      MCP_API_KEY: ${MCP_API_KEY:-}
+      MCP_HTTP_AUTH_TOKENS: ${MCP_HTTP_AUTH_TOKENS:?set MCP_HTTP_AUTH_TOKENS in .env.production}
+    expose: ['4100']
+    depends_on:
+      api: { condition: service_healthy }
+    logging: *default-logging
+    restart: unless-stopped
+    security_opt: ['no-new-privileges:true']
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://localhost:4100/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    deploy:
+      resources:
+        limits: { cpus: '0.5', memory: 512M }
+
+  nginx:
+    image: nginx:1.27-alpine
+    ports: ['80:80', '443:443']
+    volumes:
+      - ./infra/nginx/trendr.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./infra/nginx/certs:/etc/nginx/certs:ro
+    depends_on:
+      api: { condition: service_healthy }
+      web: { condition: service_healthy }
+      mcp: { condition: service_healthy }
+    logging: *default-logging
+    restart: unless-stopped
+    security_opt: ['no-new-privileges:true']
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -qO- http://127.0.0.1/healthz >/dev/null']
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits: { cpus: '0.5', memory: 256M }
+
+volumes:
+  pgdata:
+  redisdata:
