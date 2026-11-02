@@ -32,13 +32,13 @@ self-contained; Track B needs owner-provided infrastructure and secrets.
 
 | Item | Evidence |
 | --- | --- |
-| Repo state | `main` at `e9a7d1a`, pushed to `origin/main`; README polish follows |
+| Repo state | `main` synced with `origin/main`; latest code commit `096d39e` |
 | Unit suite | 79 files / 577 tests pass locally (2026-11-02) |
-| Latest CI | Run `41460809448` for `e9a7d1a` (in progress when this table was updated); previous run `41448937581` for `2f7f35c` is green |
+| Latest CI | Run `41465574824` for `096d39e`: security, lint/typecheck/unit, integration and compose-smoke all green |
 | Security gate | `pnpm audit --prod --audit-level high` green since `a839fc2`; `deepmerge@4.3.1` remains an accepted low-risk advisory |
 | Integration gate | time-dependent partition fixture fixed; `snapshots_default` assertion passes since `3ff3441` |
 | Compose flake | corepack retry added in `f2ee1d7`; compose smoke green in `41448937581` |
-| Track B status | 10.1 deployment artifacts done; 10.2 blueprint and GAP-9 done, live sync pending; 10.3 docs done except screenshots; 10.4/10.5 blocked on a live deployment |
+| Track B status | 10.1 deployment artifacts done; 10.2 blueprint and GAP-9 done, live sync pending; 10.3 docs done except screenshots; 10.4 script and result template done, deployed run pending; 10.5 blocked on production data |
 
 ## Track B blockers
 

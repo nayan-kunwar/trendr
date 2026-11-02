@@ -1645,6 +1645,12 @@ be re-checked later. Decisions with alternatives get an ADR in [`docs/adr/`](./a
   `/v1/trending`, `/v1/items/:id`, `/v1/search` and SSE examples, remote MCP setup, an ADR-0001…0021
   index and the §19.2 interview talking points. The status table shows Phase 10 in progress.
   **Screenshots remain blocked** on a live deployment; k6 and scoring tuning are likewise deferred.
+- **Task 10.4.** `infra/k6/trending.js` ramps `/v1/trending` to 200 RPS and enforces p95 < 50 ms,
+  error rate < 1%, check rate > 99% and zero dropped iterations. The anonymous tier is 60
+  requests/minute per IP, so the run needs a dedicated API key with a temporarily raised
+  `rate_limit_per_min` (or a staging instance with the limiter relaxed); `infra/k6/README.md`
+  documents both and holds the result template. **The deployed run and recorded p95 are pending**
+  the live VPS.
 - **GAP-9 resolution and caveats.** Limits were checked against the providers' docs on
   2026-11-02. Free-tier allowances change frequently; re-check before relying on any row.
 

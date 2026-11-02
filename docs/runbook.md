@@ -447,7 +447,7 @@ release workflow is still the source of truth.
 | Resend API key and a verified sender domain | Resend Dashboard |
 | GitHub fine-grained PAT (public repos, read-only) | GitHub |
 | MCP bearer token(s) and optional API key | Password manager |
-| Custom domains, if not using `onrender.com` | DNS provider |
+| Custom domains under one registrable domain (recommended for same-site auth) | DNS provider |
 
 The web image bakes `NEXT_PUBLIC_API_URL`. Set `API_PUBLIC_URL` to the final
 API origin **before** publishing web; changing it later requires a new web
