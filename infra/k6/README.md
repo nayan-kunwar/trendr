@@ -49,9 +49,13 @@ The script writes `k6-trending-summary.json` in the working directory and prints
 the same summary. Record the run in the table below (and summarize it in the
 root README once the first deployed run exists):
 
-| Date                      | Target | RPS | p50 | p95 | p99 | Errors | API CPU | API memory | Notes |
-| ------------------------- | ------ | --- | --- | --- | --- | ------ | ------- | ---------- | ----- |
-| _pending live deployment_ |        |     |     |     |     |        |         |            |       |
+| Date       | Target                                 | RPS | p50    | p95     | p99     | Errors | API CPU | API memory | Notes                                                                             |
+| ---------- | -------------------------------------- | --- | ------ | ------- | ------- | ------ | ------- | ---------- | --------------------------------------------------------------------------------- |
+| 2026-11-02 | Local Compose (`api:4000`, seeded key) | 50  | 6.4 ms | 14.0 ms | 22.5 ms | 0%     | n/a     | n/a        | 2,150 requests, 10 s ramp + 30 s hold, no dropped iterations; local baseline only |
+
+The local baseline validates the script and the Redis path, but it is **not** the
+task 10.4 acceptance result. The acceptance run must target the deployed VPS
+(or Render API) at 200 RPS and record the host's CPU/memory.
 
 Also capture the API container's CPU/memory (`docker stats` on the VPS, or
 Render metrics) and the rate-limit headers (`RateLimit-Limit`,

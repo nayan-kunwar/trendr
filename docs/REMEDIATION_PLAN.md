@@ -38,7 +38,7 @@ self-contained; Track B needs owner-provided infrastructure and secrets.
 | Security gate | `pnpm audit --prod --audit-level high` green since `a839fc2`; `deepmerge@4.3.1` remains an accepted low-risk advisory |
 | Integration gate | time-dependent partition fixture fixed; `snapshots_default` assertion passes since `3ff3441` |
 | Compose flake | corepack retry added in `f2ee1d7`; compose smoke green in `41448937581` |
-| Local rehearsal | 2026-11-02: Compose stack, seed/score, auth smoke, MCP smoke, real scoring → SSE snapshot/update, observability smoke, ETag/CORS/security headers/metrics all passed. Eight local screenshots were captured for review; they do not replace the deployed screenshots required by 10.3. Host Postgres was mapped to 5433 because a native server occupies 5432. |
+| Local rehearsal | 2026-11-02: Compose stack, seed/score, auth smoke, MCP smoke, real scoring → SSE snapshot/update, observability smoke, ETag/CORS/security headers/metrics all passed. A 50 RPS local k6 baseline passed at p95 14.0 ms / 0% errors (2,150 requests; not the 200 RPS acceptance run). Eight local screenshots were captured for review; they do not replace the deployed screenshots required by 10.3. Host Postgres was mapped to 5433 because a native server occupies 5432. |
 | Track B status | 10.1 deployment artifacts done; 10.2 blueprint and GAP-9 done, live sync pending; 10.3 docs done except screenshots; 10.4 script and result template done, deployed run pending; 10.5 blocked on production data |
 
 ## Track B blockers
