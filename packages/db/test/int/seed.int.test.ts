@@ -4,6 +4,7 @@ import { and, count, eq, inArray, max, min, sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { createDb, type Connection, type Db } from '../../src/client.js';
+import { countSnapshotsDefault } from '../../src/partitions.js';
 import { type SeedReport, seed } from '../../src/seed.js';
 import { itemTopics, items, topics } from '../../src/schema/items.js';
 import { dailyMetrics } from '../../src/schema/metrics.js';
@@ -107,6 +108,9 @@ describe('seed.ts (spec §7.3 bootstrap, task 1.6)', () => {
     expect(counts.snapshots).toBe(report.snapshots);
     expect(counts.dailyMetrics).toBe(report.dailyMetrics);
     expect(counts.itemTopics).toBe(report.itemTopics);
+    // ISS-7: the fixed fixture window must be covered by monthly partitions,
+    // never the default catch-all (which would block later partition creation).
+    expect(await countSnapshotsDefault(db)).toBe(0);
 
     // 60 days of daily buckets ending on the anchor day, plus a trailing 48 h
     // hourly tail whose newest point is the last complete hour (anchor − 1 h).
