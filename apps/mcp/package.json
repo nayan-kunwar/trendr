@@ -21,10 +21,10 @@
     "zod": "^4.6.7"
   },
   "devDependencies": {
-    "@types/node": "^22",
-    "eslint": "^9",
-    "tsup": "^8",
+    "@types/node": "^26",
+    "eslint": "^10",
+    "tsup": "^9",
     "tsx": "^4",
-    "typescript": "^5"
+    "typescript": "^7"
   }
 }

@@ -25,9 +25,9 @@
     "zod": "^4"
   },
   "devDependencies": {
-    "@types/node": "^22",
-    "eslint": "^9",
-    "tsup": "^8",
-    "typescript": "^5"
+    "@types/node": "^26",
+    "eslint": "^10",
+    "tsup": "^9",
+    "typescript": "^7"
   }
 }
