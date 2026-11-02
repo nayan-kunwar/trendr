@@ -14,5 +14,16 @@ allowBuilds:
 
 # Security: next pins postcss 8.4.31, which carries open advisories
 # (GHSA-6g55-p6wh-862q, GHSA-r28c-9q8g-f849); force the patched 8.5 line everywhere.
+# body-parser 2.3.0 (via the MCP SDK's Express peer) is affected by
+# GHSA-27r3-jxmh-p828; Express 5.3.0 accepts the patched 2.4.0.
+# fast-uri has separate 3.x and 4.x lines; both need their patched releases
+# (GHSA-w74x-v6f9-j3xg, GHSA-wjr9-j795-jxcr, GHSA-xhq7-xmqj-769h, GHSA-333x-w4r6-6crp).
 overrides:
   postcss: ^8.5.23
+  body-parser: ^2.4.0
+  fast-uri@^3: ^3.1.9
+  fast-uri@^4: ^4.2.3
+  # @fastify/static 10.x declares glob ^13, which still pulls a vulnerable
+  # minimatch. glob 14.0.3 pulls minimatch 11; verify the Swagger UI/static
+  # routes after install (semver override).
+  glob: ^14.0.3
