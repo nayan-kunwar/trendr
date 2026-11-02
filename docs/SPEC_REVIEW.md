@@ -1689,6 +1689,10 @@ be re-checked later. Decisions with alternatives get an ADR in [`docs/adr/`](./a
 | R-50 | Fixed integration-test anchors start at 2026-08-20, but migrations create only the current month −2/+3 window, so the 2026-11-01 run routed 3,792 seed rows into `snapshots_default` and failed the ISS-7 assertion. | `test/global-setup.ts` now creates partitions from 2026-08-01, and the seed test asserts `snapshots_default` stays empty. Production behaviour is unchanged. |
 | R-51 | The 2026-10-29 `compose-smoke` job failed on a transient corepack download during image build. | Both node Dockerfiles retry the pinned pnpm install three times before failing the build. |
 
+- **Agent rules file:** `CLAUDE.md` was renamed to `AGENTS.md` so agent tooling that reads
+  `AGENTS.md` picks it up automatically. The content is still the verbatim Section 0 rules;
+  `TRENDR_SPEC.md` §0/§18 still name `CLAUDE.md` because the spec is frozen.
+
 ## Environment quirks worth knowing
 
 

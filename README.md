@@ -376,7 +376,7 @@ rate-limit caveat and the result template; results are recorded after the first 
 ## Documentation
 
 - [`TRENDR_SPEC.md`](./TRENDR_SPEC.md) — the frozen specification (v1.1)
-- [`CLAUDE.md`](./CLAUDE.md) — agent/contributor operating rules (spec Section 0)
+- [`AGENTS.md`](./AGENTS.md) — agent/contributor operating rules (spec Section 0)
 - [`docs/adr/`](./docs/adr) — architecture decision records
 - [`docs/SPEC_REVIEW.md`](./docs/SPEC_REVIEW.md) — deviations, verified gaps, deferred steps
 - [`docs/REMEDIATION_PLAN.md`](./docs/REMEDIATION_PLAN.md) — CI remediation and Phase 10 plan
