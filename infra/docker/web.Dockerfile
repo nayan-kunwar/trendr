@@ -10,7 +10,13 @@ ENV NODE_OPTIONS=--dns-result-order=ipv4first
 # Pin the pnpm the repo's packageManager field expects so no build step ever
 # resolves "pnpm latest" over the network; then keep the store where the
 # builder's buildkit cache mount expects it.
-RUN corepack enable && corepack install --global pnpm@${PNPM_VERSION}
+RUN corepack enable \
+    && for attempt in 1 2 3; do \
+         corepack install --global pnpm@${PNPM_VERSION} && exit 0; \
+         echo "corepack install failed (attempt ${attempt}/3); retrying in $((attempt * 5))s" >&2; \
+         sleep $((attempt * 5)); \
+       done; \
+       exit 1
 ENV npm_config_store_dir=/pnpm/store
 WORKDIR /repo
 
