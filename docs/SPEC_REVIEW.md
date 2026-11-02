@@ -39,6 +39,12 @@ be re-checked later. Decisions with alternatives get an ADR in [`docs/adr/`](./a
   30/min) therefore stays at half the observed ceiling. The live `mcp` `overall` series already
   ended at **2026-10-19** when captured at **04:41Z** on 2026-10-20, so the 05:00 UTC daily has the
   previous day; the 11:00 retry remains for a late publication.
+- **GAP-9** — free-tier limits verified 2026-11-02. Render's free web/Postgres/Key Value cannot
+  host a durable always-on demo (15-minute spin-down, 30-day Postgres expiry, in-memory 25 MB Key
+  Value), and there is no free worker. The Blueprint therefore pays for API/worker/Postgres/Key
+  Value and leaves web/MCP free. Neon free is now **1 GB/project** (not the spec's ≈ 0.5 GB), but
+  the §6.5 90-day `daily_metrics` assumption is not implemented, so the 0.5 GB budget does not hold
+  as written. Upstash free remains unsuitable for BullMQ. See ADR-0021 and Phase 10 notes.
 
 ## Phase 1 notes
 
@@ -1616,6 +1622,51 @@ be re-checked later. Decisions with alternatives get an ADR in [`docs/adr/`](./a
 | R-43 | §14.1 freshness | A literal `max(last_snapshot_at)` over `items` includes soft-deleted and upstream-archived rows, so a healthy tier could stay permanently stale because of a dead project. | `trendr_data_freshness_seconds` excludes `is_deleted` and `is_archived` rows; the alert measures what the scheduler can still refresh. |
 | R-44 | §7.10 / 9.4 manual runs | Executing maintenance directly in an operator shell would leave the worker's `trendr_snapshots_default_rows` gauge stale. | `maintenance-cli.ts` enqueues the job onto `maintenance` and waits for the worker result; direct SQL is documented only as an emergency fallback. |
 | R-45 | §15 body size | The spec requires a 64 KB cap but does not define the error body. | Fastify's 413 is mapped through the existing RFC 7807 error handler; the cap applies to JSON and URL-encoded bodies globally, including public auth routes. |
+
+## Phase 10 notes
+
+- **Task 10.1.** `docker-compose.prod.yml` builds the one-origin VPS topology: GHCR images, no
+  published Postgres/Redis/MCP ports, nginx as the only `80`/`443` listener, Cloudflare origin TLS,
+  real-IP handling, SSE-safe proxying, and the one-shot `migrate` service ahead of API/worker.
+  `infra/scripts/bootstrap-vps.sh` installs Docker, the deploy user, the firewall and the backup
+  timer; `.github/workflows/publish.yml` publishes multi-arch images on `v*` tags or manual
+  dispatch. Main-branch publishing stays disabled until the `API_PUBLIC_URL` repository variable
+  exists.
+- **Task 10.2.** `render.yaml` is the managed alternative. It deploys prebuilt images because a
+  Render Blueprint cannot pass `dockerBuildArgs` and the web image bakes `NEXT_PUBLIC_API_URL`.
+  Paid API (for `preDeployCommand`), worker, Postgres and Key Value; free web/MCP. Default
+  `*.onrender.com` hosts are cross-site (`onrender.com` is on the Public Suffix List), so the
+  Blueprint sets `COOKIE_SAME_SITE=none`; moving both services to custom subdomains of one
+  registrable domain allows `lax`. The local validation is against Render's published JSON Schema
+  (`https://render.com/schema/render.yaml.json`) plus Prettier. **A live Blueprint sync is still
+  pending** because no Render account/CLI is available in this environment; that is the remaining
+  acceptance item for task 10.2.
+- **GAP-9 resolution and caveats.** Limits were checked against the providers' docs on
+  2026-11-02. Free-tier allowances change frequently; re-check before relying on any row.
+
+| Piece | Current free allowance (2026-11-02) | Verdict for Trendr |
+| --- | --- | --- |
+| Render web | 512 MB, 750 instance-hours/workspace/month, 5 GB bandwidth, 500 pipeline minutes, 15-minute idle spin-down, no private inbound | Demo only; the Blueprint keeps web and MCP free and accepts cold starts |
+| Render Postgres | 1 GB, one per workspace, expires 30 days after creation (14-day grace), no backups/pooling | Not durable; the Blueprint uses paid `0.5c-1g` with a 15 GB disk |
+| Render Key Value | 25 MB, one per workspace, in-memory, 50 connections, no persistence | Cannot hold BullMQ jobs across a restart; paid `256mb` with `noeviction` + `journal-snapshot` |
+| Render worker | None | Scheduler/ingest require the paid `0.5c-512mb` minimum |
+| Neon Postgres | 1 GB/project, 20 GB/account, 100 CU-hours/project, 5 GB egress, 5-minute scale-to-zero | The 0.5 GB assumption is conservative, but `daily_metrics` retention is missing (below) |
+| Upstash Redis | 250 MB, 500K commands/month, 10 GB bandwidth | BullMQ polling/blocking burns the command quota; cache-only |
+| Resend | 3,000 emails/month, 100/day | Sufficient for magic links and a small digest list; the sender domain must be verified |
+| Vercel Hobby | Free for non-commercial use; 100 GB fast data transfer, 1M CDN requests/month | Web front end only; no worker or BullMQ |
+| Fly.io | No free tier for new organizations; 2-hour/7-day trial; 256 MB Machine ≈ $2.19/month | Viable paid worker host, not a free one |
+| Oracle Always Free | Arm Ampere allowance (verify region/capacity) | Capacity is often unavailable and idle resources can be reclaimed |
+
+- **The Neon 0.5 GB budget does not hold as written.** §6.5 assumes `daily_metrics` is held to
+  ≈ 90 days, but the maintenance job rolls the table up and never prunes it. At the low-tier caps
+  (≈ 12.5k items × 2–3 metrics) the table grows by roughly 0.6–1 GB per year, so a 1 GB Neon
+  project would eventually hit the storage cap even with short snapshot/score retention. The 15 GB
+  Render disk absorbs this for years at demo size. Before using Neon free long-term, add a
+  `daily_metrics` retention job (the 30-day download window needs at least 60 days) and record the
+  measured row width; do not rely on the current table-size estimate.
+- **Cost.** Render runs about $47/month at these plans (API $7 + worker $7 + Postgres $19 + 15 GB
+  disk ≈ $4 + Key Value $10) plus bandwidth overages. The VPS path is about $6–8/month plus a
+  domain and backup egress. See ADR-0021 for the full comparison.
 
 ## Post-audit maintenance (2026-11)
 

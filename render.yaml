@@ -1,0 +1,240 @@
+# Render Blueprint — managed alternative to the VPS topology (spec §17.6,
+# task 10.2). See docs/adr/0021-deployment-topology.md for the trade-offs.
+#
+# The images are built and pushed by .github/workflows/publish.yml. Render
+# cannot build this monorepo with dockerBuildArgs, and the Next.js image bakes
+# NEXT_PUBLIC_API_URL at build time, so the Blueprint deploys prebuilt images
+# instead of Dockerfiles. Publish a release tag (or `edge` + a sha tag) before
+# the first sync:
+#
+#   git tag v1.0.0 && git push origin v1.0.0
+#
+# The repository variable API_PUBLIC_URL used by the publish workflow MUST match
+# the API origin below, otherwise the browser bundle calls the wrong host.
+#
+# Public URLs are deployment configuration, not secrets. Render cannot
+# interpolate one service's URL into another service's URL-valued env var
+# (fromService exposes host/hostport without a scheme), so the onrender.com
+# names are written out. If Render appends a suffix because a name is taken, or
+# if you use custom domains, replace all three URLs here and rebuild web with
+# the matching API_PUBLIC_URL. The API and web can share a custom origin with
+# path routing only on the VPS topology; on Render they are separate origins.
+#
+# Default `*.onrender.com` hosts are cross-site: onrender.com is on the Public
+# Suffix List, so `trendr-web.onrender.com` and `trendr-api.onrender.com` do not
+# share a registrable domain. The refresh cookie therefore uses
+# COOKIE_SAME_SITE=none below. Putting both services under custom subdomains of
+# one domain you own (for example app.example.com + api.example.com) restores a
+# same-site relationship; switch COOKIE_SAME_SITE back to lax in that case.
+#
+# Services that pull a private GHCR package need a registry credential created
+# in the Render dashboard, then uncommented on that service:
+#
+#   image:
+#     url: ghcr.io/nayan-kunwar/trendr-api:latest
+#     creds:
+#       fromRegistryCreds:
+#         name: ghcr-trendr
+
+envVarGroups:
+  # Secrets generated once by Render and shared by API and worker. Environment
+  # groups cannot contain `sync: false`, so prompted credentials stay on the
+  # individual services below.
+  - name: trendr-shared
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: API_PUBLIC_URL
+        value: https://trendr-api.onrender.com
+      - key: WEB_PUBLIC_URL
+        value: https://trendr-web.onrender.com
+      - key: CORS_ORIGINS
+        value: https://trendr-web.onrender.com
+      - key: TRUST_PROXY
+        value: 'true'
+      # The default onrender.com web/API hosts are cross-site (Public Suffix
+      # List), so the refresh cookie needs SameSite=None. NODE_ENV=production
+      # makes it Secure, which browsers require for None. Use `lax` when both
+      # services share a custom registrable domain.
+      - key: COOKIE_SAME_SITE
+        value: none
+      - key: EMAIL_PROVIDER
+        value: resend
+      # Must be an address on the verified Resend domain.
+      - key: EMAIL_FROM
+        value: 'Trendr <digest@example.com>'
+      - key: JWT_SECRET
+        generateValue: true
+      - key: API_KEY_PEPPER
+        generateValue: true
+      - key: UNSUBSCRIBE_SECRET
+        generateValue: true
+      - key: METRICS_TOKEN
+        generateValue: true
+
+  # Demo-sized ingestion and retention. The §6.5 full-size estimate lands at
+  # the 15 GB Postgres disk, so the low-tier caps keep headroom and upstream
+  # usage down. daily_metrics has no retention job yet, which is why these caps
+  # matter more than the Render disk size suggests.
+  - name: trendr-worker-caps
+    envVars:
+      - key: TRACKED_MAX_GITHUB
+        value: '5000'
+      - key: TRACKED_MAX_NPM
+        value: '2000'
+      - key: TRACKED_MAX_PYPI
+        value: '500'
+      - key: TRACKED_MAX_HUGGINGFACE
+        value: '2000'
+      - key: SNAPSHOT_RETENTION_MONTHS
+        value: '2'
+      - key: SCORES_HOURLY_RETENTION_HOURS
+        value: '24'
+      - key: SCORES_DAILY_RETENTION_DAYS
+        value: '30'
+      - key: WORKER_CONCURRENCY_INGEST
+        value: '2'
+
+services:
+  # API: the only paid web service, so preDeployCommand is available. The
+  # migration runs once per deploy against the private Postgres connection.
+  - type: web
+    name: trendr-api
+    runtime: image
+    region: frankfurt
+    plan: 0.5c-512mb
+    image:
+      url: ghcr.io/nayan-kunwar/trendr-api:latest
+    healthCheckPath: /readyz
+    preDeployCommand: node packages/db/dist/migrate.js
+    maxShutdownDelaySeconds: 30
+    envVars:
+      - key: API_PORT
+        value: '10000'
+      # The API does not run worker roles. Keeping ingest out of this list also
+      # avoids requiring GITHUB_TOKENS in the public API process.
+      - key: WORKER_ROLES
+        value: 'none'
+      - key: DATABASE_URL
+        fromDatabase:
+          name: trendr-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          name: trendr-keyvalue
+          type: keyvalue
+          property: connectionString
+      - key: ADMIN_EMAILS
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - fromGroup: trendr-shared
+
+  # Worker: no free tier exists, so this is the cheapest paid instance. It is
+  # capped at 512 MB; if scoring OOMs, move it to 1c-2g before raising NODE_OPTIONS.
+  - type: worker
+    name: trendr-worker
+    runtime: image
+    region: frankfurt
+    plan: 0.5c-512mb
+    image:
+      url: ghcr.io/nayan-kunwar/trendr-worker:latest
+    maxShutdownDelaySeconds: 60
+    envVars:
+      - key: WORKER_ROLES
+        value: scheduler,ingest,scoring,notify
+      - key: SCHEDULER_ENABLED
+        value: 'true'
+      - key: NODE_OPTIONS
+        value: --dns-result-order=ipv4first --no-network-family-autoselection --max-old-space-size=384
+      - key: DATABASE_URL
+        fromDatabase:
+          name: trendr-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          name: trendr-keyvalue
+          type: keyvalue
+          property: connectionString
+      - key: GITHUB_TOKENS
+        sync: false
+      - key: HF_TOKEN
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - fromGroup: trendr-shared
+      - fromGroup: trendr-worker-caps
+
+  # Web: free tier, so it spins down after 15 minutes without traffic and takes
+  # about a minute to wake. Free services also cannot receive private traffic;
+  # server-side calls use the API's public origin (API_INTERNAL_URL below).
+  - type: web
+    name: trendr-web
+    runtime: image
+    region: frankfurt
+    plan: free
+    image:
+      url: ghcr.io/nayan-kunwar/trendr-web:latest
+    healthCheckPath: /
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: '10000'
+      - key: HOSTNAME
+        value: 0.0.0.0
+      # Must equal the API origin baked into the image at publish time. The
+      # runtime copy also feeds the Next.js middleware CSP connect-src.
+      - key: NEXT_PUBLIC_API_URL
+        value: https://trendr-api.onrender.com
+      - key: API_INTERNAL_URL
+        value: https://trendr-api.onrender.com
+      - key: WEB_PUBLIC_URL
+        value: https://trendr-web.onrender.com
+
+  # MCP: free tier, public Streamable HTTP at POST /mcp. Set at least one
+  # MCP_HTTP_AUTH_TOKENS value in production; an empty list disables bearer auth.
+  - type: web
+    name: trendr-mcp
+    runtime: image
+    region: frankfurt
+    plan: free
+    image:
+      url: ghcr.io/nayan-kunwar/trendr-mcp:latest
+    healthCheckPath: /healthz
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: MCP_TRANSPORT
+        value: http
+      - key: MCP_PORT
+        value: '10000'
+      - key: API_INTERNAL_URL
+        value: https://trendr-api.onrender.com
+      - key: MCP_API_KEY
+        sync: false
+      - key: MCP_HTTP_AUTH_TOKENS
+        sync: false
+
+  # Redis-compatible queue/cache. noeviction is required for BullMQ; the
+  # journal-snapshot persistence mode bounds loss to about a second on restart.
+  - type: keyvalue
+    name: trendr-keyvalue
+    region: frankfurt
+    plan: 256mb
+    maxmemoryPolicy: noeviction
+    persistenceMode: journal-snapshot
+    ipAllowList: []
+
+databases:
+  # Paid compute: the API and worker connect privately; external access is
+  # disabled with an empty allow list. Use a temporary allow-list entry for a
+  # restore drill or psql from a workstation.
+  - name: trendr-db
+    databaseName: trendr
+    user: trendr
+    region: frankfurt
+    plan: 0.5c-1g
+    diskSizeGB: 15
+    postgresMajorVersion: '16'
+    ipAllowList: []

@@ -429,7 +429,160 @@ Cloudflare IP ranges in `infra/nginx/trendr.conf` are used by `real_ip` so API
 rate limits key on the client, not the edge. Refresh them when Cloudflare
 announces a range change, then validate and reload.
 
-## 7. Local Compose exposure and production boundaries
+## 7. Render alternative (Blueprint)
+
+`render.yaml` deploys the same four processes with Render Postgres and Key
+Value. It is the managed alternative to §6, not a second production path; the
+VPS remains primary (ADR-0021). Render pulls prebuilt GHCR images, so the
+release workflow is still the source of truth.
+
+### Prerequisites
+
+| Item | Where |
+| --- | --- |
+| Render account with a payment method | Render Dashboard |
+| Published images (`trendr-api`, `-worker`, `-mcp`, `-web`) | `v*` tag or manual `publish.yml` run |
+| `API_PUBLIC_URL` repository variable | GitHub → Settings → Secrets and variables → Actions → Variables |
+| GHCR read credential, only if the packages are private | Render Dashboard → Registry Credentials |
+| Resend API key and a verified sender domain | Resend Dashboard |
+| GitHub fine-grained PAT (public repos, read-only) | GitHub |
+| MCP bearer token(s) and optional API key | Password manager |
+| Custom domains, if not using `onrender.com` | DNS provider |
+
+The web image bakes `NEXT_PUBLIC_API_URL`. Set `API_PUBLIC_URL` to the final
+API origin **before** publishing web; changing it later requires a new web
+image. The Blueprint's three public URLs (`trendr-api`, `trendr-web`,
+`trendr-mcp`) are written into `render.yaml` because Render cannot interpolate
+one service's URL into another URL-valued variable. If Render appends a suffix
+or you use custom domains, edit those values and rebuild web.
+
+### First Blueprint sync
+
+1. Publish a release (API/worker/MCP first, then web):
+
+   ```bash
+   git tag v1.0.0
+   git push origin v1.0.0
+   ```
+
+2. In Render: **New → Blueprint**, connect the repository, and apply
+   `render.yaml`. Enter the `sync: false` values: `ADMIN_EMAILS`,
+   `RESEND_API_KEY` (API and worker), `GITHUB_TOKENS`, optional `HF_TOKEN`,
+   `MCP_API_KEY`, and at least one `MCP_HTTP_AUTH_TOKENS` value.
+3. Confirm the paid plans (API, worker, Postgres, Key Value). Web and MCP stay
+   free.
+4. On the first sync, wait for the API deploy to finish its pre-deploy
+   migration before relying on the worker. If the worker crash-loops, redeploy
+   it after the API reports healthy.
+
+The Blueprint ships `COOKIE_SAME_SITE=none` because the default
+`*.onrender.com` web and API hosts are cross-site; see **Auth cookies** below
+before changing it.
+
+### Verify
+
+```bash
+curl -fsS https://trendr-api.onrender.com/readyz
+curl -fsS https://trendr-web.onrender.com/ >/dev/null
+curl -fsS https://trendr-mcp.onrender.com/healthz
+curl -fsS 'https://trendr-api.onrender.com/v1/trending?scope=all&window=7d' |
+  jq '.data | length'
+
+# MCP must reject an unauthenticated POST when MCP_HTTP_AUTH_TOKENS is set.
+curl -s -o /dev/null -w '%{http_code}\n' \
+  -X POST https://trendr-mcp.onrender.com/mcp
+```
+
+The API is paid and stays warm, so SSE should stream without a cold-start gap:
+
+```bash
+curl -N 'https://trendr-api.onrender.com/v1/stream/leaderboard?scope=all&window=7d&limit=5'
+```
+
+### Auth cookies
+
+`onrender.com` is on the Public Suffix List, so the default
+`trendr-web.onrender.com` and `trendr-api.onrender.com` hosts are **cross-site**
+for cookies, not same-site subdomains. The Blueprint therefore sets
+`COOKIE_SAME_SITE=none`; `NODE_ENV=production` makes the cookie `Secure`, which
+browsers require for `SameSite=None`. The API env schema rejects
+`COOKIE_SAME_SITE=none` outside production, and the route refuses the
+combination without Secure cookies.
+
+Cross-site refresh still requires the `CORS_ORIGINS` allowlist and the
+`X-Requested-With: trendr` CSRF header; the API does not accept a bare cookie
+POST. Safari blocks third-party cookies by default, and other browsers may
+partition or throttle them, so session restore on the default Render hosts is
+not reliable in every browser.
+
+For a browser-complete demo, add custom subdomains under one registrable domain
+you own (`app.example.com` and `api.example.com`, not two `*.onrender.com`
+hosts), then set `COOKIE_SAME_SITE=lax`. Same-site subdomains work with `Lax`
+even though the requests are cross-origin.
+
+### Custom domains
+
+Add the domains in each service's **Settings → Custom Domains** (or with
+`domains:` in `render.yaml`). Keep the web and API hosts under the same
+registrable domain. Then update all of:
+
+- `trendr-shared`: `API_PUBLIC_URL`, `WEB_PUBLIC_URL`, `CORS_ORIGINS`, and
+  `COOKIE_SAME_SITE=lax` once both hosts are custom subdomains of one domain.
+- `trendr-web`: `NEXT_PUBLIC_API_URL`, `API_INTERNAL_URL`, `WEB_PUBLIC_URL`.
+- `trendr-mcp`: `API_INTERNAL_URL`.
+
+Re-publish the web image with the matching `API_PUBLIC_URL` after changing the
+API origin. Render issues and renews TLS certificates; Cloudflare proxying is
+optional and not required for this path.
+
+### Deploy a new release
+
+Image-backed services do not redeploy when `latest` moves. Publish the tag,
+then trigger a manual deploy (or a deploy hook) for each service in this order:
+
+1. **API** — the pre-deploy command applies migrations; wait for `/readyz`.
+2. **worker** — starts against the migrated schema.
+3. **web** and **MCP** — no schema dependency.
+
+To pin a release instead of tracking `latest`, change each `image.url` in
+`render.yaml` to the release tag and sync the Blueprint. Migrations remain
+expand → migrate → contract, so a rollback to the previous image is safe while
+the schema stays compatible.
+
+### Limitations and operations
+
+- Free web/MCP spin down after 15 minutes idle and take about a minute to wake.
+  They share the workspace's 750 free instance-hours/month; do not keep both
+  warm with an uptime monitor unless that budget is acceptable.
+- Free web services cannot receive private traffic, so web/MCP call the API's
+  public origin. Server-side rendering therefore pays one public hop.
+- No nginx, Cloudflare origin certificate, Prometheus or Grafana run in this
+  path. Use Render logs/metrics and scrape the API's `METRICS_TOKEN`-guarded
+  `/metrics` from an external collector if needed.
+- Postgres and Key Value have `ipAllowList: []`. For `psql` or a restore drill,
+  temporarily add your workstation's IP in the Render Dashboard, then remove it.
+- Key Value `noeviction` returns write errors when full instead of dropping
+  queued jobs. Watch memory and queue depth. Persistence bounds loss to about a
+  second on restart but is **not** a backup.
+- `daily_metrics` has no retention job, so the low-tier caps in `render.yaml`
+  are the main control on database growth (GAP-9).
+- The Blueprint is schema-validated locally. The first live sync against a
+  Render account is the remaining validation step.
+
+### Backups and restore
+
+Paid Render Postgres provides point-in-time recovery: 3 days on Hobby, 7 days
+on Pro or higher. Use **Recovery → Restore Database** to create a recovery
+instance, validate it, then point the services at it. Use **Create export** for
+a logical backup; Render retains exports for seven days. Download the
+`.dir.tar.gz` and restore with `pg_restore` into an empty database if you need
+longer retention.
+
+Key Value has no logical backup. BullMQ jobs are re-derived from the scheduler
+after a queue loss, but jobs accepted before the loss are not recovered beyond
+the journal-snapshot window.
+
+## 8. Local Compose exposure and production boundaries
 
 `docker-compose.yml` is a local-development topology. Postgres, Redis, and the
 MCP HTTP port are published on `127.0.0.1` only, and the database uses
