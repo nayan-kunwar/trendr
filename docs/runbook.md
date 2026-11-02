@@ -466,9 +466,10 @@ or you use custom domains, edit those values and rebuild web.
    ```
 
 2. In Render: **New → Blueprint**, connect the repository, and apply
-   `render.yaml`. Enter the `sync: false` values: `ADMIN_EMAILS`,
-   `RESEND_API_KEY` (API and worker), `GITHUB_TOKENS`, optional `HF_TOKEN`,
-   `MCP_API_KEY`, and at least one `MCP_HTTP_AUTH_TOKENS` value.
+   `render.yaml`. Change `EMAIL_FROM` in `trendr-shared` from the placeholder to
+   an address on the verified Resend domain, then enter the `sync: false` values:
+   `ADMIN_EMAILS`, `RESEND_API_KEY` (API and worker), `GITHUB_TOKENS`, optional
+   `HF_TOKEN`, `MCP_API_KEY`, and at least one `MCP_HTTP_AUTH_TOKENS` value.
 3. Confirm the paid plans (API, worker, Postgres, Key Value). Web and MCP stay
    free.
 4. On the first sync, wait for the API deploy to finish its pre-deploy
