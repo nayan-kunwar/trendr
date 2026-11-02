@@ -1,11 +1,14 @@
 # CI remediation and Phase 10 plan
 
 **Date:** 2026-11-02  
-**Status:** In progress — Track A complete; Track B partially blocked on live infrastructure  
+**Status:** In progress — Track A complete; Track B partially blocked on live infrastructure;
+the production-readiness review remediation is planned in
+[`PRODUCTION_READINESS_REVIEW.md`](./PRODUCTION_READINESS_REVIEW.md)  
 **Scope:** Restore green CI (dependency audit + integration regression), then finish Phase 10
 (deployment and polish).
 
 Related documents: [`AUDIT.md`](../AUDIT.md), [`SPEC_REVIEW.md`](./SPEC_REVIEW.md),
+[`PRODUCTION_READINESS_REVIEW.md`](./PRODUCTION_READINESS_REVIEW.md),
 [`runbook.md`](./runbook.md), [`TRENDR_SPEC.md`](../TRENDR_SPEC.md).
 
 ## Summary
@@ -28,13 +31,25 @@ A third, non-blocking issue was the 2026-10-29 `compose-smoke` failure: a transi
 The plan below fixes CI first (Track A), then completes Phase 10 (Track B). Track A is
 self-contained; Track B needs owner-provided infrastructure and secrets.
 
+## Follow-on workstream — production-readiness review
+
+The 2026-11-02 production-readiness review of `main` at `2ad0396` recorded **27 findings**
+(0 Critical, 4 High, 12 Medium, 11 Low) and a “Ready with conditions” verdict. All 27 are
+scheduled in [`PRODUCTION_READINESS_REVIEW.md`](./PRODUCTION_READINESS_REVIEW.md), with the four
+High findings reproduced first and a checkpoint after they are fixed.
+
+This workstream is local code and operations work; it can proceed while Track B remains blocked on
+live infrastructure. It does not replace the Track B acceptance items — deployed screenshots, the
+200 RPS k6 run, scoring tuning and the live Render/VPS checks still require the owner-provided
+environment.
+
 ## Current evidence
 
 | Item | Evidence |
 | --- | --- |
-| Repo state | `main` synced with `origin/main`; latest code commit `096d39e` |
+| Repo state | `main` synced with `origin/main`; latest code commit `2ad0396` |
 | Unit suite | 79 files / 577 tests pass locally (2026-11-02) |
-| Latest CI | Run `41465574824` for `096d39e`: security, lint/typecheck/unit, integration and compose-smoke all green |
+| Latest CI | Run `41501249324` for `2ad0396`: security, lint/typecheck/unit, integration and compose-smoke all green |
 | Security gate | `pnpm audit --prod --audit-level high` green since `a839fc2`; `deepmerge@4.3.1` remains an accepted low-risk advisory |
 | Integration gate | time-dependent partition fixture fixed; `snapshots_default` assertion passes since `3ff3441` |
 | Compose flake | corepack retry added in `f2ee1d7`; compose smoke green in `41448937581` |
@@ -423,7 +438,9 @@ Step 9.
 
 These are documented and stay deferred unless priorities change:
 
-- `K-02` sequential trigram search fallback — revisit with `EXPLAIN`/benchmarks.
+- `K-02` sequential trigram search fallback — now scheduled as M-1 in
+  [`PRODUCTION_READINESS_REVIEW.md`](./PRODUCTION_READINESS_REVIEW.md) with the missing functional
+  index and a before/after `EXPLAIN`.
 - `R-39` MCP resources and `weekly_briefing` prompt.
 - `R-41` OpenTelemetry SDK wiring (Jaeger already provisioned).
 - `R-42` Turnstile (magic-link rate limits are the current mitigation).

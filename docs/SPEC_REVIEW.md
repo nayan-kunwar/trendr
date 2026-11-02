@@ -1693,6 +1693,18 @@ be re-checked later. Decisions with alternatives get an ADR in [`docs/adr/`](./a
   `AGENTS.md` picks it up automatically. The content is still the verbatim Section 0 rules;
   `TRENDR_SPEC.md` §0/§18 still name `CLAUDE.md` because the spec is frozen.
 
+## Production-readiness review (2026-11-02)
+
+- [`PRODUCTION_READINESS_REVIEW.md`](./PRODUCTION_READINESS_REVIEW.md) records the 27-finding
+  review of `main` at `2ad0396` (0 Critical, 4 High, 12 Medium, 11 Low; “Ready with conditions”).
+  The PDF is truncated on page 9, so the Medium and Low findings are table-level one-liners only.
+- The four High findings were re-verified against the code here: spoofable `CF-Connecting-IP`,
+  refresh-reuse family revocation without a grace window, a shared 5/min auth bucket that includes
+  refresh, and the rename-back unique violation on `items_source_upstream_uq`.
+- Two planned fixes deviate from §10.5: a 15 s refresh-reuse grace (H-2) and a separate refresh
+  rate-limit bucket (H-3). They will be recorded as R-52/R-53 with ADR-0022/0023 when the code
+  lands, together with the naming additions for the new Redis keys, table and metrics.
+
 ## Environment quirks worth knowing
 
 

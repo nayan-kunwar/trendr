@@ -380,6 +380,7 @@ rate-limit caveat and the result template; results are recorded after the first 
 - [`docs/adr/`](./docs/adr) — architecture decision records
 - [`docs/SPEC_REVIEW.md`](./docs/SPEC_REVIEW.md) — deviations, verified gaps, deferred steps
 - [`docs/REMEDIATION_PLAN.md`](./docs/REMEDIATION_PLAN.md) — CI remediation and Phase 10 plan
+- [`docs/PRODUCTION_READINESS_REVIEW.md`](./docs/PRODUCTION_READINESS_REVIEW.md) — 27-finding review and remediation plan
 - [`docs/runbook.md`](./docs/runbook.md) — operations, deployment, backups and incident checklists
 - [`render.yaml`](./render.yaml) / [`docker-compose.prod.yml`](./docker-compose.prod.yml) — deployment artifacts
 - [`docs/mockups/`](./docs/mockups) — UI mockups (reference for Phase 6)
