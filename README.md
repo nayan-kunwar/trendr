@@ -358,6 +358,10 @@ coverage artifact, integration tests, `gitleaks` + `pnpm audit`, and a Compose s
 builds the whole stack, waits for health, seeds the database, triggers a scoring run and asserts
 `/v1/trending` returns entries.
 
+Load testing uses [`infra/k6/trending.js`](./infra/k6/trending.js): a 200 RPS ramp against
+`/v1/trending` with a p95 target of 50 ms. See [`infra/k6/README.md`](./infra/k6/README.md) for the
+rate-limit caveat and the result template; results are recorded after the first deployed run.
+
 ## Troubleshooting
 
 - **Docker builds fail with registry timeouts** — image builds throttle installs
