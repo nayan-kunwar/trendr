@@ -63,6 +63,7 @@ describe('@trendr/config env schema', () => {
     expect(result.env.TRUST_PROXY).toBe(false);
     expect(result.env.ADMIN_EMAILS).toEqual([]);
     expect(result.env.CORS_ORIGINS).toEqual(['http://localhost:3000']);
+    expect(result.env.COOKIE_SAME_SITE).toBe('lax');
     expect(result.env.WORKER_ROLES).toEqual(['scheduler', 'ingest', 'scoring', 'notify']);
     expect(result.env.WORKER_METRICS_PORT).toBe(9464);
     expect(result.env.SNAPSHOT_RETENTION_MONTHS).toBe(3);
@@ -77,6 +78,29 @@ describe('@trendr/config env schema', () => {
       return;
     }
     expect(result.message).toContain('RESEND_API_KEY');
+  });
+
+  it('allows SameSite=None only where cookies are Secure', () => {
+    const production = readEnv({
+      ...MINIMAL_VALID,
+      NODE_ENV: 'production',
+      COOKIE_SAME_SITE: 'none',
+      GITHUB_TOKENS: 'ghp_test',
+    });
+    expect(production.ok).toBe(true);
+    if (production.ok) {
+      expect(production.env.COOKIE_SAME_SITE).toBe('none');
+    }
+
+    const development = readEnv({ ...MINIMAL_VALID, COOKIE_SAME_SITE: 'none' });
+    expect(development.ok).toBe(false);
+    if (!development.ok) {
+      expect(development.message).toContain('COOKIE_SAME_SITE');
+      expect(development.message).toContain('NODE_ENV=production');
+    }
+
+    const strict = readEnv({ ...MINIMAL_VALID, COOKIE_SAME_SITE: 'strict' });
+    expect(strict.ok).toBe(true);
   });
 
   it('exits with a readable message when required vars are missing', () => {

@@ -53,6 +53,7 @@ const app = await buildApp({
     refreshTtlDays: env.REFRESH_TTL_DAYS,
     accessTokenTtlSeconds: env.JWT_ACCESS_TTL_SEC,
     cookieSecure: env.NODE_ENV === 'production',
+    cookieSameSite: env.COOKIE_SAME_SITE,
   },
   queueConnection: queueRedis,
   unsubscribeSecret: env.UNSUBSCRIBE_SECRET,

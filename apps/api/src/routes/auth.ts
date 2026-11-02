@@ -44,6 +44,30 @@ const REFRESH_COOKIE = 'dt_refresh';
 const REFRESH_COOKIE_PATH = '/v1/auth';
 const MAGIC_LINKS_PER_EMAIL_PER_HOUR = 3;
 
+/** SameSite mode for the refresh cookie (env: COOKIE_SAME_SITE). */
+export type RefreshCookieSameSite = 'lax' | 'strict' | 'none';
+
+/** Attributes for the rotating refresh cookie (exported for unit tests). */
+export function refreshCookieOptions(
+  sameSite: RefreshCookieSameSite,
+  secure: boolean,
+  ttlDays: number,
+): {
+  path: string;
+  httpOnly: boolean;
+  secure: boolean;
+  sameSite: RefreshCookieSameSite;
+  maxAge: number;
+} {
+  return {
+    path: REFRESH_COOKIE_PATH,
+    httpOnly: true,
+    secure,
+    sameSite,
+    maxAge: ttlDays * 24 * 60 * 60,
+  };
+}
+
 /** Per-process fallback when Redis is absent (tests/tooling). */
 const memoryMagicLinkCounters = new Map<string, { count: number; resetAt: number }>();
 const memoryAuthCounters = new Map<string, { count: number; resetAt: number }>();
@@ -59,6 +83,13 @@ export interface AuthRoutesOptions {
   accessTokenTtlSeconds?: number;
   /** Secure cookies in production; false only for local http development. */
   cookieSecure?: boolean;
+  /**
+   * Cookie SameSite mode (env: COOKIE_SAME_SITE). Default `lax` works for the
+   * single-origin VPS and for custom subdomains of one registrable domain.
+   * Cross-site origins (e.g. two `*.onrender.com` hosts, which the Public
+   * Suffix List treats as separate sites) need `none` plus `cookieSecure`.
+   */
+  cookieSameSite?: RefreshCookieSameSite;
   /** Spec §10.5 auth tier: 5 requests/min per IP across `/v1/auth/*`. */
   authRateLimitMax?: number;
   /** Env TRUST_PROXY: use the same trusted-client-IP derivation as the global limiter. */
@@ -70,6 +101,15 @@ export interface AuthRoutesOptions {
 export function registerAuthRoutes(app: FastifyInstance, options: AuthRoutesOptions = {}): void {
   const server = app.withTypeProvider<ZodTypeProvider>();
   const trustProxy = options.trustProxy ?? false;
+  const cookieSecure = options.cookieSecure ?? false;
+  const cookieSameSite = options.cookieSameSite ?? 'lax';
+
+  // SameSite=None is only honoured by browsers on Secure cookies. `main.ts`
+  // derives Secure from NODE_ENV=production, and the env schema rejects this
+  // combination outside production; keep the direct-call path honest too.
+  if (cookieSameSite === 'none' && !cookieSecure) {
+    throw new Error('cookieSameSite "none" requires secure cookies');
+  }
 
   const serviceOptions = (): AuthServiceOptions => {
     if (!app.hasDecorator('db') || options.emailSender === undefined) {
@@ -97,17 +137,21 @@ export function registerAuthRoutes(app: FastifyInstance, options: AuthRoutesOpti
 
   const setRefreshCookie = (reply: FastifyReply, session: AuthSession): void => {
     const ttlDays = options.refreshTtlDays ?? 30;
-    reply.setCookie(REFRESH_COOKIE, session.refreshToken, {
-      path: REFRESH_COOKIE_PATH,
-      httpOnly: true,
-      secure: options.cookieSecure ?? false,
-      sameSite: 'lax',
-      maxAge: ttlDays * 24 * 60 * 60,
-    });
+    reply.setCookie(
+      REFRESH_COOKIE,
+      session.refreshToken,
+      refreshCookieOptions(cookieSameSite, cookieSecure, ttlDays),
+    );
   };
 
   const clearRefreshCookie = (reply: FastifyReply): void => {
-    reply.clearCookie(REFRESH_COOKIE, { path: REFRESH_COOKIE_PATH });
+    // Match the attributes used when setting it so the deletion is accepted
+    // in browsers that partition or reject mismatched cookies.
+    reply.clearCookie(REFRESH_COOKIE, {
+      path: REFRESH_COOKIE_PATH,
+      secure: cookieSecure,
+      sameSite: cookieSameSite,
+    });
   };
 
   const guard = {

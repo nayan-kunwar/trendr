@@ -27,6 +27,10 @@ const baseEnvSchema = z.object({
   JWT_SECRET: z.string().min(32),
   JWT_ACCESS_TTL_SEC: z.coerce.number().int().default(900),
   REFRESH_TTL_DAYS: z.coerce.number().int().default(30),
+  // `none` is only valid with Secure cookies, which the API sets in production.
+  // Default `lax` covers the single-origin VPS topology and same-site custom
+  // subdomains; split-origin deployments on unrelated sites need `none`.
+  COOKIE_SAME_SITE: z.enum(['lax', 'strict', 'none']).default('lax'),
   API_KEY_PEPPER: z.string().min(32),
   UNSUBSCRIBE_SECRET: z.string().min(32),
   METRICS_TOKEN: z.string().min(16),
@@ -75,6 +79,13 @@ const baseEnvSchema = z.object({
 });
 
 export const EnvSchema = baseEnvSchema.superRefine((e, ctx) => {
+  if (e.COOKIE_SAME_SITE === 'none' && e.NODE_ENV !== 'production') {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['COOKIE_SAME_SITE'],
+      message: 'none requires NODE_ENV=production because SameSite=None needs Secure cookies',
+    });
+  }
   if (e.EMAIL_PROVIDER === 'resend' && !e.RESEND_API_KEY) {
     ctx.addIssue({ code: 'custom', path: ['RESEND_API_KEY'], message: 'required for resend' });
   }
