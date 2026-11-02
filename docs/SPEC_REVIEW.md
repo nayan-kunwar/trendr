@@ -1641,6 +1641,10 @@ be re-checked later. Decisions with alternatives get an ADR in [`docs/adr/`](./a
   (`https://render.com/schema/render.yaml.json`) plus Prettier. **A live Blueprint sync is still
   pending** because no Render account/CLI is available in this environment; that is the remaining
   acceptance item for task 10.2.
+- **Task 10.3.** README now includes a Mermaid architecture diagram, copy-paste
+  `/v1/trending`, `/v1/items/:id`, `/v1/search` and SSE examples, remote MCP setup, an ADR-0001…0021
+  index and the §19.2 interview talking points. The status table shows Phase 10 in progress.
+  **Screenshots remain blocked** on a live deployment; k6 and scoring tuning are likewise deferred.
 - **GAP-9 resolution and caveats.** Limits were checked against the providers' docs on
   2026-11-02. Free-tier allowances change frequently; re-check before relying on any row.
 

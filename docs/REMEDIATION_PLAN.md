@@ -1,7 +1,7 @@
 # CI remediation and Phase 10 plan
 
 **Date:** 2026-11-02  
-**Status:** Proposed  
+**Status:** In progress — Track A complete; Track B partially blocked on live infrastructure  
 **Scope:** Restore green CI (dependency audit + integration regression), then finish Phase 10
 (deployment and polish).
 
@@ -32,13 +32,20 @@ self-contained; Track B needs owner-provided infrastructure and secrets.
 
 | Item | Evidence |
 | --- | --- |
-| Repo state | `main` at `43b43d2`, clean and synced with `origin/main` |
-| Unit suite | 78 files / 573 tests pass locally (2026-11-02) |
-| Last release gate | 2026-10-23: typecheck, lint, 149 integration tests and production build pass |
-| Latest nightly | Run `41295630498` (2026-11-01): contract and lint/typecheck/unit pass; security and integration fail; compose-smoke skipped |
-| Security failure | `body-parser@2.3.0` high advisory; 12 findings total (5 low, 6 moderate, 1 high) |
-| Integration failure | `maintenance.int.test.ts`: expected `{ defaultRows: 0 }`, received `{ defaultRows: 3792 }` |
-| Compose flake | Run `40848417237` (2026-10-29): corepack download failed inside `node.Dockerfile` |
+| Repo state | `main` at `e9a7d1a`, pushed to `origin/main`; README polish follows |
+| Unit suite | 79 files / 577 tests pass locally (2026-11-02) |
+| Latest CI | Run `41460809448` for `e9a7d1a` (in progress when this table was updated); previous run `41448937581` for `2f7f35c` is green |
+| Security gate | `pnpm audit --prod --audit-level high` green since `a839fc2`; `deepmerge@4.3.1` remains an accepted low-risk advisory |
+| Integration gate | time-dependent partition fixture fixed; `snapshots_default` assertion passes since `3ff3441` |
+| Compose flake | corepack retry added in `f2ee1d7`; compose smoke green in `41448937581` |
+| Track B status | 10.1 deployment artifacts done; 10.2 blueprint and GAP-9 done, live sync pending; 10.3 docs done except screenshots; 10.4/10.5 blocked on a live deployment |
+
+## Track B blockers
+
+- **Live VPS acceptance:** owner-supplied domain, VPS/SSH access, Cloudflare origin certificate,
+  production secrets, GHCR access and a backup destination.
+- **Live Render sync:** a Render account/CLI and at least one published image in GHCR.
+- **Screenshots, k6 results and scoring tuning:** require a live deployment and 2–4 weeks of data.
 
 ---
 

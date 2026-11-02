@@ -11,19 +11,19 @@ an MCP server for agents.
 
 ## Status
 
-| Phase | Scope                                            | State   |
-| ----- | ------------------------------------------------ | ------- |
-| 0     | Scaffolding, tooling, CI skeleton, Compose stack | ✅ done |
-| 1     | Database + core domain                           | ✅ done |
-| 2     | Scoring engine (TDD)                             | ✅ done |
-| 3     | Read API (public)                                | ✅ done |
-| 4     | Ingestion framework + GitHub adapter             | ✅ done |
-| 5     | npm, PyPI, Hugging Face, arXiv, MCP adapters     | ✅ done |
-| 6     | Web frontend                                     | ✅ done |
-| 7     | Accounts, watchlists, alerts, digest             | ✅ done |
-| 8     | MCP server                                       | ✅ done |
-| 9     | Observability, security, operations              | ✅ done |
-| 10    | Deployment and polish                            | ⏳ next |
+| Phase | Scope                                            | State          |
+| ----- | ------------------------------------------------ | -------------- |
+| 0     | Scaffolding, tooling, CI skeleton, Compose stack | ✅ done        |
+| 1     | Database + core domain                           | ✅ done        |
+| 2     | Scoring engine (TDD)                             | ✅ done        |
+| 3     | Read API (public)                                | ✅ done        |
+| 4     | Ingestion framework + GitHub adapter             | ✅ done        |
+| 5     | npm, PyPI, Hugging Face, arXiv, MCP adapters     | ✅ done        |
+| 6     | Web frontend                                     | ✅ done        |
+| 7     | Accounts, watchlists, alerts, digest             | ✅ done        |
+| 8     | MCP server                                       | ✅ done        |
+| 9     | Observability, security, operations              | ✅ done        |
+| 10    | Deployment and polish                            | 🚧 in progress |
 
 ## Stack
 
@@ -119,6 +119,40 @@ Key variables — the full annotated list is in [`.env.example`](./.env.example)
 | `API_INTERNAL_URL`              | `http://api:4000`                 | API base URL used by the MCP server          |
 | `NEXT_PUBLIC_API_URL`           | `http://localhost:4000`           | Browser-facing API base (web image only)     |
 
+## API examples
+
+Set `API` to the local API or the deployed origin. Public reads need no credentials; writes and
+account routes use a bearer access token or `X-API-Key`.
+
+```bash
+API=http://localhost:4000
+
+# Top five across all sources over the last 7 days.
+curl -fsS "$API/v1/trending?scope=all&window=7d&limit=5" |
+  jq '{runId, computedAt, rows: [.data[] | {rank, source: .item.source, name: .item.displayName, score, delta, current}]}'
+
+# Fetch one item and its 30-day series. Item ids are numeric strings from the API.
+ID=$(curl -fsS "$API/v1/trending?scope=all&window=24h&limit=1" | jq -r '.data[0].item.id')
+curl -fsS "$API/v1/items/$ID" |
+  jq '{id, source, displayName, tier, latestMetrics, scores}'
+curl -fsS "$API/v1/items/$ID/history?granularity=day" |
+  jq '{metric, kind, points: (.points | length)}'
+
+# Search names, descriptions and topics.
+curl -fsS "$API/v1/search?q=vector%20database&limit=5" |
+  jq '.items[] | {id, source, name, current, score7d}'
+
+# Live leaderboard over Server-Sent Events.
+curl -N -H 'Accept: text/event-stream' \
+  "$API/v1/stream/leaderboard?scope=all&window=7d"
+```
+
+The stream sends `leaderboard.snapshot` on connect and `leaderboard.update` after each scoring
+run, with a `Last-Event-ID` header for reconnect replay. Errors are RFC 7807 problem documents
+(`application/problem+json`), and paginated endpoints return a `Link: …; rel="next"` header when
+`page.nextCursor` is set. Interactive OpenAPI docs are at `/docs` and the machine-readable
+document is `/openapi.json`.
+
 ## MCP server
 
 `apps/mcp` exposes the five read-only tools from spec §11:
@@ -196,6 +230,28 @@ Add this to `.cursor/mcp.json` (or the equivalent Cursor settings UI):
 Add `"headers": { "Authorization": "Bearer <token>" }` when HTTP auth tokens are enabled. Ask
 Cursor to list MCP tools and call `whats_new_in_mcp`; both should work against the Compose stack.
 
+### Remote HTTP (deployed)
+
+The deployed endpoint is the same stateless Streamable HTTP route: `https://<mcp-host>/mcp`
+(the Render Blueprint uses `https://trendr-mcp.onrender.com/mcp`; the VPS serves
+`https://<domain>/mcp`). Set `MCP_HTTP_AUTH_TOKENS` on the server and send one of those values as
+`Authorization: Bearer <token>` from the client. `MCP_API_KEY` remains the server's read-only key
+for calling the public API; it is not the client credential.
+
+```json
+{
+  "mcpServers": {
+    "trendr": {
+      "url": "https://<mcp-host>/mcp",
+      "headers": { "Authorization": "Bearer <one-of-MCP_HTTP_AUTH_TOKENS>" }
+    }
+  }
+}
+```
+
+Health is `GET https://<mcp-host>/healthz`. See the [runbook](./docs/runbook.md) for the VPS and
+Render deployment paths.
+
 ### Manual check log
 
 - **2026-10-22:** Inspector CLI listed all five tools and `get_trending` returned three structured
@@ -203,15 +259,94 @@ Cursor to list MCP tools and call `whats_new_in_mcp`; both should work against t
   above; the HTTP and stdio transports are covered by `apps/mcp/test/http.test.ts` and
   `apps/mcp/test/tools.test.ts`.
 
-## Architecture in one paragraph
+## Architecture
+
+```mermaid
+flowchart LR
+  U["Developers / agents"] --> EDGE["Cloudflare / Render edge"]
+  EDGE --> WEB["Next.js web"]
+  EDGE --> API["Fastify API"]
+  EDGE --> MCP["MCP server"]
+
+  subgraph Upstream["Upstream sources"]
+    GH["GitHub REST/GraphQL"]
+    NPM["npm registry + downloads"]
+    PYPI["PyPI + pypistats"]
+    HF["Hugging Face"]
+    ARX["arXiv"]
+    MCPR["MCP registry"]
+  end
+
+  subgraph Ingest["Ingestion and scoring"]
+    W["Worker<br/>BullMQ roles"]
+    R[("Redis<br/>queues · cache · rate limits · pub/sub")]
+    DB[("Postgres 16<br/>items · snapshots · scores")]
+  end
+
+  GH & NPM & PYPI & HF & ARX & MCPR --> W
+  W -->|"snapshots + scores"| DB
+  W -->|"queues + events"| R
+  API -->|"cache first, SQL fallback"| R
+  API --> DB
+  WEB --> API
+  MCP --> API
+```
+
+### In one paragraph
 
 Postgres is the source of truth; Redis carries the cache, rate-limit buckets, BullMQ queues and
 pub/sub. The worker ingests upstream APIs into partitioned `snapshots`, runs the scoring engine per
 (source, window), publishes leaderboards to Redis ZSETs, evaluates alert rules, and sends digest
 and alert email through `packages/email`; the API reads Redis first and falls back to SQL; SSE
 broadcasts leaderboard updates to the web app. Magic-link sessions keep the access token in memory
-and rotate an httpOnly refresh cookie. See `TRENDR_SPEC.md` §3 for the
-full component diagram and §8 for the scoring model.
+and rotate an httpOnly refresh cookie. See `TRENDR_SPEC.md` §3 for the full component diagram and
+§8 for the scoring model; [`docs/adr/0021-deployment-topology.md`](./docs/adr/0021-deployment-topology.md)
+covers the VPS and Render deployment shapes.
+
+## Design decisions
+
+ADRs record choices that are expensive to reverse and the evidence behind them. The full set is in
+[`docs/adr/`](./docs/adr).
+
+| Area                   | Decisions                                                                                                                                                                                                                                                                                                                                                                                                        |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Stack                  | [0001 Fastify over Express](./docs/adr/0001-fastify-over-express.md), [0002 Drizzle over Prisma](./docs/adr/0002-drizzle-over-prisma.md), [0003 BullMQ over Kafka/RabbitMQ](./docs/adr/0003-bullmq-over-kafka.md)                                                                                                                                                                                                |
+| Data                   | [0004 monthly-partitioned snapshots](./docs/adr/0004-partitioned-snapshots.md), [0010 sources vs dist resolution](./docs/adr/0010-sources-vs-dist-resolution.md), [0014 Hugging Face rolling downloads](./docs/adr/0014-hf-latest-only-downloads.md), [0015 MCP registry sync](./docs/adr/0015-mcp-registry-sync.md), [0016 additive topic persistence](./docs/adr/0016-additive-topic-persistence.md)           |
+| Build and test         | [0005 one-shot migrate with Compose](./docs/adr/0005-gap10-compose-wait-one-shot-migrate.md), [0006 `pnpm deploy --legacy`](./docs/adr/0006-gap11-pnpm-deploy-legacy.md), [0007 dependency-direction lint](./docs/adr/0007-dependency-direction-lint.md), [0008 Vitest root workspace](./docs/adr/0008-vitest-root-workspace.md), [0009 container build hardening](./docs/adr/0009-container-build-hardening.md) |
+| Upstream reality       | [0011 GitHub GraphQL batch cost](./docs/adr/0011-gap1-graphql-batch-cost.md), [0012 stargazer backfill cap](./docs/adr/0012-gap7-stargazer-backfill-cap.md), [0013 fine-grained PAT expiry](./docs/adr/0013-gap8-pat-expiry.md)                                                                                                                                                                                  |
+| Serving and operations | [0017 shared email boundary](./docs/adr/0017-shared-email-boundary.md), [0018 MCP stateless HTTP](./docs/adr/0018-mcp-runtime-boundary.md), [0019 observability boundaries](./docs/adr/0019-observability-boundaries.md), [0020 security hardening](./docs/adr/0020-security-hardening.md), [0021 deployment topology](./docs/adr/0021-deployment-topology.md)                                                   |
+
+## Interview talking points
+
+The spec's §19.2 table is the long version. These are the trade-offs worth walking through with the
+code open:
+
+| Topic                                  | What to explain                                                                                                                                                                                        |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Velocity vs popularity                 | `log10(1+Δ) · (Δ/(B+k))^β`: log damping for the absolute term, sub-linear relative growth, and a smoothing prior that stops tiny-base explosions.                                                      |
+| Counters vs daily aggregates           | GitHub stars are cumulative counters, so diff snapshots; npm/PyPI downloads are daily aggregates, so compare period sums. Late data uses a 3-day upsert window, and weekday seasonality is normalized. |
+| Cross-source comparability             | Robust z-score on `ln(1+score)` (median/MAD) rather than mean/σ, plus a max-share cap on the combined board so one source cannot dominate.                                                             |
+| BullMQ vs Kafka vs RabbitMQ            | BullMQ provides cron, delays, retries and rate limiting on the Redis that already exists. Kafka earns its place only for replay or high fan-out; RabbitMQ plus an outbox serves domain events.         |
+| Rate limiting as a distributed problem | A Redis token bucket shared by every worker, upstream header feedback, ETag conditional requests that cost no primary quota on 304, and GraphQL batching.                                              |
+| Idempotency everywhere                 | Deterministic job ids, natural-key upserts, bucketed `captured_at`, and dedupe keys for alerts/digests. A crash mid-batch duplicates nothing; a retry completes the work.                              |
+| Time-series in Postgres                | Monthly range partitions give pruning and O(1) retention via `DROP PARTITION`, with BRIN indexes; TimescaleDB is optional, not required for a managed host.                                            |
+| Pagination and cache                   | A cursor pinned to the scoring `run_id` keeps pages snapshot-consistent; Redis ZSET swap with `RENAME`, version ETags, and a Postgres fallback when the cache is down.                                 |
+| Real time                              | SSE is one-way, HTTP-friendly, and reconnects with `Last-Event-ID`; Redis pub/sub fans out across API replicas and heartbeats survive proxy buffering.                                                 |
+| Security and ops maturity              | Hashed API keys with a pepper, refresh-token reuse detection, SSRF allowlists, RFC 8058 unsubscribe, RED metrics, freshness SLOs, and a DLQ with admin replay.                                         |
+| AI-native surface                      | The MCP server reuses the public API instead of opening a second data path, with structured outputs and read-only annotations.                                                                         |
+
+## Deployment
+
+Two topologies use the same images:
+
+- **VPS (primary):** `docker-compose.prod.yml` with nginx, Cloudflare origin TLS, and no published
+  Postgres/Redis/MCP ports. `infra/scripts/bootstrap-vps.sh` provisions the host.
+- **Render (managed alternative):** `render.yaml` runs the prebuilt GHCR images with Render
+  Postgres and Key Value. See ADR-0021 for the trade-offs and the free-tier limits.
+
+`.github/workflows/publish.yml` builds `linux/amd64`/`linux/arm64` images on `v*` tags or manual
+dispatch. The [runbook](./docs/runbook.md) covers first deploy, verification, rollback, backups and
+both deployment paths.
 
 ## Testing and CI
 
@@ -241,4 +376,6 @@ builds the whole stack, waits for health, seeds the database, triggers a scoring
 - [`docs/adr/`](./docs/adr) — architecture decision records
 - [`docs/SPEC_REVIEW.md`](./docs/SPEC_REVIEW.md) — deviations, verified gaps, deferred steps
 - [`docs/REMEDIATION_PLAN.md`](./docs/REMEDIATION_PLAN.md) — CI remediation and Phase 10 plan
+- [`docs/runbook.md`](./docs/runbook.md) — operations, deployment, backups and incident checklists
+- [`render.yaml`](./render.yaml) / [`docker-compose.prod.yml`](./docker-compose.prod.yml) — deployment artifacts
 - [`docs/mockups/`](./docs/mockups) — UI mockups (reference for Phase 6)
