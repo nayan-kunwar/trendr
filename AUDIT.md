@@ -198,3 +198,25 @@ These are real limitations, but they are documented or intentionally tested in t
 - `K-03`–`K-05` verification on 2026-10-23: monorepo typecheck and lint, the full unit suite (78 files / 573 tests), the full integration suite (30 files / 149 tests) and `pnpm build` pass. `docker compose config --quiet` accepts the loopback bindings, and the compiled MCP server exits 1 in `NODE_ENV=production` without `MCP_HTTP_AUTH_TOKENS`.
 - The existing tests generally use small fixtures and distinct scores; the gaps noted above explain why the remaining defects were not caught.
 - `BUGS.md` has been removed and replaced by this audit.
+
+## Post-audit CI remediation (2026-11)
+
+The nightly CI job exposed three issues after the audit baseline. They do not reopen the
+findings above; the remediation is recorded here for traceability.
+
+- **Dependency audit (`security`).** `pnpm audit --prod --audit-level high` began failing on
+  2026-10-24 because `body-parser@2.3.0` (via the MCP SDK's Express dependency) was covered by
+  `GHSA-27r3-jxmh-p828`. `pnpm-workspace.yaml` now overrides `body-parser` to `^2.4.0` and pins
+  the patched `fast-uri` 3.x/4.x lines. A `glob@14.0.3` override also clears the transitive
+  `minimatch` advisory reached through `@fastify/static`. The only remaining production
+  advisory is `deepmerge@4.3.1` (`GHSA-gcqx-w48m-w2h4`, low): no `4.3.2` release is published,
+  and it is reachable only through the email renderer, so it is accepted.
+- **Integration partition fixture.** On 2026-11-01
+  `apps/worker/test/int/maintenance.int.test.ts` expected `snapshots_default = 0` but saw
+  3,792 rows. Fixed test anchors start at 2026-08-20, while migrations create only the current
+  month −2/+3 window. `test/global-setup.ts` now creates partitions from 2026-08-01, and
+  `packages/db/test/int/seed.int.test.ts` asserts the default partition stays empty. This is a
+  test-fixture fix; production behaviour is unchanged.
+- **Compose build flake.** The 2026-10-29 `compose-smoke` failure was a transient corepack
+  download error during image build. Both node Dockerfiles now retry the pinned pnpm
+  installation three times.

@@ -1617,6 +1617,17 @@ be re-checked later. Decisions with alternatives get an ADR in [`docs/adr/`](./a
 | R-44 | §7.10 / 9.4 manual runs | Executing maintenance directly in an operator shell would leave the worker's `trendr_snapshots_default_rows` gauge stale. | `maintenance-cli.ts` enqueues the job onto `maintenance` and waits for the worker result; direct SQL is documented only as an emergency fallback. |
 | R-45 | §15 body size | The spec requires a 64 KB cap but does not define the error body. | Fastify's 413 is mapped through the existing RFC 7807 error handler; the cap applies to JSON and URL-encoded bodies globally, including public auth routes. |
 
+## Post-audit maintenance (2026-11)
+
+| # | Finding | Resolution |
+| --- | --- | --- |
+| R-46 | `pnpm audit --prod --audit-level high` failed on `body-parser@2.3.0` via the MCP SDK's Express dependency (`GHSA-27r3-jxmh-p828`). | `pnpm-workspace.yaml` overrides `body-parser` to `^2.4.0`; Express 5.3.0 accepts the patched release. |
+| R-47 | `fast-uri` 3.1.8 and 4.2.2 carried four URI-parsing advisories (`GHSA-w74x-v6f9-j3xg`, `GHSA-wjr9-j795-jxcr`, `GHSA-xhq7-xmqj-769h`, `GHSA-333x-w4r6-6crp`). | Scoped overrides pin the 3.x line to `^3.1.9` and the 4.x line to `^4.2.3`; both lines remain in the dependency graph. |
+| R-48 | `@fastify/static@10.1.x` pulls `glob@13`, which depends on vulnerable `minimatch@10` (`GHSA-3g3m-2fjr-6pw4`, `GHSA-g3hv-75wg-m249`). | `glob` is overridden to `^14.0.3`, which pulls `minimatch@11.0.3`; the `/docs`/OpenAPI integration tests still pass. |
+| R-49 | `deepmerge@4.3.1` (`GHSA-gcqx-w48m-w2h4`, low) reaches the worker through the email renderer; no `4.3.2` release is published. | Accepted. The dependency is only used while rendering email content, and the advisory has no available fix yet. |
+| R-50 | Fixed integration-test anchors start at 2026-08-20, but migrations create only the current month −2/+3 window, so the 2026-11-01 run routed 3,792 seed rows into `snapshots_default` and failed the ISS-7 assertion. | `test/global-setup.ts` now creates partitions from 2026-08-01, and the seed test asserts `snapshots_default` stays empty. Production behaviour is unchanged. |
+| R-51 | The 2026-10-29 `compose-smoke` job failed on a transient corepack download during image build. | Both node Dockerfiles retry the pinned pnpm install three times before failing the build. |
+
 ## Environment quirks worth knowing
 
 
