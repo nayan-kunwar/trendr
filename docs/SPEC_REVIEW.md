@@ -1701,9 +1701,25 @@ be re-checked later. Decisions with alternatives get an ADR in [`docs/adr/`](./a
 - The four High findings were re-verified against the code here: spoofable `CF-Connecting-IP`,
   refresh-reuse family revocation without a grace window, a shared 5/min auth bucket that includes
   refresh, and the rename-back unique violation on `items_source_upstream_uq`.
+- H-1 is fixed without a spec deviation: the API validates `CF-Connecting-IP` with `net.isIP` and
+  falls back to `request.ip`; nginx overwrites the header and closes non-Cloudflare peers with 444;
+  UFW and the `TRENDR-INGRESS` Docker chain restrict 80/443 to the published ranges.
 - Two planned fixes deviate from §10.5: a 15 s refresh-reuse grace (H-2) and a separate refresh
   rate-limit bucket (H-3). They will be recorded as R-52/R-53 with ADR-0022/0023 when the code
   lands, together with the naming additions for the new Redis keys, table and metrics.
+
+## Naming additions (production-readiness remediation)
+
+`TRENDR_SPEC.md` is frozen, so names introduced by the review fixes are recorded here instead of
+Appendix B.
+
+| Name                                  | Kind           | Finding | Purpose                                                                   |
+| ------------------------------------- | -------------- | ------- | ------------------------------------------------------------------------- |
+| `TRENDR-INGRESS`                      | iptables chain | H-1     | Filters Docker forwarded 80/443 to Cloudflare ranges in `DOCKER-USER`     |
+| `trendr-cloudflare-ips.service`       | systemd unit   | H-1     | Fetches ranges, regenerates nginx includes, reloads nginx, reapplies rules |
+| `trendr-cloudflare-ips.timer`         | systemd unit   | H-1     | Weekly refresh (Sunday 03:30 UTC)                                          |
+| `infra/cloudflare/ips.txt`            | generated file | H-1     | Canonical Cloudflare range list shared by nginx and the firewall          |
+| `nginx-real-ip.conf`, `nginx-geo.conf` | generated file | H-1     | `set_real_ip_from` and `geo` allowlist includes                           |
 
 ## Environment quirks worth knowing
 

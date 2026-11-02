@@ -88,6 +88,8 @@ jobs:
     needs: integration
     steps:
       - uses: actions/checkout@v4
+      - name: Origin ingress policy (H-1)
+        run: bash infra/scripts/verify-origin-ingress.sh
       - run: cp .env.example .env
       # The one-shot `migrate` service exits 0 and modern Compose `--wait` accepts that
       # (verified locally on Compose v5.4). If a runner's Compose disagrees, run

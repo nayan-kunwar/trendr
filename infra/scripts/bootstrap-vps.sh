@@ -5,9 +5,10 @@
 #   sudo TRENDR_REPO=https://github.com/nayan-kunwar/trendr.git \
 #        ./infra/scripts/bootstrap-vps.sh
 #
-# The script installs Docker, creates the deploy user and checkout, opens only
-# SSH/80/443, installs the backup timer, and starts the stack when
-# .env.production and the Cloudflare origin certificate are present.
+# The script installs Docker, creates the deploy user and checkout, opens SSH
+# and allows 80/443 only from Cloudflare's edge ranges, installs the backup and
+# range-refresh timers, and starts the stack when .env.production and the
+# Cloudflare origin certificate are present.
 #
 # Optional environment:
 #   DEPLOY_USER  (deploy)         unprivileged service/checkout owner
@@ -95,14 +96,20 @@ if [[ ! -f "$ENV_FILE" ]]; then
   warn "created $ENV_FILE from the example; fill every secret before deploying"
 fi
 
-# ── Firewall ────────────────────────────────────────────────────────────────
+# ── Firewall and Cloudflare edge ranges ─────────────────────────────────────
+# H-1: the origin must not be reachable directly. Refresh the published ranges
+# (fall back to the committed list when offline) and install both the UFW and
+# DOCKER-USER policies. Docker's DNAT path bypasses UFW, so both are required.
 ufw default deny incoming
 ufw default allow outgoing
 ufw allow "${SSH_PORT}/tcp" comment 'SSH'
-ufw allow 80/tcp comment 'HTTP (redirect + Cloudflare origin)'
-ufw allow 443/tcp comment 'HTTPS'
 ufw --force enable
-log "ufw enabled: SSH/${SSH_PORT}, 80, 443"
+log "ufw enabled: SSH/${SSH_PORT} from anywhere"
+log "refreshing Cloudflare ranges and restricting 80/443 to the edge"
+if ! bash "$TRENDR_DIR/infra/scripts/refresh-cloudflare-ips.sh" --no-firewall; then
+  warn "could not refresh Cloudflare ranges; using the committed list"
+fi
+bash "$TRENDR_DIR/infra/scripts/configure-firewall.sh"
 
 # ── Backup timer ────────────────────────────────────────────────────────────
 sed -e "s|/opt/trendr|$TRENDR_DIR|g" \
@@ -112,9 +119,18 @@ sed -e "s|/opt/trendr|$TRENDR_DIR|g" \
   >/etc/systemd/system/trendr-backup.service
 install -m 644 "$TRENDR_DIR/infra/systemd/trendr-backup.timer" \
   /etc/systemd/system/trendr-backup.timer
+
+# ── Cloudflare range-refresh timer ──────────────────────────────────────────
+sed -e "s|/opt/trendr|$TRENDR_DIR|g" \
+  "$TRENDR_DIR/infra/systemd/trendr-cloudflare-ips.service" \
+  >/etc/systemd/system/trendr-cloudflare-ips.service
+install -m 644 "$TRENDR_DIR/infra/systemd/trendr-cloudflare-ips.timer" \
+  /etc/systemd/system/trendr-cloudflare-ips.timer
+
 systemctl daemon-reload
 systemctl enable --now trendr-backup.timer
-log "backup timer installed (daily 02:30 UTC)"
+systemctl enable --now trendr-cloudflare-ips.timer
+log "timers installed (backup daily 02:30 UTC, Cloudflare ranges weekly)"
 
 # ── Start when secrets and certificates are present ─────────────────────────
 if [[ -f "$CERTS_DIR/origin.pem" && -f "$CERTS_DIR/origin-key.pem" ]]; then

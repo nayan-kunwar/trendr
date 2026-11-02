@@ -1,7 +1,7 @@
 # Production-readiness review remediation
 
 **Date:** 2026-11-03  
-**Status:** Planned — no remediation code merged yet  
+**Status:** In progress — Phase 1 (H-1) verified locally; Phases 2–9 planned  
 **Reviewed commit:** `2ad0396` (2026-11-02)  
 **Source:** `Trendr production-readiness review.pdf` (9 pages)  
 **Scope:** all 27 findings — 0 Critical, 4 High, 12 Medium, 11 Low.
@@ -48,7 +48,7 @@ gates pass; live-deployment acceptance is tracked separately in
 
 | ID  | Finding | Evidence | Planned remediation | Phase | Status |
 | --- | --- | --- | --- | --- | --- |
-| H-1 | Per-IP controls trust a client-supplied `CF-Connecting-IP`; the origin is reachable directly | `apps/api/src/plugins/rate-limit.ts:28-35`; `infra/nginx/trendr.conf:68-116`; `infra/scripts/bootstrap-vps.sh:99-105` | nginx overwrites the header after `real_ip`; API accepts only a parseable IP and falls back to `request.ip`; UFW allows 80/443 only from Cloudflare ranges | 1 | Planned |
+| H-1 | Per-IP controls trust a client-supplied `CF-Connecting-IP`; the origin is reachable directly | `apps/api/src/plugins/rate-limit.ts:28-35`; `infra/nginx/trendr.conf:68-116`; `infra/scripts/bootstrap-vps.sh:99-105` | nginx overwrites the header after `real_ip`; API accepts only a parseable IP and falls back to `request.ip`; UFW allows 80/443 only from Cloudflare ranges | 1 | Verified |
 | H-2 | Refresh reuse detection has no grace window, so concurrent refreshes revoke the whole family | `apps/api/src/services/auth.service.ts:116-148`; `apps/web/src/lib/auth.ts:33-39`; `apps/web/src/components/auth-provider.tsx:30-40` | 15 s grace returns a benign typed 401 without revoking or clearing; Web Locks single-flight across tabs; parallel-refresh test | 2 | Planned |
 | H-3 | One 5/min-per-IP auth bucket is shared with the refresh call that runs on every page load | `apps/api/src/routes/auth.ts:162-167,352-374` | Keep 5/min on magic-link and verify; give refresh a separate, higher bucket keyed by session hash plus an IP guard; skip anonymous refresh; handle 429 without clearing the session | 2 | Planned |
 | H-4 | Rename-back (A→B, then B→A) breaks the ingestion chunk with a unique violation on every retry | `packages/db/src/repositories/items.repo.ts:235-315,128-131`; `packages/db/migrations/0000_init.sql:282`; `apps/worker/src/ingestion/upsert.ts:63-182` | Stub-aware merge on rename-back; in-chunk dedupe; per-item failure isolation | 3 | Planned |
@@ -246,6 +246,11 @@ own.
 Key changes: `net.isIP` validation in `clientIp`; nginx header overwrite; UFW Cloudflare allowlist
 plus a range-refresh timer; runbook instructions for existing hosts. No spec deviation.
 
+**Status (2026-11-03):** fixed. Local gate green — `pnpm lint`, `pnpm typecheck`, 580 unit tests,
+149 integration tests and `infra/scripts/verify-origin-ingress.sh` (Cloudflare-range source served,
+non-Cloudflare source closed even with a forged header). Live VPS acceptance is in the deferred
+list below.
+
 ### Phase 2 — Auth lifecycle (H-2, H-3, L-1)
 
 1. `feat(api): add a bounded refresh-reuse grace window`
@@ -381,7 +386,7 @@ These cannot be closed in this environment and remain tracked in
 
 ## Status checklist
 
-- [ ] Phase 1 — H-1 fixed and reproduced
+- [x] Phase 1 — H-1 fixed and reproduced
 - [ ] Phase 2 — H-2, H-3, L-1 fixed
 - [ ] Phase 3 — H-4, M-10 fixed; checkpoint after the Highs
 - [ ] Phase 4 — M-1, M-4, M-11 fixed

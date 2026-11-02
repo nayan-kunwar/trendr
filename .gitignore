@@ -32,6 +32,7 @@ pnpm-debug.log*
 coverage/
 test-results/
 k6-trending-summary.json
+.tmp/
 
 # Editor / OS
 .DS_Store

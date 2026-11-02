@@ -213,6 +213,7 @@ services:
     ports: ['80:80', '443:443']
     volumes:
       - ./infra/nginx/trendr.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./infra/cloudflare:/etc/nginx/cloudflare:ro
       - ./infra/nginx/certs:/etc/nginx/certs:ro
     depends_on:
       api: { condition: service_healthy }

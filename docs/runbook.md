@@ -416,6 +416,50 @@ curl -fsS https://<host>/readyz
 If the release added a migration, restore the pre-deploy backup into a scratch
 database first and decide whether a schema rollback is required.
 
+### Origin ingress and client IPs (H-1)
+
+Only nginx publishes host ports. Two layers keep the origin from being reached
+around Cloudflare:
+
+- nginx trusts `CF-Connecting-IP` only from the generated Cloudflare range
+  includes (`infra/cloudflare/nginx-real-ip.conf` and `nginx-geo.conf`). A
+  connection whose peer is not Cloudflare is closed with 444 before proxying,
+  and the forwarded `CF-Connecting-IP` is overwritten with `$remote_addr`.
+- UFW allows 80/443 only from those ranges, and the `TRENDR-INGRESS` chain in
+  `DOCKER-USER` applies the same policy to Docker's forwarded traffic. UFW's
+  INPUT rules do not see DNAT'd packets, so the Docker chain is required.
+
+The API accepts only a parseable IP from `CF-Connecting-IP` and otherwise falls
+back to `request.ip`, so a malformed value cannot become a rate-limit key or an
+`auth_tokens.created_ip` write.
+
+`infra/scripts/refresh-cloudflare-ips.sh` fetches the published ranges,
+regenerates the nginx includes, reloads nginx and reapplies the firewall. The
+weekly `trendr-cloudflare-ips.timer` runs it; run it manually after a range
+change:
+
+```bash
+sudo /opt/trendr/infra/scripts/refresh-cloudflare-ips.sh
+```
+
+Validate nginx and the two-source behaviour locally or in CI:
+
+```bash
+bash infra/scripts/verify-origin-ingress.sh
+```
+
+For debugging, do not open the origin. Tunnel to its loopback address, which
+the `geo` block already allows:
+
+```bash
+ssh -L 8443:127.0.0.1:443 deploy@<vps>
+curl -k https://127.0.0.1:8443/readyz
+```
+
+A Cloudflare Tunnel sidecar is not part of the current topology. If you add
+one, include its Docker subnet in the `geo` block and in `TRENDR-INGRESS`, or
+close 80/443 entirely and let the tunnel be the only path.
+
 ### Nginx changes
 
 ```bash
@@ -425,9 +469,9 @@ docker compose --env-file .env.production -f docker-compose.prod.yml \
   exec nginx nginx -s reload
 ```
 
-Cloudflare IP ranges in `infra/nginx/trendr.conf` are used by `real_ip` so API
-rate limits key on the client, not the edge. Refresh them when Cloudflare
-announces a range change, then validate and reload.
+Cloudflare IP ranges are generated into `infra/cloudflare/` and used by
+`real_ip` and the `geo` allowlist. Refresh them with
+`refresh-cloudflare-ips.sh` (above), then validate and reload.
 
 ## 7. Render alternative (Blueprint)
 
