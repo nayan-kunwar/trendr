@@ -39,6 +39,32 @@ describe('clientIp (spec §10.5)', () => {
   it('falls back to the socket peer without the header', () => {
     expect(clientIp(fakeRequest({}, '10.0.0.2'), true)).toBe('10.0.0.2');
   });
+
+  it('accepts IPv4 and IPv6 header values', () => {
+    expect(clientIp(fakeRequest({ 'cf-connecting-ip': '203.0.113.9' }, '10.0.0.1'), true)).toBe(
+      '203.0.113.9',
+    );
+    expect(clientIp(fakeRequest({ 'cf-connecting-ip': '2001:db8::1' }, '10.0.0.1'), true)).toBe(
+      '2001:db8::1',
+    );
+  });
+
+  it('ignores a header that is not a bare IP address', () => {
+    // H-1: an untrusted value must never become a rate-limit key or an
+    // `auth_tokens.created_ip` inet write.
+    for (const forged of [
+      'attacker',
+      '203.0.113.9, 10.0.0.1',
+      '203.0.113.9:443',
+      '999.1.1.1',
+      '',
+      ' ',
+    ]) {
+      expect(clientIp(fakeRequest({ 'cf-connecting-ip': forged }, '10.0.0.1'), true)).toBe(
+        '10.0.0.1',
+      );
+    }
+  });
 });
 
 describe('per-tier limits and keys (spec §10.5)', () => {
@@ -114,6 +140,25 @@ describe('rate limit plugin (spec §10.5)', () => {
 
         const b1 = await app.inject({ method: 'GET', url: '/healthz', headers: clientB });
         expect(b1.statusCode).toBe(200);
+      },
+    );
+  });
+
+  it('does not let a forged CF-Connecting-IP escape the anonymous bucket', async () => {
+    await withApp(
+      { ...DEPS, trustProxy: true, rateLimit: { max: 1, timeWindowMs: 60_000 } },
+      async (app) => {
+        const request = (forged: string) =>
+          app.inject({
+            method: 'GET',
+            url: '/healthz',
+            remoteAddress: '198.51.100.7',
+            headers: { 'cf-connecting-ip': forged },
+          });
+
+        expect((await request('not-an-ip')).statusCode).toBe(200);
+        expect((await request('also-not-an-ip')).statusCode).toBe(429);
+        expect((await request('203.0.113.99:443')).statusCode).toBe(429);
       },
     );
   });

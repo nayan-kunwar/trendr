@@ -1,6 +1,7 @@
 import rateLimit from '@fastify/rate-limit';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { Redis } from 'ioredis';
+import { isIP } from 'node:net';
 
 import { API_RATE_LIMIT_KEY_PREFIX } from '@trendr/core';
 
@@ -24,11 +25,18 @@ export interface RateLimitPluginOptions {
   trustProxy?: boolean;
 }
 
-/** Client IP behind Cloudflare when the proxy is trusted, else the socket peer. */
+/**
+ * Client IP behind Cloudflare when the proxy is trusted, else the socket peer.
+ *
+ * H-1: the header is caller-controlled until a trusted proxy overwrites it, so
+ * only a bare IP address is accepted. Garbage (including a comma-separated
+ * chain or `host:port`) falls back to `request.ip`, which keeps rate-limit
+ * keys stable and prevents invalid `inet` writes.
+ */
 export function clientIp(request: FastifyRequest, trustProxy: boolean): string {
   if (trustProxy) {
     const cf = request.headers['cf-connecting-ip'];
-    if (typeof cf === 'string' && cf.length > 0) {
+    if (typeof cf === 'string' && isIP(cf) !== 0) {
       return cf;
     }
   }
