@@ -13,12 +13,12 @@ interface EvalCall {
   args: unknown[];
 }
 
-function fakeRedis(): { eval: ReturnType<typeof vi.fn>; calls: EvalCall[] } {
+function fakeRedis(): { eval: (...args: unknown[]) => Promise<number>; calls: EvalCall[] } {
   const calls: EvalCall[] = [];
-  const evalFn = vi.fn((...args: unknown[]) => {
+  const evalFn = (...args: unknown[]): Promise<number> => {
     calls.push({ args });
     return Promise.resolve(1);
-  });
+  };
   return { eval: evalFn, calls };
 }
 
