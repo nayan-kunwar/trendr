@@ -70,6 +70,12 @@ export const redisKeys = {
   /** `apikey:last-used:{id}` — NX marker so `api_keys.last_used_at` writes at most once a minute (spec §10.5). */
   apiKeyLastUsed: (id: string): string => `apikey:last-used:${id}`,
 
+  /** `apirl:magic:{sha256(email)}` — per-address magic-link issuance (3/h, §10.5). */
+  magicLinkBucket: (emailHash: string): string => `apirl:magic:${emailHash}`,
+
+  /** `apirl:auth:{ip}` — strict 5/min sign-in bucket shared by magic-link/verify/logout. */
+  authRateBucket: (ip: string): string => `apirl:auth:${ip}`,
+
   /** `apirl:auth:refresh:{sha256-prefix}` — per-session refresh budget (60/min, H-3). */
   authRefreshBucket: (sessionHashPrefix: string): string =>
     `apirl:auth:refresh:${sessionHashPrefix}`,

@@ -14,7 +14,9 @@ import {
 import { deleteUser, findUserById, updateUserDisplayName, type UserRecord } from '@trendr/db';
 
 import { requireUser } from '../plugins/auth.js';
+import { bumpMemoryCounter, incrementWithTtl } from '../plugins/counters.js';
 import { CACHE_CONTROL } from '../plugins/etag.js';
+import type { RefreshReuseOutcome } from '../plugins/metrics.js';
 import { clientIp } from '../plugins/rate-limit.js';
 import {
   AuthMessageResponse,
@@ -45,6 +47,8 @@ import {
 const REFRESH_COOKIE = 'dt_refresh';
 const REFRESH_COOKIE_PATH = '/v1/auth';
 const MAGIC_LINKS_PER_EMAIL_PER_HOUR = 3;
+const AUTH_WINDOW_SECONDS = 60;
+const MAGIC_LINK_WINDOW_SECONDS = 3_600;
 
 /** H-3: refresh is machine-driven, so it gets its own per-session budget. */
 export const REFRESH_SESSION_MAX = 60;
@@ -75,10 +79,8 @@ export function refreshCookieOptions(
   };
 }
 
-/** Per-process fallback when Redis is absent (tests/tooling). */
-const memoryMagicLinkCounters = new Map<string, { count: number; resetAt: number }>();
+/** Per-process fallback when Redis is absent (tests/tooling). Bounded by L-1. */
 const memoryAuthCounters = new Map<string, { count: number; resetAt: number }>();
-const memoryRefreshCounters = new Map<string, { count: number; resetAt: number }>();
 
 export interface AuthRoutesOptions {
   /** Omitted only by tooling builds (OpenAPI export). */
@@ -173,7 +175,14 @@ export function registerAuthRoutes(app: FastifyInstance, options: AuthRoutesOpti
 
   const strictAuthGuard = async (request: FastifyRequest): Promise<void> => {
     const ip = clientIp(request, trustProxy);
-    if (!(await allowAuthRequest(app, ip, options.authRateLimitMax ?? 5))) {
+    if (
+      !(await allowCounter(
+        app,
+        redisKeys.authRateBucket(ip),
+        AUTH_WINDOW_SECONDS,
+        options.authRateLimitMax ?? 5,
+      ))
+    ) {
       throw new RateLimitedError('too many authentication requests; try again in a minute');
     }
   };
@@ -189,17 +198,19 @@ export function registerAuthRoutes(app: FastifyInstance, options: AuthRoutesOpti
     if (raw === undefined) return;
 
     const ip = clientIp(request, trustProxy);
-    const ipAllowed = await allowRefreshRequest(
+    const ipAllowed = await allowCounter(
       app,
       redisKeys.authRefreshIpBucket(ip),
+      AUTH_WINDOW_SECONDS,
       options.refreshIpRateLimitMax ?? REFRESH_IP_MAX,
     );
     if (!ipAllowed) {
       throw new RateLimitedError('too many refresh attempts; try again shortly');
     }
-    const sessionAllowed = await allowRefreshRequest(
+    const sessionAllowed = await allowCounter(
       app,
       redisKeys.authRefreshBucket(refreshSessionHash(raw)),
+      AUTH_WINDOW_SECONDS,
       options.refreshRateLimitMax ?? REFRESH_SESSION_MAX,
     );
     if (!sessionAllowed) {
@@ -221,7 +232,14 @@ export function registerAuthRoutes(app: FastifyInstance, options: AuthRoutesOpti
     },
     async (request, reply) => {
       const email = request.body.email.trim().toLowerCase();
-      if (!(await allowMagicLink(app, email, options.now?.() ?? new Date()))) {
+      if (
+        !(await allowCounter(
+          app,
+          redisKeys.magicLinkBucket(hashToken(email).toString('hex')),
+          MAGIC_LINK_WINDOW_SECONDS,
+          MAGIC_LINKS_PER_EMAIL_PER_HOUR,
+        ))
+      ) {
         throw new RateLimitedError('too many sign-in links requested for this email');
       }
       try {
@@ -273,16 +291,14 @@ export function registerAuthRoutes(app: FastifyInstance, options: AuthRoutesOpti
       const raw = getRefreshCookie(request);
       const outcome = await rotateRefreshToken(serviceOptions(), raw);
       if (outcome.status === 'grace') {
-        if (app.hasDecorator('observeRefreshReuse')) app.observeRefreshReuse('grace');
+        observeRefreshReuse(app, 'grace');
         reply.header('retry-after', '1');
         throw new RefreshRotatedError(
           'refresh token was just rotated; retry with the current cookie',
         );
       }
       if (outcome.status === 'invalid') {
-        if (outcome.reason === 'reused' && app.hasDecorator('observeRefreshReuse')) {
-          app.observeRefreshReuse('theft');
-        }
+        if (outcome.reason === 'reused') observeRefreshReuse(app, 'theft');
         clearRefreshCookie(reply);
         throw new UnauthorizedError('invalid or expired refresh token');
       }
@@ -377,82 +393,31 @@ function getRefreshCookie(request: FastifyRequest): string | undefined {
   return typeof cookie === 'string' && cookie.length > 0 ? cookie : undefined;
 }
 
-async function allowMagicLink(app: FastifyInstance, email: string, now: Date): Promise<boolean> {
-  const key = `apirl:magic:${hashToken(email).toString('hex')}`;
-
-  if (app.hasDecorator('redis')) {
-    try {
-      const count = await app.redis.incr(key);
-      if (count === 1) await app.redis.expire(key, 3600);
-      return count <= MAGIC_LINKS_PER_EMAIL_PER_HOUR;
-    } catch {
-      // Redis is a best-effort limiter; fall through to the process-local map.
-    }
-  }
-
-  const existing = memoryMagicLinkCounters.get(key);
-  if (existing === undefined || existing.resetAt <= now.getTime()) {
-    memoryMagicLinkCounters.set(key, { count: 1, resetAt: now.getTime() + 3_600_000 });
-    return true;
-  }
-  existing.count += 1;
-  return existing.count <= MAGIC_LINKS_PER_EMAIL_PER_HOUR;
-}
-
-/** Spec §10.5 auth tier: 5 requests/min per IP for magic-link/verify/logout. */
-async function allowAuthRequest(app: FastifyInstance, ip: string, max: number): Promise<boolean> {
-  if (max <= 0) return true;
-  const key = `apirl:auth:${ip}`;
-  const now = Date.now();
-
-  if (app.hasDecorator('redis')) {
-    try {
-      const count = await app.redis.incr(key);
-      if (count === 1) await app.redis.expire(key, 60);
-      return count <= max;
-    } catch {
-      // Degrade to the process-local counter when Redis is unavailable.
-    }
-  }
-
-  const existing = memoryAuthCounters.get(key);
-  if (existing === undefined || existing.resetAt <= now) {
-    memoryAuthCounters.set(key, { count: 1, resetAt: now + 60_000 });
-    return true;
-  }
-  existing.count += 1;
-  return existing.count <= max;
-}
-
-/** H-3: one fixed 60 s window per refresh bucket (session hash or IP guard). */
-async function allowRefreshRequest(
+async function allowCounter(
   app: FastifyInstance,
   key: string,
+  windowSeconds: number,
   max: number,
 ): Promise<boolean> {
   if (max <= 0) return true;
-  const now = Date.now();
 
   if (app.hasDecorator('redis')) {
-    try {
-      const count = await app.redis.incr(key);
-      if (count === 1) await app.redis.expire(key, 60);
-      return count <= max;
-    } catch {
-      // Degrade to the process-local counter when Redis is unavailable.
-    }
+    const count = await incrementWithTtl(app.redis, key, windowSeconds);
+    if (count !== null) return count <= max;
+    // Redis is a best-effort limiter; fall through to the bounded local map.
   }
 
-  const existing = memoryRefreshCounters.get(key);
-  if (existing === undefined || existing.resetAt <= now) {
-    memoryRefreshCounters.set(key, { count: 1, resetAt: now + 60_000 });
-    return true;
-  }
-  existing.count += 1;
-  return existing.count <= max;
+  return bumpMemoryCounter(memoryAuthCounters, key, Date.now(), windowSeconds * 1_000, max);
 }
 
 /** H-2/H-3: stable, short key for one refresh session (never the raw token). */
 function refreshSessionHash(rawToken: string): string {
   return hashToken(rawToken).subarray(0, 8).toString('hex');
+}
+
+/** H-2: the metric plugin is optional in tooling builds and route unit tests. */
+function observeRefreshReuse(app: FastifyInstance, outcome: RefreshReuseOutcome): void {
+  if (app.hasDecorator('observeRefreshReuse')) {
+    app.observeRefreshReuse(outcome);
+  }
 }

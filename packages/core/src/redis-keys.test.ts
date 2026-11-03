@@ -62,7 +62,9 @@ describe('redisKeys (spec §9.1)', () => {
     expect(redisKeys.sseConnections('key:abc')).toBe('apirl:sse:key:abc');
   });
 
-  it('builds the refresh rate-limit keys', () => {
+  it('builds the auth rate-limit keys', () => {
+    expect(redisKeys.magicLinkBucket('abc123')).toBe('apirl:magic:abc123');
+    expect(redisKeys.authRateBucket('203.0.113.9')).toBe('apirl:auth:203.0.113.9');
     expect(redisKeys.authRefreshBucket('deadbeefdeadbeef')).toBe(
       'apirl:auth:refresh:deadbeefdeadbeef',
     );
