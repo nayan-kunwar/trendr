@@ -483,13 +483,14 @@ be re-checked later. Decisions with alternatives get an ADR in [`docs/adr/`](./a
     cross-source jobs; `Cache-Control: no-store`.
 - **Search implementation.** Rank = `greatest(ts_rank_cd(english), ts_rank_cd(simple))` over the
   dual `websearch_to_tsquery` OR; when the FTS hit count is `< 5` the page appends a trigram tail
-  that excludes FTS matches: `word_similarity(lower($q), lower(display_name)) > 0`. The function
-  form is mandatory — pg_trgm's operators use thresholds (0.3/0.6) that drop the spec's own
-  `nxt` → `vercel/next.js` pair (0.286, measured on PG16). The `> 0` floor means a boundary
-  trigram matches any same-first-letter word (seed `nuxt/nuxt` scores 0.5 for `nxt` and
-  outranks `next.js`), which is accepted fuzzy-search behaviour, ordered by similarity then id
-  desc. The trigram scan is sequential by design (a GIN index would not shrink the `> 0`
-  candidate set); revisit if the item count grows.
+  that excludes FTS matches. Since M-1 (R-54, ADR-0025) the tail predicates with the indexable
+  form `lower(display_name) %> lower($q)` and lowers `pg_trgm.word_similarity_threshold` to 0.15
+  for its own transaction; `items_display_name_trgm_idx` is a GIN index on `lower(display_name)`.
+  The operator's default 0.6 (and `%`'s 0.3) would drop the spec's own `nxt` → `vercel/next.js`
+  pair (0.286, measured on PG16), which still matches at 0.15. The higher floor drops rows that
+  share only a boundary trigram; results are still ordered by the exact `word_similarity` the API
+  reports, then id desc. `items_name_trgm_idx` on raw `display_name` remains because the spec
+  lists it, but no query uses it.
 - **Search cursor.** `{m: 'fts'|'both', p: 'fts'|'trigram', k: score, i: itemId}` — the mode is
   fixed on page 1 from the total FTS count (`count(*) OVER ()`) and carried in the cursor, so
   deeper pages cannot switch modes when the FTS count crosses the threshold between requests;
@@ -1690,6 +1691,7 @@ be re-checked later. Decisions with alternatives get an ADR in [`docs/adr/`](./a
 | R-51 | The 2026-10-29 `compose-smoke` job failed on a transient corepack download during image build. | Both node Dockerfiles retry the pinned pnpm install three times before failing the build. |
 | R-52 | H-2: concurrent refreshes with one cookie revoked the whole family and signed every tab out. | A used token replayed within 15 s returns typed `refresh-rotated` 401 with `Retry-After`, without revoking or clearing; outside the window reuse still revokes. Web Locks plus a typed one-shot retry in the client. Deliberate §10.5 deviation; ADR-0022. |
 | R-53 | H-3: refresh shared the 5/min sign-in bucket, so routine page loads could 429 and the old client treated that as signed out. | Magic-link/verify/logout keep 5/min; refresh gets 60/min per presented-cookie hash plus a 120/min per-IP guard; anonymous refresh skips the buckets; client uses `trendr.hasSession` and treats 429/5xx as transient. Deliberate §10.5 deviation; ADR-0023. |
+| R-54 | M-1: the §7.5 trigram fallback used `word_similarity(...) > 0`, which no GIN index can serve, and the only trigram index was on raw `display_name`. | Function moved to the indexable `lower(display_name) %> lower(q)` operator with a transaction-scoped `pg_trgm.word_similarity_threshold` of 0.15, backed by `items_display_name_trgm_idx`. The candidate floor rises from “any shared trigram” to 0.15 word similarity; the §18 `nxt` → `next.js` pair (≈0.29) still matches. ADR-0025. |
 
 - **Agent rules file:** `CLAUDE.md` was renamed to `AGENTS.md` so agent tooling that reads
   `AGENTS.md` picks it up automatically. The content is still the verbatim Section 0 rules;
@@ -1706,9 +1708,11 @@ be re-checked later. Decisions with alternatives get an ADR in [`docs/adr/`](./a
 - H-1 is fixed without a spec deviation: the API validates `CF-Connecting-IP` with `net.isIP` and
   falls back to `request.ip`; nginx overwrites the header and closes non-Cloudflare peers with 444;
   UFW and the `TRENDR-INGRESS` Docker chain restrict 80/443 to the published ranges.
-- Two planned fixes deviate from §10.5: a 15 s refresh-reuse grace (H-2) and a separate refresh
-  rate-limit bucket (H-3). They will be recorded as R-52/R-53 with ADR-0022/0023 when the code
-  lands, together with the naming additions for the new Redis keys, table and metrics.
+- Two fixes deviate from §10.5 and are recorded as R-52/R-53 with ADR-0022/0023: the 15 s
+  refresh-reuse grace (H-2) and the separate refresh rate-limit bucket (H-3), together with the
+  naming additions for the new Redis keys and metrics.
+- M-1 ships with a deliberate change to the documented behaviour and is recorded as R-54 with
+  ADR-0025.
 
 ## Naming additions (production-readiness remediation)
 
@@ -1728,6 +1732,8 @@ Appendix B.
 | `apirl:auth:refresh:ip:{ip}`          | Redis key      | H-3     | Coarse per-IP refresh guard (120/min)                                     |
 | `trendr_auth_refresh_reuse_total{outcome}` | metric    | H-2     | Grace vs theft-classified refresh reuse                                   |
 | `trendr.hasSession`                   | localStorage key | H-3   | Non-sensitive web session hint; never a credential                        |
+| `items_display_name_trgm_idx`         | GIN index      | M-1     | Functional trigram index on `lower(display_name)` used by the search fallback |
+| `TRIGRAM_WORD_SIMILARITY_THRESHOLD`   | constant       | M-1     | 0.15 word-similarity floor for the fallback, set per transaction          |
 
 ## Environment quirks worth knowing
 

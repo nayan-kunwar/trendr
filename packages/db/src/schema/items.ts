@@ -70,6 +70,9 @@ export const items = pgTable(
       .where(sql`${t.language} IS NOT NULL`),
     index('items_search_idx').using('gin', t.searchTsv),
     index('items_name_trgm_idx').using('gin', sql`${t.displayName} gin_trgm_ops`),
+    // M-1: the §7.5 fuzzy fallback compares `lower(display_name)` and uses the
+    // indexable `%>` operator, so the index must be on the same expression.
+    index('items_display_name_trgm_idx').using('gin', sql`lower(${t.displayName}) gin_trgm_ops`),
     index('items_created_idx').on(t.source, t.upstreamCreatedAt.desc()),
   ],
 );

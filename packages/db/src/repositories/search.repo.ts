@@ -15,12 +15,16 @@ import type { JobType } from './runs.repo.js';
  * `search_tsv` mixes configs — names with `simple` (weight A), descriptions
  * with `english` (weight B) — so both `websearch_to_tsquery` forms are queried
  * and the better of the two ranks is kept; either config may be the one that
- * matches. The trigram fallback compares `lower(display_name)` against the raw
- * query with `word_similarity(...) > 0`: the measured similarity for the §18
- * acceptance pair (`nxt` → `vercel/next.js`) is ≈ 0.29, below pg_trgm's
- * operator thresholds (0.3 for `%`, 0.6 for `<%`), so the function form is
- * required. It is a sequential scan by design (a fraction of `items`, only
- * running when FTS found fewer than 5 hits).
+ * matches.
+ *
+ * M-1: the trigram fallback is index-backed. It compares
+ * `lower(display_name)` against `lower(q)` with the `%>` word-similarity
+ * operator — the only word-similarity form a GIN trigram index can serve —
+ * after lowering `pg_trgm.word_similarity_threshold` for the transaction. The
+ * operator's default 0.6 (and `%`'s 0.3) drop the §18 acceptance pair
+ * (`nxt` → `vercel/next.js`, word similarity ≈ 0.29), hence the per-transaction
+ * threshold. Candidates are still ordered by the exact `word_similarity` the
+ * API reports.
  */
 
 /** The list-item fields shared by `/v1/search` and `/v1/new` (spec §11.1 `search_items`). */
@@ -159,9 +163,22 @@ export async function searchItemsFts(db: DbExecutor, params: SearchParams): Prom
 }
 
 /**
+ * M-1: pg_trgm's default `word_similarity_threshold` (0.6) and `%`'s 0.3 both
+ * drop the §18 acceptance pair (`nxt` → `vercel/next.js`, ≈ 0.29), so the
+ * fallback lowers it inside its own transaction. The value keeps ordinary
+ * one-trigram overlaps out of the candidate set without losing that pair.
+ */
+export const TRIGRAM_WORD_SIMILARITY_THRESHOLD = 0.15;
+
+/**
  * Spec §10.1 `/v1/search` fallback: items that do *not* full-text match but
  * are trigram-similar on `display_name`, ordered by similarity, keyset-
  * paginated on `(similarity, id)`.
+ *
+ * M-1: the predicate is the indexable `lower(display_name) %> lower(q)` form
+ * backed by `items_display_name_trgm_idx`, not the sequential
+ * `word_similarity(...) > 0` function call. The threshold is lowered for this
+ * transaction only, so pooled connections keep pg_trgm's default.
  */
 export async function searchItemsTrigram(
   db: DbExecutor,
@@ -172,7 +189,10 @@ export async function searchItemsTrigram(
   const conditions: (SQL | undefined)[] = [
     eq(items.isDeleted, false),
     sql`NOT ${matches}`,
-    sql`${sim} > 0`,
+    // M-1: indexable operator form; `%>` reads as
+    // `word_similarity(lower(q), lower(display_name)) > threshold` with the
+    // column on the left so the GIN trigram index applies.
+    sql`lower(${items.displayName}) %> lower(${params.q})`,
     params.source === undefined ? undefined : eq(items.source, params.source),
     params.kind === undefined ? undefined : eq(items.kind, params.kind),
     params.after === undefined
@@ -180,17 +200,23 @@ export async function searchItemsTrigram(
       : sql`(${sim} < ${params.after.score} OR (${sim} = ${params.after.score} AND ${items.id} < ${params.after.itemId}))`,
   ];
 
-  const rows = await db
-    .select({
-      ...summaryColumns(),
-      score: sim.as('score'),
-    })
-    .from(items)
-    .where(and(...conditions))
-    .orderBy(desc(sim), desc(items.id))
-    .limit(params.fetch);
-
-  return rows.map(toScoredSummaryRow);
+  return db.transaction(async (tx) => {
+    // `is_local = true` scopes the GUC to this transaction; the default 0.6
+    // would drop the §18 `nxt` → `next.js` pair.
+    await tx.execute(
+      sql`SELECT set_config('pg_trgm.word_similarity_threshold', ${TRIGRAM_WORD_SIMILARITY_THRESHOLD.toFixed(3)}, true)`,
+    );
+    const rows = await tx
+      .select({
+        ...summaryColumns(),
+        score: sim.as('score'),
+      })
+      .from(items)
+      .where(and(...conditions))
+      .orderBy(desc(sim), desc(items.id))
+      .limit(params.fetch);
+    return rows.map(toScoredSummaryRow);
+  });
 }
 
 export interface NewItemsParams {

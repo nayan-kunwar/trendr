@@ -57,7 +57,7 @@ gates pass; live-deployment acceptance is tracked separately in
 
 | ID   | Finding | Evidence | Planned remediation | Phase | Status |
 | ---- | --- | --- | --- | --- | --- |
-| M-1  | Unauthenticated trigram search cannot use its index and scans the whole `items` table per distinct query | `packages/db/src/repositories/search.repo.ts:166-194`; `items_name_trgm_idx` is on raw `display_name`, the query uses `lower(display_name)` | Functional GIN index on `lower(display_name)`; confirm with `EXPLAIN` | 4 | Planned |
+| M-1  | Unauthenticated trigram search cannot use its index and scans the whole `items` table per distinct query | `packages/db/src/repositories/search.repo.ts:166-194`; `items_name_trgm_idx` is on raw `display_name`, the query uses `lower(display_name)` | Functional GIN index on `lower(display_name)`; indexable `%>` predicate; confirmed with `EXPLAIN` | 4 | Verified |
 | M-2  | API-key check runs before the rate limiter, with an uncached database lookup per request | `apps/api/src/plugins/api-key.ts:72-98`; plugin order in `apps/api/src/app.ts` | Short Redis cache for key lookups with explicit invalidation; nginx `limit_req`/`limit_conn` flood guard | 6 | Planned |
 | M-3  | Scoring lock expires after 120 s with no renewal, the current-run swap is unconditional, and a skipped run reports success | `apps/worker/src/scoring/run-scoring.ts:50,109-115,310-313` | Renew the lock; monotonic swap; return an explicit `skipped` result and metric | 5 | Planned |
 | M-4  | Missing indexes on `scores(run_id)` and `alert_events(score_run_id)` make retention and FK checks scan | `packages/db/src/repositories/retention.repo.ts:39-60`; `0000_init.sql` index list | Add both indexes in one migration; `EXPLAIN` before/after | 4 | Planned |
@@ -293,8 +293,7 @@ is unchanged. Live VPS acceptance is still in the deferred list.
 Key changes: `lower(display_name)` GIN index; `scores(run_id)` and `alert_events(score_run_id)`
 indexes; 12-month partition lead; default-partition guard; `trendr_partition_lead_days` and alert.
 Migrations are forward-only. M-1 is the benchmark-driven revisit of the K-02 deferral recorded in
-[`AUDIT.md`](../AUDIT.md): the functional index fixes the index mismatch while the fallback query
-itself stays sequential only for genuinely non-matching rows.
+[`AUDIT.md`](../AUDIT.md).
 
 ### Phase 5 — Scoring (M-3, L-5, L-8, L-9)
 
