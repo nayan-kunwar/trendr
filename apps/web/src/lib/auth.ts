@@ -16,6 +16,10 @@ import {
 let accessToken: string | null = null;
 let refreshInFlight: Promise<AuthUser | null> | null = null;
 
+const REFRESH_LOCK_NAME = 'trendr.auth.refresh';
+const REFRESH_CHANNEL_NAME = 'trendr.auth.refresh';
+const REFRESH_RETRY_DELAY_MS = 150;
+
 export function getAccessToken(): string | null {
   return accessToken;
 }
@@ -30,28 +34,59 @@ export async function verifyMagicLink(token: string): Promise<AuthUser> {
   return session.user;
 }
 
-/** Restore a session from the refresh cookie; concurrent callers share one request. */
+/**
+ * Restore a session from the refresh cookie. Concurrent callers, including
+ * other tabs when Web Locks is available, share one refresh (H-2).
+ */
 export function refreshSession(): Promise<AuthUser | null> {
-  refreshInFlight ??= doRefresh().finally(() => {
-    refreshInFlight = null;
-  });
+  refreshInFlight ??= withRefreshLock(doRefreshWithRetry)
+    .catch(() => null)
+    .finally(() => {
+      refreshInFlight = null;
+    });
   return refreshInFlight;
 }
 
-async function doRefresh(): Promise<AuthUser | null> {
+type RefreshAttempt =
+  { kind: 'session'; session: AuthSession } | { kind: 'rotated' } | { kind: 'failed' };
+
+/** Retry once when another tab won the rotation race (H-2). */
+async function doRefreshWithRetry(): Promise<AuthUser | null> {
+  let attempt = await doRefresh();
+  if (attempt.kind === 'rotated') {
+    await delay(REFRESH_RETRY_DELAY_MS);
+    attempt = await doRefresh();
+  }
+  return attempt.kind === 'session' ? attempt.session.user : null;
+}
+
+async function doRefresh(): Promise<RefreshAttempt> {
+  let response: Response;
   try {
-    const response = await post('/v1/auth/refresh');
-    if (!response.ok) {
-      accessToken = null;
-      return null;
-    }
-    const session = AuthSessionSchema.parse(await response.json());
-    accessToken = session.accessToken;
-    return session.user;
+    response = await post('/v1/auth/refresh');
   } catch {
     accessToken = null;
-    return null;
+    return { kind: 'failed' };
   }
+
+  if (response.ok) {
+    try {
+      const session = AuthSessionSchema.parse(await response.json());
+      accessToken = session.accessToken;
+      return { kind: 'session', session };
+    } catch {
+      accessToken = null;
+      return { kind: 'failed' };
+    }
+  }
+
+  const problem = await readProblem(response);
+  if (response.status === 401 && isRefreshRotated(problem)) {
+    // Do not clear the token: another tab already holds the successor cookie.
+    return { kind: 'rotated' };
+  }
+  accessToken = null;
+  return { kind: 'failed' };
 }
 
 export async function signOut(): Promise<void> {
@@ -166,19 +201,74 @@ async function parseJson<T>(
 }
 
 async function throwProblem(path: string, response: Response): Promise<never> {
-  let problem: unknown;
-  try {
-    const body: unknown = await response.json();
-    const parsed = ProblemSchema.safeParse(body);
-    problem = parsed.success ? parsed.data : body;
-  } catch {
-    problem = undefined;
-  }
+  const problem = await readProblem(response);
   throw new ApiError(
     `API request to ${path} failed with status ${response.status}`,
     response.status,
     problem,
   );
+}
+
+async function readProblem(response: Response): Promise<unknown> {
+  try {
+    const body: unknown = await response.json();
+    const parsed = ProblemSchema.safeParse(body);
+    return parsed.success ? parsed.data : body;
+  } catch {
+    return undefined;
+  }
+}
+
+function isRefreshRotated(problem: unknown): boolean {
+  const parsed = ProblemSchema.safeParse(problem);
+  return parsed.success && parsed.data.type.endsWith('/refresh-rotated');
+}
+
+/**
+ * Cross-tab refresh serialization. Web Locks is the primary mechanism; the
+ * BroadcastChannel path is a best-effort fallback for older browsers, where
+ * the typed `refresh-rotated` retry still protects the session (H-2).
+ */
+async function withRefreshLock<T>(run: () => Promise<T>): Promise<T> {
+  const locks = typeof navigator === 'undefined' ? undefined : navigator.locks;
+  if (locks !== undefined) {
+    return locks.request(REFRESH_LOCK_NAME, run);
+  }
+  return withBroadcastRefreshLock(run);
+}
+
+async function withBroadcastRefreshLock<T>(run: () => Promise<T>): Promise<T> {
+  if (typeof BroadcastChannel === 'undefined') return run();
+
+  const channel = new BroadcastChannel(REFRESH_CHANNEL_NAME);
+  const state = { anotherTabStarted: false };
+  channel.onmessage = (event: MessageEvent) => {
+    const data: unknown = event.data;
+    if (
+      typeof data === 'object' &&
+      data !== null &&
+      'type' in data &&
+      data.type === 'refresh-start'
+    ) {
+      state.anotherTabStarted = true;
+    }
+  };
+  channel.postMessage({ type: 'refresh-start' });
+
+  try {
+    await delay(50);
+    // Give the first tab time to write the rotated cookie before we consume it.
+    if (state.anotherTabStarted) await delay(500);
+    return await run();
+  } finally {
+    channel.close();
+  }
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
 }
 
 export type { AuthSession, AuthUser };
