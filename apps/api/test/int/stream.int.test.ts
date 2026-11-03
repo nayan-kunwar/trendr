@@ -294,6 +294,14 @@ describe('SSE leaderboard stream (task 3.6)', () => {
       expect(afterConnect).toContain('"score":7.49');
       expect(afterConnect).toContain('"delta":900');
 
+      // M-5: the per-client counter is a ~90 s lease refreshed by the
+      // heartbeat, so a crashed process cannot lock the user out for a day.
+      const [counterKey] = await redis.keys('apirl:sse:*');
+      if (counterKey === undefined) throw new Error('sse counter missing after connect');
+      const ttl = await redis.ttl(counterKey);
+      expect(ttl).toBeGreaterThan(0);
+      expect(ttl).toBeLessThanOrEqual(90);
+
       const afterUpdate = await publishUntilUpdate(stream.reader, updatePayload('81240'));
       expect(afterUpdate).toContain('id: 81240');
       expect(afterUpdate).toContain(

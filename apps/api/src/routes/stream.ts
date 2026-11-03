@@ -23,8 +23,12 @@ export const SSE_HEARTBEAT_MS = 25_000;
 export const SSE_DRAIN_TIMEOUT_MS = 10_000;
 /** Spec §10.5 — `sse` tier: concurrent streams per IP/key. */
 export const SSE_MAX_CONNECTIONS = 5;
-/** Crash-safety TTL for the counter; refreshed on every connect and close. */
-const SSE_COUNTER_TTL_SECONDS = 86_400;
+/**
+ * M-5: the per-client counter is a lease, not a permanent record. The heartbeat
+ * refreshes it every 25 s, so a crashed process releases its slots about 90 s
+ * later instead of locking the user out for a day.
+ */
+export const SSE_COUNTER_LEASE_SECONDS = 90;
 
 export interface SnapshotEntry {
   rank: number;
@@ -133,7 +137,7 @@ export function registerStreamRoutes(app: FastifyInstance, options: StreamRouteO
           );
         }
         counted = true;
-        await app.redis.expire(counterKey, SSE_COUNTER_TTL_SECONDS).catch(() => undefined);
+        await app.redis.expire(counterKey, SSE_COUNTER_LEASE_SECONDS).catch(() => undefined);
       } catch (error) {
         if (error instanceof RateLimitedError) {
           throw error;
@@ -248,6 +252,13 @@ export function registerStreamRoutes(app: FastifyInstance, options: StreamRouteO
       // on a later tick) always has a live timer to stop.
       stopHeartbeat = startHeartbeat(() => {
         client.send(': ping\n\n');
+        // M-5: every heartbeat proves the process is alive, so the lease can
+        // expire quickly after a crash.
+        if (counted && !finalized) {
+          app.redis.expire(counterKey, SSE_COUNTER_LEASE_SECONDS).catch((error: unknown) => {
+            app.log.warn({ err: error }, 'sse counter lease refresh failed');
+          });
+        }
       });
 
       // Spec §10.6 — snapshot from `lbmeta` + the board ZSET; deltas via cards.
