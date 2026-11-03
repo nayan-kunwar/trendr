@@ -93,6 +93,8 @@ describe('apps/api', () => {
       const trusted = await buildApp({
         ...TEST_DEPS,
         trustProxy: true,
+        // M-12: the CF header is only trusted behind the nginx deployment.
+        trustCfConnectingIp: true,
         auth: { emailSender: NOOP_EMAIL_SENDER, authRateLimitMax: 1 },
       });
       try {
