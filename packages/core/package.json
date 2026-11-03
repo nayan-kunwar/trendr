@@ -18,10 +18,10 @@
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
-    "eslint": "^9",
+    "eslint": "^10",
     "ioredis": "^5.11.1",
-    "tsup": "^8",
-    "typescript": "^5"
+    "tsup": "^9",
+    "typescript": "^7"
   },
   "dependencies": {
     "zod": "^4.6.7"
