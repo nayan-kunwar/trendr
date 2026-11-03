@@ -13,12 +13,17 @@ export interface MetricsOptions {
   db?: Connection;
 }
 
+/** H-2: distinguish a benign rotation race from theft-classified reuse. */
+export type RefreshReuseOutcome = 'grace' | 'theft';
+
 declare module 'fastify' {
   interface FastifyInstance {
     /** Gauge `trendr_sse_clients{scope,window}` (spec §10.6). */
     sseClients: Gauge;
     /** Counter `trendr_cache_requests_total{cache,result}` (spec §14.1). */
     observeCache: (cache: CacheKind, result: CacheResult) => void;
+    /** Counter `trendr_auth_refresh_reuse_total{outcome}` (H-2). */
+    observeRefreshReuse: (outcome: RefreshReuseOutcome) => void;
   }
 }
 
@@ -61,6 +66,17 @@ export function registerMetrics(app: FastifyInstance, options: MetricsOptions = 
   });
   app.decorate('observeCache', (cache: CacheKind, result: CacheResult) => {
     cacheRequests.inc({ cache, result });
+  });
+
+  // H-2 — distinguish a benign 15 s rotation race from theft-classified reuse.
+  const refreshReuse = new Counter({
+    name: 'trendr_auth_refresh_reuse_total',
+    help: 'Refresh-token replays by outcome (grace race vs theft revocation).',
+    labelNames: ['outcome'],
+    registers: [registry],
+  });
+  app.decorate('observeRefreshReuse', (outcome: RefreshReuseOutcome) => {
+    refreshReuse.inc({ outcome });
   });
 
   // Spec §14.1 — scrape-time pool counters; no series when the API has no DB.

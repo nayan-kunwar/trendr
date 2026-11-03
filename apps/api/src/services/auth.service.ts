@@ -40,10 +40,21 @@ export interface AuthSession {
   familyId: string;
 }
 
-export interface RefreshResult extends AuthSession {
-  /** The presented token was already used; its whole family was revoked. */
-  reused?: boolean;
-}
+/** H-2: how long a just-rotated token is treated as a benign race, not theft. */
+export const REFRESH_REUSE_GRACE_MS = 15_000;
+
+/**
+ * H-2 typed rotation outcome. `grace` carries no token material: the caller
+ * answers a typed 401 and leaves the current cookie alone. Only `reused`
+ * (outside the grace window) has revoked the family.
+ */
+export type RefreshResult =
+  | { status: 'rotated'; session: AuthSession }
+  | { status: 'grace' }
+  | {
+      status: 'invalid';
+      reason: 'missing' | 'unknown' | 'expired' | 'revoked' | 'reused';
+    };
 
 export async function issueMagicLink(
   options: AuthServiceOptions,
@@ -110,40 +121,58 @@ export async function verifyMagicLink(
 }
 
 /**
- * Rotate a refresh token. Reuse of an already-used token is treated as theft:
- * every token in its family is revoked, including the newest one.
+ * Rotate a refresh token. Reuse outside the 15 s grace window is treated as
+ * theft and revokes every token in the family, including the newest one. A
+ * replay inside the window is a routine multi-tab race: it returns `grace`
+ * without revoking anything (H-2, ADR-0022).
  */
 export async function rotateRefreshToken(
   options: AuthServiceOptions,
   rawToken: string | undefined,
-): Promise<RefreshResult | null> {
-  if (rawToken === undefined || rawToken.length === 0) return null;
+): Promise<RefreshResult> {
+  if (rawToken === undefined || rawToken.length === 0) {
+    return { status: 'invalid', reason: 'missing' };
+  }
   const now = options.now?.() ?? new Date();
   const tokenHash = hashToken(rawToken);
 
   return options.db.transaction(async (tx) => {
     const token = await findAuthTokenByHash(tx, tokenHash, { forUpdate: true });
-    if (token?.kind !== 'refresh') return null;
+    if (token?.kind !== 'refresh') return { status: 'invalid', reason: 'unknown' };
+
+    // A family already revoked by logout or an earlier theft must stay dead.
+    if (token.revokedAt !== null) return { status: 'invalid', reason: 'revoked' };
 
     if (token.usedAt !== null) {
+      if (now.getTime() - token.usedAt.getTime() <= REFRESH_REUSE_GRACE_MS) {
+        return { status: 'grace' };
+      }
       if (token.familyId !== null) {
         await revokeAuthTokenFamily(tx, token.familyId, now);
+        return { status: 'invalid', reason: 'reused' };
       }
-      return null;
+      return { status: 'invalid', reason: 'unknown' };
     }
-    if (token.revokedAt !== null || token.expiresAt.getTime() <= now.getTime()) {
-      return null;
+    if (token.expiresAt.getTime() <= now.getTime()) {
+      return { status: 'invalid', reason: 'expired' };
     }
-    if (token.familyId === null) return null;
+    if (token.familyId === null) return { status: 'invalid', reason: 'unknown' };
 
     const user = await findUserById(tx, token.userId);
-    if (user === null) return null;
+    if (user === null) return { status: 'invalid', reason: 'unknown' };
 
     const role = options.adminEmails.includes(normalizeEmail(user.email)) ? 'admin' : 'user';
     const refreshedUser = user.role === role ? user : await setUserRole(tx, user.id, role);
 
     await markAuthTokenUsed(tx, token.id, now);
-    return createRefreshSession(tx, refreshedUser, now, token.familyId, options.refreshTtlDays);
+    const session = await createRefreshSession(
+      tx,
+      refreshedUser,
+      now,
+      token.familyId,
+      options.refreshTtlDays,
+    );
+    return { status: 'rotated', session };
   });
 }
 

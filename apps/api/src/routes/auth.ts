@@ -5,6 +5,7 @@ import type { EmailSender } from '@trendr/email';
 import {
   JWT_ACCESS_TTL_SECONDS,
   RateLimitedError,
+  RefreshRotatedError,
   UnauthorizedError,
   UnavailableError,
   hashToken,
@@ -230,13 +231,23 @@ export function registerAuthRoutes(app: FastifyInstance, options: AuthRoutesOpti
     },
     async (request, reply) => {
       const raw = getRefreshCookie(request);
-      const session = await rotateRefreshToken(serviceOptions(), raw);
-      if (session === null) {
+      const outcome = await rotateRefreshToken(serviceOptions(), raw);
+      if (outcome.status === 'grace') {
+        if (app.hasDecorator('observeRefreshReuse')) app.observeRefreshReuse('grace');
+        reply.header('retry-after', '1');
+        throw new RefreshRotatedError(
+          'refresh token was just rotated; retry with the current cookie',
+        );
+      }
+      if (outcome.status === 'invalid') {
+        if (outcome.reason === 'reused' && app.hasDecorator('observeRefreshReuse')) {
+          app.observeRefreshReuse('theft');
+        }
         clearRefreshCookie(reply);
         throw new UnauthorizedError('invalid or expired refresh token');
       }
-      setRefreshCookie(reply, session);
-      return reply.send(sessionBody(session));
+      setRefreshCookie(reply, outcome.session);
+      return reply.send(sessionBody(outcome.session));
     },
   );
 

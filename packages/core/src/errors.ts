@@ -29,6 +29,16 @@ export class UnauthorizedError extends AppError {
   override readonly type = 'unauthorized';
 }
 
+/**
+ * H-2: the presented refresh token was already rotated moments ago. Unlike a
+ * theft-classified reuse this is benign (a multi-tab race), so the client may
+ * retry once and the family stays valid.
+ */
+export class RefreshRotatedError extends AppError {
+  override readonly status = 401;
+  override readonly type = 'refresh-rotated';
+}
+
 export class ForbiddenError extends AppError {
   override readonly status = 403;
   override readonly type = 'forbidden';

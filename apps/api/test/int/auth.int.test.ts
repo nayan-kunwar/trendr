@@ -1,10 +1,11 @@
 import { randomUUID } from 'node:crypto';
 
 import { eq, like } from 'drizzle-orm';
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, LightMyRequestResponse } from 'fastify';
 import { Redis } from 'ioredis';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
+import { hashToken } from '@trendr/core';
 import { authTokens, createDb, users, type Connection } from '@trendr/db';
 import { SmtpEmailSender } from '@trendr/email';
 
@@ -43,6 +44,7 @@ beforeAll(async () => {
     redis,
     jwtSecret: JWT_SECRET,
     rateLimit: { max: 1_000 },
+    metricsToken: 'int-metrics-token',
     auth: {
       emailSender: new SmtpEmailSender('Trendr <digest@localhost>', SMTP_URL),
       webPublicUrl: 'http://localhost:3000',
@@ -133,6 +135,35 @@ async function login(email: string): Promise<{
   return { accessToken: body.accessToken, cookie: refreshCookie(verified), token };
 }
 
+function refresh(
+  target: FastifyInstance,
+  cookie: string | undefined,
+  remoteAddress?: string,
+): Promise<LightMyRequestResponse> {
+  return target.inject({
+    method: 'POST',
+    url: '/v1/auth/refresh',
+    headers: {
+      ...(cookie === undefined ? {} : { cookie: `dt_refresh=${cookie}` }),
+      'x-requested-with': 'trendr',
+    },
+    ...(remoteAddress === undefined ? {} : { remoteAddress }),
+  });
+}
+
+function problemType(response: LightMyRequestResponse): string {
+  const body: unknown = response.json();
+  if (
+    typeof body === 'object' &&
+    body !== null &&
+    'type' in body &&
+    typeof body.type === 'string'
+  ) {
+    return body.type;
+  }
+  throw new Error(`response was not a problem document: ${response.body}`);
+}
+
 describe('magic-link auth and refresh rotation (task 7.1)', () => {
   it('delivers a single-use link, verifies the user, and restores /v1/me', async () => {
     const email = newEmail('flow');
@@ -195,36 +226,74 @@ describe('magic-link auth and refresh rotation (task 7.1)', () => {
     expect(reused.statusCode).toBe(401);
 
     const cookie = refreshCookie(verified);
-    const rotated = await app.inject({
-      method: 'POST',
-      url: '/v1/auth/refresh',
-      headers: { cookie: `dt_refresh=${cookie}`, 'x-requested-with': 'trendr' },
-    });
+    const rotated = await refresh(app, cookie);
     expect(rotated.statusCode, rotated.body).toBe(200);
     const rotatedCookie = refreshCookie(rotated);
     expect(rotatedCookie).not.toBe(cookie);
 
-    // Presenting the old refresh token after rotation is theft: revoke the family.
-    const oldAgain = await app.inject({
-      method: 'POST',
-      url: '/v1/auth/refresh',
-      headers: { cookie: `dt_refresh=${cookie}`, 'x-requested-with': 'trendr' },
-    });
+    // H-2: replaying the immediately previous token is a benign race. It is a
+    // typed 401 with no token material, does not revoke the family and must not
+    // clear the browser's now-current cookie.
+    const oldAgain = await refresh(app, cookie);
     expect(oldAgain.statusCode).toBe(401);
+    expect(problemType(oldAgain)).toBe('https://trendr.dev/problems/refresh-rotated');
+    expect(oldAgain.headers['retry-after']).toBeDefined();
+    expect(oldAgain.headers['set-cookie']).toBeUndefined();
 
-    const newestNow = await app.inject({
-      method: 'POST',
-      url: '/v1/auth/refresh',
-      headers: { cookie: `dt_refresh=${rotatedCookie}`, 'x-requested-with': 'trendr' },
+    const metrics = await app.inject({
+      method: 'GET',
+      url: '/metrics',
+      headers: { authorization: 'Bearer int-metrics-token' },
     });
-    expect(newestNow.statusCode).toBe(401);
+    expect(metrics.body).toMatch(/trendr_auth_refresh_reuse_total\{outcome="grace"\} [1-9]/);
 
-    const freshNewest = await app.inject({
-      method: 'POST',
-      url: '/v1/auth/refresh',
-      headers: { cookie: 'dt_refresh=not-a-real-token', 'x-requested-with': 'trendr' },
+    // The successor issued before the replay is still valid.
+    const newestNow = await refresh(app, rotatedCookie);
+    expect(newestNow.statusCode, newestNow.body).toBe(200);
+    const newestCookie = refreshCookie(newestNow);
+
+    // Outside the 15 s grace, the same replay is theft and revokes the family.
+    await connection.db
+      .update(authTokens)
+      .set({ usedAt: new Date(Date.now() - 16_000) })
+      .where(eq(authTokens.tokenHash, hashToken(cookie)));
+    const theft = await refresh(app, cookie);
+    expect(theft.statusCode).toBe(401);
+    expect(problemType(theft)).toBe('https://trendr.dev/problems/unauthorized');
+
+    const metricsAfterTheft = await app.inject({
+      method: 'GET',
+      url: '/metrics',
+      headers: { authorization: 'Bearer int-metrics-token' },
     });
+    expect(metricsAfterTheft.body).toMatch(
+      /trendr_auth_refresh_reuse_total\{outcome="theft"\} [1-9]/,
+    );
+
+    const newestAfterTheft = await refresh(app, newestCookie);
+    expect(newestAfterTheft.statusCode).toBe(401);
+
+    const freshNewest = await refresh(app, 'not-a-real-token');
     expect(freshNewest.statusCode).toBe(401);
+  });
+
+  it('serializes parallel refreshes with one cookie without revoking the family (H-2)', async () => {
+    const { cookie } = await login(newEmail('parallel'));
+
+    const [first, second] = await Promise.all([refresh(app, cookie), refresh(app, cookie)]);
+    const responses = [first, second];
+    const statuses = responses.map((response) => response.statusCode).sort();
+    expect(statuses).toEqual([200, 401]);
+
+    const winner = responses.find((response) => response.statusCode === 200);
+    const loser = responses.find((response) => response.statusCode === 401);
+    if (winner === undefined || loser === undefined) throw new Error('parallel refresh failed');
+    expect(problemType(loser)).toBe('https://trendr.dev/problems/refresh-rotated');
+    expect(loser.headers['set-cookie']).toBeUndefined();
+
+    const successor = refreshCookie(winner);
+    const retried = await refresh(app, successor);
+    expect(retried.statusCode, retried.body).toBe(200);
   });
 
   it('patches and clears the display name for the authenticated user', async () => {
