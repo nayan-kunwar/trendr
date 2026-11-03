@@ -1744,6 +1744,11 @@ Appendix B.
 | `trendr_rate_limit_degraded_total`    | metric         | L-11    | Rate-limit store failures after which the API failed open                 |
 | `admin_audit_log`                     | table          | M-6     | Durable operator mutation trail (actor, action, target, payload)          |
 | `apikey:lookup:{prefix}`              | Redis key      | M-2     | 60 s API-key row cache, invalidated on revoke                              |
+| `trendr_backup_last_success_timestamp_seconds` | metric | M-8 | Last verified backup (node_exporter textfile) |
+| `trendr_backup_size_bytes`            | metric         | M-8     | Size of the last verified archive                                          |
+| `BackupStale`                         | alert          | M-8     | No verified backup for 36 h                                                |
+| `infra/scripts/restore-drill.sh`      | script         | M-8     | Restores the newest archive into a scratch DB and checks counts            |
+| `REQUIRE_OFFSITE`, `BACKUP_METRIC_DIR` | env           | M-8     | Backup policy and textfile output directory                               |
 
 ## Environment quirks worth knowing
 

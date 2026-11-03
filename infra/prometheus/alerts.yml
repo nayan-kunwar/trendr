@@ -49,6 +49,13 @@ groups:
         annotations:
           summary: 'snapshots_default holds {{ $value }} rows'
           description: 'Creating a partition for that range will fail (spec 6.3); run create-partitions and inspect.'
+      - alert: BackupStale
+        expr: time() - trendr_backup_last_success_timestamp_seconds > 36 * 3600
+        for: 1h
+        labels: { severity: critical }
+        annotations:
+          summary: 'No verified database backup for {{ $value | humanizeDuration }}'
+          description: 'backup.sh writes this textfile metric after a dump passes pg_restore --list. Check trendr-backup.timer, the age recipient and the S3 upload.'
       - alert: RateLimitDegraded
         expr: increase(trendr_rate_limit_degraded_total[15m]) > 0
         for: 5m

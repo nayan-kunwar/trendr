@@ -280,13 +280,23 @@ Production backups are logical `pg_dump -Fc` archives taken by
 `infra/scripts/backup.sh`. `trendr-backup.timer` runs the script daily at
 **02:30 UTC**; `Persistent=true` catches up after downtime.
 
-The script:
+The script (M-8):
 
 1. writes `trendr-<UTC timestamp>.dump` atomically under `BACKUP_DIR`;
-2. encrypts it with `age` when `BACKUP_AGE_RECIPIENT` is set, otherwise gzips it;
-3. uploads to `S3_URI` with `--sse AES256` when configured;
-4. deletes local archives older than `BACKUP_RETENTION_DAYS` (mirror that with
+2. **verifies** it with `pg_restore --list` before the last good copy is
+   replaced;
+3. encrypts it with `age` and uploads it to `S3_URI` with `--sse AES256`;
+   `REQUIRE_OFFSITE=1` (the default) makes both mandatory, so a host with a
+   local dump only fails loudly instead of pretending to be backed up.
+   `REQUIRE_OFFSITE=0` is for a local drill or a dev machine;
+4. writes `trendr_backup.prom` (`trendr_backup_last_success_timestamp_seconds`,
+   `trendr_backup_size_bytes`) into `BACKUP_METRIC_DIR` for the node_exporter
+   textfile collector; the `BackupStale` alert fires after 36 h;
+5. deletes local archives older than `BACKUP_RETENTION_DAYS` (mirror that with
    an object-storage lifecycle rule).
+
+Point `BACKUP_METRIC_DIR` at `/var/lib/node_exporter/textfile` (or scrape the
+file another way); without it the alert has no series and cannot fire.
 
 Configuration is read from `.env.production` by the systemd unit:
 
@@ -299,8 +309,16 @@ ls -lh /opt/trendr/backups
 
 ### Restore drill
 
-Never restore over the live database. Create a scratch database from the same
-Postgres container, restore into it, verify, then drop it:
+Use the script — it restores the newest archive into a scratch database,
+checks the schema/data counts and drops it (the live database is untouched):
+
+```bash
+sudo -u deploy /opt/trendr/infra/scripts/restore-drill.sh
+# age-encrypted archives: BACKUP_AGE_IDENTITY=/etc/trendr/age-key.txt
+```
+
+Run it after every schema-changing deploy and at least monthly, and record the
+date/result. The manual equivalent, if you need to inspect the scratch DB:
 
 ```bash
 cd /opt/trendr
