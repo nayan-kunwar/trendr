@@ -24,6 +24,9 @@ const baseEnvSchema = z.object({
   WEB_PUBLIC_URL: z.url(),
   CORS_ORIGINS: csv,
   TRUST_PROXY: bool.prefault('false'),
+  // M-12: only the VPS nginx overwrites CF-Connecting-IP. On Render,
+  // TRUST_PROXY is true for X-Forwarded-For but this header is caller data.
+  TRUST_CF_CONNECTING_IP: bool.prefault('false'),
   JWT_SECRET: z.string().min(32),
   // L-6: bounded lifetimes. The spec's 900 s / 30 d stay the defaults, but a
   // mistyped value can no longer issue a 5-year JWT or a 10-minute refresh.

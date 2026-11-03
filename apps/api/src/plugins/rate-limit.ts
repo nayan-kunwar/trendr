@@ -21,8 +21,10 @@ export interface RateLimitPluginOptions {
   /** Anonymous-tier budget (spec §10.5); authenticated keys use their own DB budget. */
   max?: number;
   timeWindowMs?: number;
-  /** Env TRUST_PROXY: only then is `CF-Connecting-IP` trusted (spec §10.5). */
+  /** Env TRUST_PROXY: trust the platform's `X-Forwarded-For` chain (spec §10.5). */
   trustProxy?: boolean;
+  /** Env TRUST_CF_CONNECTING_IP: only nginx overwrites this header (M-12). */
+  trustCfConnectingIp?: boolean;
 }
 
 /**
@@ -33,8 +35,14 @@ export interface RateLimitPluginOptions {
  * chain or `host:port`) falls back to `request.ip`, which keeps rate-limit
  * keys stable and prevents invalid `inet` writes.
  */
-export function clientIp(request: FastifyRequest, trustProxy: boolean): string {
-  if (trustProxy) {
+export function clientIp(
+  request: FastifyRequest,
+  trustProxy: boolean,
+  trustCfConnectingIp = false,
+): string {
+  // M-12: `CF-Connecting-IP` is only authentic when a trusted proxy overwrites
+  // it (the VPS nginx). On Render, TRUST_PROXY covers `X-Forwarded-For` only.
+  if (trustProxy && trustCfConnectingIp) {
     const cf = request.headers['cf-connecting-ip'];
     if (typeof cf === 'string' && isIP(cf) !== 0) {
       return cf;
@@ -47,14 +55,18 @@ export function clientIp(request: FastifyRequest, trustProxy: boolean): string {
  * Spec §10.5: key = API key id ‖ user id ‖ client IP (`apirl:{keyId|userId|ip}`).
  * Keyed, JWT and anonymous traffic therefore never share a counter.
  */
-export function rateLimitKey(request: FastifyRequest, trustProxy: boolean): string {
+export function rateLimitKey(
+  request: FastifyRequest,
+  trustProxy: boolean,
+  trustCfConnectingIp = false,
+): string {
   if (request.apiKey) {
     return `key:${request.apiKey.id}`;
   }
   if (request.authUser) {
     return `user:${request.authUser.id}`;
   }
-  return `ip:${clientIp(request, trustProxy)}`;
+  return `ip:${clientIp(request, trustProxy, trustCfConnectingIp)}`;
 }
 
 /** Spec §10.5: apiKey → its DB budget, admin → 600, user → 300, else anonymous. */
@@ -129,6 +141,7 @@ export async function registerRateLimit(
   options: RateLimitPluginOptions = {},
 ): Promise<void> {
   const trustProxy = options.trustProxy ?? false;
+  const trustCfConnectingIp = options.trustCfConnectingIp ?? false;
   const anonymousMax = options.max ?? ANONYMOUS_MAX;
   const redis =
     options.redis === undefined
@@ -143,7 +156,7 @@ export async function registerRateLimit(
     global: true,
     max: (request) => resolveRateLimitMax(request, anonymousMax),
     timeWindow: options.timeWindowMs ?? ANONYMOUS_WINDOW_MS,
-    keyGenerator: (request) => rateLimitKey(request, trustProxy),
+    keyGenerator: (request) => rateLimitKey(request, trustProxy, trustCfConnectingIp),
     enableDraftSpec: true,
     skipOnError: true,
     // Spec §9.1: `apirl:{keyId|ip}` is the inbound API rate-limit key space.

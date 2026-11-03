@@ -102,12 +102,14 @@ services:
     name: trendr-api
     runtime: image
     region: frankfurt
-    plan: 0.5c-512mb
+    # M-12: 512 MB left too little headroom for the API, its Postgres pool and
+    # the leaderboard/cache working set.
+    plan: 1c-2g
     image:
       url: ghcr.io/nayan-kunwar/trendr-api:latest
     healthCheckPath: /readyz
     preDeployCommand: node packages/db/dist/migrate.js
-    maxShutdownDelaySeconds: 30
+    maxShutdownDelaySeconds: 60
     envVars:
       - key: API_PORT
         value: '10000'
@@ -130,23 +132,23 @@ services:
         sync: false
       - fromGroup: trendr-shared
 
-  # Worker: no free tier exists, so this is the cheapest paid instance. It is
-  # capped at 512 MB; if scoring OOMs, move it to 1c-2g before raising NODE_OPTIONS.
+  # Worker: runs ingestion + scoring. M-12 moves it off 512 MB, which was not
+  # enough for the all-board rebuild and adapter buffers.
   - type: worker
     name: trendr-worker
     runtime: image
     region: frankfurt
-    plan: 0.5c-512mb
+    plan: 1c-2g
     image:
       url: ghcr.io/nayan-kunwar/trendr-worker:latest
-    maxShutdownDelaySeconds: 60
+    maxShutdownDelaySeconds: 120
     envVars:
       - key: WORKER_ROLES
         value: scheduler,ingest,scoring,notify
       - key: SCHEDULER_ENABLED
         value: 'true'
       - key: NODE_OPTIONS
-        value: --dns-result-order=ipv4first --no-network-family-autoselection --max-old-space-size=384
+        value: --dns-result-order=ipv4first --no-network-family-autoselection --max-old-space-size=1536
       - key: DATABASE_URL
         fromDatabase:
           name: trendr-db

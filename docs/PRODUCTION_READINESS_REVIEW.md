@@ -65,10 +65,10 @@ gates pass; live-deployment acceptance is tracked separately in
 | M-6  | No audit trail for admin mutations | `apps/api/src/services/admin.service.ts:475-495` | `admin_audit_log` written in the same transaction as each mutation | 6 | Verified |
 | M-7  | Config validation lets a non-functional or weak production configuration boot | `packages/config/src/env.ts:27-35,66-68,81-103` | Production-only guardrails plus bounded token lifetimes | 6 | Verified |
 | M-8  | Backup and disaster-recovery posture is weak for a single-VPS deployment | `infra/scripts/backup.sh:54-78` | Require offsite + encryption in production; verify the dump; add a restore drill and stale-backup alert | 7 | Verified |
-| M-9  | Release pipeline is not gated on CI and ships unpinned, unsigned images | `.github/workflows/publish.yml`; `docker-compose.prod.yml:84` (`:latest` fallback) | Reusable CI prerequisite, SHA-pinned actions, SBOM/Trivy/cosign, explicit `TRENDR_TAG` | 7 | Planned |
+| M-9  | Release pipeline is not gated on CI and ships unpinned, unsigned images | `.github/workflows/publish.yml`; `docker-compose.prod.yml:84` (`:latest` fallback) | Reusable CI prerequisite, SHA-pinned actions, SBOM/Trivy/cosign, explicit `TRENDR_TAG` | 7 | Verified |
 | M-10 | One chunk is one transaction with no in-chunk de-duplication or per-item isolation | `apps/worker/src/ingestion/upsert.ts:63-122` | Dedupe by natural key; per-item retry isolation on chunk failure | 3 | Verified |
 | M-11 | Partition maintenance only creates the current month plus three, risking a blocked create when data lands in the default partition | `apps/worker/src/processors/maintenance.processor.ts:119-130` | Create 12 months ahead; guard the default partition; alert on short lead time | 4 | Verified |
-| M-12 | Render blueprint: proxy trust unverified and memory headroom thin | `render.yaml:53-54` | Verify Render's edge behavior against its docs; keep `TRUST_PROXY` only if proxy-only; raise memory and shutdown settings | 7 | Planned |
+| M-12 | Render blueprint: proxy trust unverified and memory headroom thin | `render.yaml:53-54` | Verify Render's edge behavior against its docs; keep `TRUST_PROXY` only if proxy-only; raise memory and shutdown settings | 7 | Verified |
 
 ### Low
 
@@ -76,7 +76,7 @@ gates pass; live-deployment acceptance is tracked separately in
 | ---- | --- | --- | --- | --- | --- |
 | L-1  | Non-atomic `INCR` then `EXPIRE`, and unbounded in-memory fallback maps | `apps/api/src/routes/auth.ts:72-73,334-335,359-360` | Lua `INCR`+`EXPIRE`; cap and evict the fallback map | 2 | Verified |
 | L-2  | Wrong contact URL in the default User-Agent, and console output in the log email sender | `packages/config/src/env.ts:44` (`nayankunwar` vs `nayan-kunwar`); `packages/email/src/index.ts:86` | Correct the URL; inject the logger | 8 | Planned |
-| L-3  | Supply-chain and container-hardening gaps | `.github/workflows/ci.yml`; `infra/docker/node.Dockerfile` | Pin actions and base images by digest; non-root runtime; `no-new-privileges`, drop capabilities | 7 | Planned |
+| L-3  | Supply-chain and container-hardening gaps | `.github/workflows/ci.yml`; `infra/docker/node.Dockerfile` | Pin actions and base images by digest; non-root runtime; `no-new-privileges`, drop capabilities | 7 | Verified |
 | L-4  | API-key count cap is a check-then-insert race | `apps/api/src/services/api-key.service.ts:63-83` | Serialize per user with `pg_advisory_xact_lock`; parallel-create test | 7 | Verified |
 | L-5  | Error masking in run bookkeeping | `apps/worker/src/scoring/run-scoring.ts` catch path; `apps/worker/src/processors/ingest.processor.ts:118-124` | Never let bookkeeping replace the job error; log both; leave no `running` rows | 5 | Verified |
 | L-6  | No bounds on token lifetimes | `packages/config/src/env.ts:28-29` | Bound access-token seconds and refresh days | 6 | Verified |

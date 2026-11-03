@@ -1749,6 +1749,8 @@ Appendix B.
 | `BackupStale`                         | alert          | M-8     | No verified backup for 36 h                                                |
 | `infra/scripts/restore-drill.sh`      | script         | M-8     | Restores the newest archive into a scratch DB and checks counts            |
 | `REQUIRE_OFFSITE`, `BACKUP_METRIC_DIR` | env           | M-8     | Backup policy and textfile output directory                               |
+| `TRUST_CF_CONNECTING_IP`              | env            | M-12    | Trust the Cloudflare client header only behind the VPS nginx              |
+| `TRENDR_TAG`                          | env (required) | M-9     | Exact GHCR image tag for `docker-compose.prod.yml`; no implicit `latest`  |
 
 ## Environment quirks worth knowing
 

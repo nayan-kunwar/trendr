@@ -117,21 +117,21 @@ describe('rate-limit store observability (L-11)', () => {
 describe('clientIp (spec §10.5)', () => {
   it('prefers CF-Connecting-IP only behind a trusted proxy', () => {
     const request = fakeRequest({ 'cf-connecting-ip': '203.0.113.9' }, '10.0.0.1');
-    expect(clientIp(request, true)).toBe('203.0.113.9');
+    expect(clientIp(request, true, true)).toBe('203.0.113.9');
     expect(clientIp(request, false)).toBe('10.0.0.1');
   });
 
   it('falls back to the socket peer without the header', () => {
-    expect(clientIp(fakeRequest({}, '10.0.0.2'), true)).toBe('10.0.0.2');
+    expect(clientIp(fakeRequest({}, '10.0.0.2'), true, true)).toBe('10.0.0.2');
   });
 
   it('accepts IPv4 and IPv6 header values', () => {
-    expect(clientIp(fakeRequest({ 'cf-connecting-ip': '203.0.113.9' }, '10.0.0.1'), true)).toBe(
-      '203.0.113.9',
-    );
-    expect(clientIp(fakeRequest({ 'cf-connecting-ip': '2001:db8::1' }, '10.0.0.1'), true)).toBe(
-      '2001:db8::1',
-    );
+    expect(
+      clientIp(fakeRequest({ 'cf-connecting-ip': '203.0.113.9' }, '10.0.0.1'), true, true),
+    ).toBe('203.0.113.9');
+    expect(
+      clientIp(fakeRequest({ 'cf-connecting-ip': '2001:db8::1' }, '10.0.0.1'), true, true),
+    ).toBe('2001:db8::1');
   });
 
   it('ignores a header that is not a bare IP address', () => {
@@ -145,7 +145,7 @@ describe('clientIp (spec §10.5)', () => {
       '',
       ' ',
     ]) {
-      expect(clientIp(fakeRequest({ 'cf-connecting-ip': forged }, '10.0.0.1'), true)).toBe(
+      expect(clientIp(fakeRequest({ 'cf-connecting-ip': forged }, '10.0.0.1'), true, true)).toBe(
         '10.0.0.1',
       );
     }
@@ -163,9 +163,18 @@ describe('per-tier limits and keys (spec §10.5)', () => {
   it('keys authenticated requests by API key id, anonymous ones by IP', () => {
     expect(rateLimitKey(fakeRequest({}, '10.0.0.1', apiKey), false)).toBe(`key:${apiKey.id}`);
     expect(rateLimitKey(fakeRequest({}, '10.0.0.1'), false)).toBe('ip:10.0.0.1');
-    expect(rateLimitKey(fakeRequest({ 'cf-connecting-ip': '203.0.113.9' }, '10.0.0.1'), true)).toBe(
-      'ip:203.0.113.9',
-    );
+    expect(
+      rateLimitKey(fakeRequest({ 'cf-connecting-ip': '203.0.113.9' }, '10.0.0.1'), true, true),
+    ).toBe('ip:203.0.113.9');
+  });
+
+  it('ignores CF-Connecting-IP without an explicit trust flag (M-12)', () => {
+    const request = fakeRequest({ 'cf-connecting-ip': '203.0.113.9' }, '10.0.0.1');
+    // On Render, TRUST_PROXY covers X-Forwarded-For only; the CF header is
+    // caller data unless nginx overwrites it.
+    expect(clientIp(request, true, false)).toBe('10.0.0.1');
+    expect(rateLimitKey(request, true, false)).toBe('ip:10.0.0.1');
+    expect(rateLimitKey(request, true, true)).toBe('ip:203.0.113.9');
   });
 
   it('uses the per-key budget for authenticated requests only', () => {
@@ -212,7 +221,12 @@ describe('rate limit plugin (spec §10.5)', () => {
 
   it('keys trusted CF-Connecting-IP clients separately', async () => {
     await withApp(
-      { ...DEPS, trustProxy: true, rateLimit: { max: 1, timeWindowMs: 60_000 } },
+      {
+        ...DEPS,
+        trustProxy: true,
+        trustCfConnectingIp: true,
+        rateLimit: { max: 1, timeWindowMs: 60_000 },
+      },
       async (app) => {
         const clientA = { 'cf-connecting-ip': '203.0.113.1' };
         const clientB = { 'cf-connecting-ip': '203.0.113.2' };

@@ -82,6 +82,8 @@ function cardDelta(payload: string | null): number {
 export interface StreamRouteOptions {
   /** Env TRUST_PROXY: identity for the `sse` counter is key id ‖ user id ‖ IP (§10.5). */
   trustProxy?: boolean;
+  /** Env TRUST_CF_CONNECTING_IP: only a trusted proxy writes that header (M-12). */
+  trustCfConnectingIp?: boolean;
 }
 
 /**
@@ -95,6 +97,7 @@ export interface StreamRouteOptions {
 export function registerStreamRoutes(app: FastifyInstance, options: StreamRouteOptions = {}): void {
   const server = app.withTypeProvider<ZodTypeProvider>();
   const trustProxy = options.trustProxy ?? false;
+  const trustCfConnectingIp = options.trustCfConnectingIp ?? false;
   const hasRedis = app.hasDecorator('redis');
   const broadcaster = app.hasDecorator('redisSub')
     ? new LeaderboardBroadcaster({
@@ -126,7 +129,9 @@ export function registerStreamRoutes(app: FastifyInstance, options: StreamRouteO
       const { scope, window } = request.query;
 
       // Spec §10.5 — `apirl:sse:{keyId|ip}` INCR/DECR; 6th concurrent stream is 429.
-      const counterKey = redisKeys.sseConnections(rateLimitKey(request, trustProxy));
+      const counterKey = redisKeys.sseConnections(
+        rateLimitKey(request, trustProxy, trustCfConnectingIp),
+      );
       let counted = false;
       try {
         const count = await app.redis.incr(counterKey);

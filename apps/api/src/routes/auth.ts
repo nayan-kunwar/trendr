@@ -108,6 +108,8 @@ export interface AuthRoutesOptions {
   refreshIpRateLimitMax?: number;
   /** Env TRUST_PROXY: use the same trusted-client-IP derivation as the global limiter. */
   trustProxy?: boolean;
+  /** Env TRUST_CF_CONNECTING_IP: only a trusted proxy writes that header (M-12). */
+  trustCfConnectingIp?: boolean;
   /** Injectable clock (tests). */
   now?: () => Date;
 }
@@ -115,6 +117,7 @@ export interface AuthRoutesOptions {
 export function registerAuthRoutes(app: FastifyInstance, options: AuthRoutesOptions = {}): void {
   const server = app.withTypeProvider<ZodTypeProvider>();
   const trustProxy = options.trustProxy ?? false;
+  const trustCfConnectingIp = options.trustCfConnectingIp ?? false;
   const cookieSecure = options.cookieSecure ?? false;
   const cookieSameSite = options.cookieSameSite ?? 'lax';
 
@@ -174,7 +177,7 @@ export function registerAuthRoutes(app: FastifyInstance, options: AuthRoutesOpti
   };
 
   const strictAuthGuard = async (request: FastifyRequest): Promise<void> => {
-    const ip = clientIp(request, trustProxy);
+    const ip = clientIp(request, trustProxy, trustCfConnectingIp);
     if (
       !(await allowCounter(
         app,
@@ -197,7 +200,7 @@ export function registerAuthRoutes(app: FastifyInstance, options: AuthRoutesOpti
     const raw = getRefreshCookie(request);
     if (raw === undefined) return;
 
-    const ip = clientIp(request, trustProxy);
+    const ip = clientIp(request, trustProxy, trustCfConnectingIp);
     const ipAllowed = await allowCounter(
       app,
       redisKeys.authRefreshIpBucket(ip),
@@ -245,7 +248,7 @@ export function registerAuthRoutes(app: FastifyInstance, options: AuthRoutesOpti
       try {
         await issueMagicLink(serviceOptions(), {
           email,
-          ip: clientIp(request, trustProxy),
+          ip: clientIp(request, trustProxy, trustCfConnectingIp),
           userAgent: request.headers['user-agent'] ?? null,
         });
       } catch (error) {

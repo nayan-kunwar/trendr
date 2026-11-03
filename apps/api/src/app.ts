@@ -39,6 +39,8 @@ export interface BuildAppDeps {
   /** Pre-built pino logger from main.ts; tests omit it for a silent app. */
   loggerInstance?: FastifyBaseLogger;
   trustProxy?: boolean;
+  /** M-12: trust `CF-Connecting-IP` only when a proxy overwrites it (VPS nginx). */
+  trustCfConnectingIp?: boolean;
   /** CORS allowlist (env: CORS_ORIGINS). */
   corsOrigins?: string[];
   /** Bearer token guarding /metrics (env: METRICS_TOKEN). */
@@ -138,6 +140,7 @@ export async function buildApp(deps: BuildAppDeps = {}): Promise<FastifyInstance
   if (deps.rateLimit !== false) {
     await registerRateLimit(app, {
       trustProxy: deps.trustProxy ?? false,
+      trustCfConnectingIp: deps.trustCfConnectingIp ?? false,
       ...deps.rateLimit,
       ...(deps.redis ? { redis: deps.redis } : {}),
     });
@@ -155,9 +158,16 @@ export async function buildApp(deps: BuildAppDeps = {}): Promise<FastifyInstance
   registerTopicRoutes(app);
   registerCompareRoutes(app);
   registerStatsRoutes(app);
-  registerStreamRoutes(app, { trustProxy: deps.trustProxy ?? false });
+  registerStreamRoutes(app, {
+    trustProxy: deps.trustProxy ?? false,
+    trustCfConnectingIp: deps.trustCfConnectingIp ?? false,
+  });
   registerAdminRoutes(app, queues === undefined ? {} : { queues });
-  registerAuthRoutes(app, { ...(deps.auth ?? {}), trustProxy: deps.trustProxy ?? false });
+  registerAuthRoutes(app, {
+    ...(deps.auth ?? {}),
+    trustProxy: deps.trustProxy ?? false,
+    trustCfConnectingIp: deps.trustCfConnectingIp ?? false,
+  });
   registerWatchlistRoutes(app, queues === undefined ? {} : { queues });
   registerAlertRoutes(app);
   registerDigestRoutes(app);
