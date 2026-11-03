@@ -4,12 +4,35 @@ updates:
     directory: '/'
     schedule:
       interval: weekly
+    # Majors get their own PR so a TypeScript/ESLint/Next jump can be reviewed
+    # and tested on its own (they have repeatedly broken the toolchain when
+    # bundled with fifteen unrelated updates).
+    open-pull-requests-limit: 10
     groups:
-      production:
+      production-minor:
         dependency-type: production
-      development:
+        update-types: [minor, patch]
+      production-major:
+        dependency-type: production
+        update-types: [major]
+      development-minor:
         dependency-type: development
+        update-types: [minor, patch]
+      development-major:
+        dependency-type: development
+        update-types: [major]
+    ignore:
+      # The runtime is Node 22; @types/node majors track newer Node lines and
+      # would let the code compile against APIs the runtime does not have.
+      - dependency-name: '@types/node'
+        update-types: ['version-update:semver-major']
   - package-ecosystem: github-actions
     directory: '/'
     schedule:
       interval: weekly
+    # Minor/patch action bumps arrive together; a major (v4 → v7) arrives alone
+    # because it can change inputs, the Node runtime or credential handling.
+    groups:
+      actions-minor:
+        patterns: ['*']
+        update-types: [minor, patch]
