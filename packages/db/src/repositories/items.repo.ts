@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+
 import { and, asc, eq, inArray, sql, type SQL } from 'drizzle-orm';
 
 import type { ItemFlag, ItemKind, Metric, Source, Tier, Window } from '@trendr/core';
@@ -224,6 +226,26 @@ export interface ItemRenameInput {
 
 export type ItemRenameOutcome = 'renamed' | 'target-exists' | 'item-missing';
 
+interface RenameRow {
+  id: bigint;
+  externalId: string;
+  flags: string[];
+  kind: ItemKind;
+  primaryMetric: Metric;
+  description: string | null;
+  url: string;
+  homepage: string | null;
+  language: string | null;
+  license: string | null;
+  owner: string | null;
+}
+
+interface RenameCandidate {
+  index: number;
+  input: ItemRenameInput;
+  row: RenameRow;
+}
+
 /**
  * Spec §5.4 — an upstream rename: move `items.external_id` to the new slug and
  * keep the old name resolvable. The old name gets a `tier='cold'`,
@@ -231,16 +253,57 @@ export type ItemRenameOutcome = 'renamed' | 'target-exists' | 'item-missing';
  * exposes it) plus an `item_aliases` row (`same_project`, confidence 1) from
  * the renamed item to the stub. The stub keeps the previous metadata and URL
  * but no `upstream_id` — that stays unique to the live row.
+ *
+ * H-4: several renames from one chunk are applied as one batch. Every moving
+ * row is staged through a temporary `external_id` first, so swaps and chains
+ * can resolve targets that are themselves moving. When the target name is a
+ * cold rename stub, the stub is merged into the live row instead of being
+ * treated as a conflict; the live row id — and with it snapshots, scores and
+ * watchlists — survives the round trip.
  */
+export async function applyItemRenames(
+  db: DbExecutor,
+  inputs: readonly ItemRenameInput[],
+): Promise<ItemRenameOutcome[]> {
+  const outcomes: ItemRenameOutcome[] = inputs.map(() => 'item-missing');
+  const groups = new Map<Source, { index: number; input: ItemRenameInput }[]>();
+  inputs.forEach((input, index) => {
+    if (input.fromExternalId === input.toExternalId) {
+      outcomes[index] = 'renamed';
+      return;
+    }
+    const group = groups.get(input.source) ?? [];
+    group.push({ index, input });
+    groups.set(input.source, group);
+  });
+
+  for (const [source, entries] of groups) {
+    await applySourceRenameBatch(db, source, entries, outcomes);
+  }
+  return outcomes;
+}
+
+/** One rename; kept for callers that do not have a chunk to batch. */
 export async function applyItemRename(
   db: DbExecutor,
   input: ItemRenameInput,
 ): Promise<ItemRenameOutcome> {
-  if (input.fromExternalId === input.toExternalId) return 'renamed';
+  const [outcome] = await applyItemRenames(db, [input]);
+  return outcome ?? 'item-missing';
+}
 
-  const [current] = await db
+async function applySourceRenameBatch(
+  db: DbExecutor,
+  source: Source,
+  entries: readonly { index: number; input: ItemRenameInput }[],
+  outcomes: ItemRenameOutcome[],
+): Promise<void> {
+  const itemIds = [...new Set(entries.map((entry) => entry.input.itemId))];
+  const rows = await db
     .select({
       id: items.id,
+      externalId: items.externalId,
+      flags: items.flags,
       kind: items.kind,
       primaryMetric: items.primaryMetric,
       description: items.description,
@@ -251,67 +314,229 @@ export async function applyItemRename(
       owner: items.owner,
     })
     .from(items)
-    .where(and(eq(items.source, input.source), eq(items.externalId, input.fromExternalId)));
-  if (current?.id !== input.itemId) return 'item-missing';
+    .where(and(eq(items.source, source), inArray(items.id, itemIds)))
+    .orderBy(asc(items.id))
+    .for('update');
+  const rowById = new Map(rows.map((row) => [row.id, row]));
 
-  const [target] = await db
-    .select({ id: items.id })
-    .from(items)
-    .where(and(eq(items.source, input.source), eq(items.externalId, input.toExternalId)));
-  if (target !== undefined && target.id !== input.itemId) return 'target-exists';
-
-  await db
-    .update(items)
-    .set({ externalId: input.toExternalId, updatedAt: sql`now()` })
-    .where(eq(items.id, input.itemId));
-
-  const inserted = await db
-    .insert(items)
-    .values({
-      source: input.source,
-      kind: current.kind,
-      externalId: input.fromExternalId,
-      upstreamId: null,
-      name: input.fromExternalId.split('/').pop() ?? input.fromExternalId,
-      displayName: input.fromExternalId,
-      description: current.description,
-      url: current.url,
-      homepage: current.homepage,
-      language: current.language,
-      license: current.license,
-      owner: current.owner,
-      primaryMetric: current.primaryMetric,
-      tier: 'cold',
-      flags: ['stub'],
-    })
-    .onConflictDoNothing({ target: [items.source, items.externalId] })
-    .returning({ id: items.id });
-
-  let stubId = inserted[0]?.id;
-  if (stubId === undefined) {
-    // The old name is already tracked (e.g. rename back and forth): reuse it.
-    const [existing] = await db
-      .select({ id: items.id })
-      .from(items)
-      .where(and(eq(items.source, input.source), eq(items.externalId, input.fromExternalId)));
-    if (existing === undefined) {
-      throw new Error(`rename stub for "${input.fromExternalId}" vanished mid-transaction`);
+  const seen = new Set<bigint>();
+  let active: RenameCandidate[] = [];
+  for (const entry of entries) {
+    const row = rowById.get(entry.input.itemId);
+    if (row === undefined) {
+      outcomes[entry.index] = 'item-missing';
+      continue;
     }
-    stubId = existing.id;
+    if (row.externalId !== entry.input.fromExternalId || seen.has(row.id)) {
+      outcomes[entry.index] = 'item-missing';
+      continue;
+    }
+    seen.add(row.id);
+    active.push({ index: entry.index, input: entry.input, row });
+  }
+  if (active.length === 0) return;
+
+  const targets = await db
+    .select({ id: items.id, externalId: items.externalId, flags: items.flags })
+    .from(items)
+    .where(
+      and(
+        eq(items.source, source),
+        inArray(items.externalId, [
+          ...new Set(active.map((candidate) => candidate.input.toExternalId)),
+        ]),
+      ),
+    )
+    .orderBy(asc(items.id))
+    .for('update');
+  const targetByName = new Map(targets.map((target) => [target.externalId, target]));
+
+  // A target held by a live row that is not moving cannot be taken. Removing a
+  // blocked move can block a later one, so settle the staging set first.
+  for (;;) {
+    const movingIds = new Set(active.map((candidate) => candidate.row.id));
+    const claimed = new Set<string>();
+    const kept: RenameCandidate[] = [];
+    let dropped = false;
+    for (const candidate of active) {
+      const targetName = candidate.input.toExternalId;
+      const target = targetByName.get(targetName);
+      const blockedByLiveRow =
+        target !== undefined &&
+        target.id !== candidate.row.id &&
+        !target.flags.includes('stub') &&
+        !movingIds.has(target.id);
+      if (blockedByLiveRow || claimed.has(targetName)) {
+        outcomes[candidate.index] = 'target-exists';
+        dropped = true;
+        continue;
+      }
+      claimed.add(targetName);
+      kept.push(candidate);
+    }
+    active = kept;
+    if (!dropped) break;
+    if (active.length === 0) return;
   }
 
-  await db
-    .insert(itemAliases)
-    .values({
-      itemId: input.itemId,
-      aliasItemId: stubId,
-      relation: 'same_project',
-      confidence: 1,
-      evidence: input.evidence,
-    })
-    .onConflictDoNothing();
+  // Free every moving name before writing a target: this is what makes swaps
+  // (A→B, B→A) and chains (A→B, B→C) resolvable.
+  for (const candidate of active) {
+    await db
+      .update(items)
+      .set({ externalId: `__trendr_rename_${randomUUID()}`, updatedAt: sql`now()` })
+      .where(eq(items.id, candidate.row.id));
+  }
 
-  return 'renamed';
+  // Rename-back: the target is the stub created by the previous move. Merge
+  // its engagement and derived rows into the live item, then delete it.
+  const merged = new Set<bigint>();
+  for (const candidate of active) {
+    const target = targetByName.get(candidate.input.toExternalId);
+    if (
+      target === undefined ||
+      target.id === candidate.row.id ||
+      !target.flags.includes('stub') ||
+      merged.has(target.id)
+    ) {
+      continue;
+    }
+    await mergeItemStub(db, target.id, candidate.row.id);
+    merged.add(target.id);
+  }
+
+  for (const candidate of active) {
+    await db
+      .update(items)
+      .set({ externalId: candidate.input.toExternalId, updatedAt: sql`now()` })
+      .where(eq(items.id, candidate.row.id));
+  }
+
+  const finalNames = new Set(active.map((candidate) => candidate.input.toExternalId));
+  for (const candidate of active) {
+    outcomes[candidate.index] = 'renamed';
+    const from = candidate.input.fromExternalId;
+    // The vacated name stays live when another row in this batch is moving
+    // into it; only a genuinely free name gets a stub.
+    if (finalNames.has(from)) continue;
+
+    const inserted = await db
+      .insert(items)
+      .values({
+        source,
+        kind: candidate.row.kind,
+        externalId: from,
+        upstreamId: null,
+        name: from.split('/').pop() ?? from,
+        displayName: from,
+        description: candidate.row.description,
+        url: candidate.row.url,
+        homepage: candidate.row.homepage,
+        language: candidate.row.language,
+        license: candidate.row.license,
+        owner: candidate.row.owner,
+        primaryMetric: candidate.row.primaryMetric,
+        tier: 'cold',
+        flags: ['stub'],
+      })
+      .onConflictDoNothing({ target: [items.source, items.externalId] })
+      .returning({ id: items.id });
+
+    let stubId = inserted[0]?.id;
+    if (stubId === undefined) {
+      const [existing] = await db
+        .select({ id: items.id })
+        .from(items)
+        .where(and(eq(items.source, source), eq(items.externalId, from)));
+      if (existing === undefined) {
+        throw new Error(`rename stub for "${from}" vanished mid-transaction`);
+      }
+      stubId = existing.id;
+    }
+    if (stubId === candidate.row.id) continue;
+
+    await db
+      .insert(itemAliases)
+      .values({
+        itemId: candidate.row.id,
+        aliasItemId: stubId,
+        relation: 'same_project',
+        confidence: 1,
+        evidence: candidate.input.evidence,
+      })
+      .onConflictDoNothing();
+  }
+}
+
+/**
+ * H-4: fold a cold rename stub into the live row before the stub is deleted.
+ * Everything user-visible follows the live id; duplicate watchlist rows and
+ * alias pairs are dropped so the move cannot violate a primary key.
+ */
+async function mergeItemStub(db: DbExecutor, stubId: bigint, liveId: bigint): Promise<void> {
+  if (stubId === liveId) return;
+
+  await db.execute(sql`
+    DELETE FROM watchlist_items AS stub
+    USING watchlist_items AS live
+    WHERE stub.item_id = ${stubId}
+      AND live.item_id = ${liveId}
+      AND live.watchlist_id = stub.watchlist_id`);
+  await db.execute(sql`
+    UPDATE watchlist_items SET item_id = ${liveId} WHERE item_id = ${stubId}`);
+
+  const stubTopics = await db
+    .select({ topicId: itemTopics.topicId })
+    .from(itemTopics)
+    .where(eq(itemTopics.itemId, stubId));
+  await db.execute(sql`
+    INSERT INTO item_topics (item_id, topic_id)
+    SELECT ${liveId}, topic_id FROM item_topics WHERE item_id = ${stubId}
+    ON CONFLICT DO NOTHING`);
+  await db.delete(itemTopics).where(eq(itemTopics.itemId, stubId));
+  if (stubTopics.length > 0) {
+    const topicIds = [...new Set(stubTopics.map((row) => row.topicId))].sort((a, b) => a - b);
+    await db.execute(sql`
+      UPDATE topics t
+      SET item_count = (
+        SELECT count(*)::int FROM item_topics it WHERE it.topic_id = t.id
+      )
+      WHERE t.id IN (${sql.join(
+        topicIds.map((id) => sql`${id}`),
+        sql`, `,
+      )})`);
+  }
+
+  await db.execute(sql`UPDATE alerts SET item_id = ${liveId} WHERE item_id = ${stubId}`);
+  await db.execute(sql`
+    UPDATE alert_events SET item_id = ${liveId} WHERE item_id = ${stubId}`);
+
+  await db.execute(sql`
+    WITH moved AS (
+      SELECT
+        CASE WHEN a.item_id = ${stubId} THEN ${liveId} ELSE a.item_id END AS item_id,
+        CASE WHEN a.alias_item_id = ${stubId} THEN ${liveId} ELSE a.alias_item_id END AS alias_item_id,
+        a.relation,
+        a.confidence,
+        a.evidence
+      FROM item_aliases a
+      WHERE a.item_id = ${stubId} OR a.alias_item_id = ${stubId}
+    )
+    INSERT INTO item_aliases (item_id, alias_item_id, relation, confidence, evidence)
+    SELECT item_id, alias_item_id, relation, confidence, evidence
+    FROM moved
+    WHERE item_id <> alias_item_id
+    ON CONFLICT (item_id, alias_item_id, relation) DO NOTHING`);
+  await db.execute(sql`
+    DELETE FROM item_aliases WHERE item_id = ${stubId} OR alias_item_id = ${stubId}`);
+
+  const deleted = await db
+    .delete(items)
+    .where(and(eq(items.id, stubId), sql`'stub' = ANY(${items.flags})`))
+    .returning({ id: items.id });
+  if (deleted.length === 0) {
+    throw new Error(`rename stub ${stubId.toString()} disappeared during merge`);
+  }
 }
 
 /** The minimum an adapter needs to fetch one tracked item (§7.1 step 4). */

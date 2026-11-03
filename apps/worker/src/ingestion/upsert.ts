@@ -2,7 +2,7 @@ import { and, eq, inArray, sql } from 'drizzle-orm';
 
 import { normalizeTopicSlugs, type Metric, type Source, type Tier } from '@trendr/core';
 import {
-  applyItemRename,
+  applyItemRenames,
   itemAliases,
   itemTopics,
   items,
@@ -14,6 +14,7 @@ import {
   type DailyMetricUpsert,
   type Db,
   type DbExecutor,
+  type ItemRenameInput,
   type ItemUpsert,
   type SnapshotUpsert,
 } from '@trendr/db';
@@ -138,8 +139,9 @@ export async function persistDailySeries(
 /**
  * Spec §5.4 — detect upstream renames inside one chunk: group the payloads by
  * `(source, upstream_id)`, load the tracked rows for those node ids and let
- * `applyItemRename` move any row whose `external_id` changed. Identification
- * is by node id, never by name.
+ * `applyItemRenames` move any row whose `external_id` changed. Identification
+ * is by node id, never by name. The whole source group is one batch so swaps
+ * and chains inside a page resolve together (H-4).
  */
 async function applySourceRenames(
   db: DbExecutor,
@@ -156,28 +158,40 @@ async function applySourceRenames(
 
   for (const [source, externalIdByUpstreamId] of bySource) {
     const existing = await loadItemsByUpstreamIds(db, source, [...externalIdByUpstreamId.keys()]);
+    const renames: { input: ItemRenameInput; from: string; to: string }[] = [];
     for (const [upstreamId, externalId] of externalIdByUpstreamId) {
       const row = existing.get(upstreamId);
       if (row === undefined || row.externalId === externalId) continue;
-      const outcome = await applyItemRename(db, {
-        source,
-        itemId: row.id,
-        fromExternalId: row.externalId,
-        toExternalId: externalId,
-        evidence: `${source}_rename`, // §5.4 e.g. `github_rename`
+      renames.push({
+        from: row.externalId,
+        to: externalId,
+        input: {
+          source,
+          itemId: row.id,
+          fromExternalId: row.externalId,
+          toExternalId: externalId,
+          evidence: `${source}_rename`, // §5.4 e.g. `github_rename`
+        },
       });
+    }
+    if (renames.length === 0) continue;
+
+    const outcomes = await applyItemRenames(
+      db,
+      renames.map((rename) => rename.input),
+    );
+    outcomes.forEach((outcome, index) => {
+      const rename = renames[index];
+      if (rename === undefined) return;
       if (outcome === 'renamed') {
-        logger?.info(
-          { source, from: row.externalId, to: externalId },
-          'tracked item renamed upstream',
-        );
+        logger?.info({ source, from: rename.from, to: rename.to }, 'tracked item renamed upstream');
       } else if (outcome === 'target-exists') {
         logger?.warn(
-          { source, from: row.externalId, to: externalId },
+          { source, from: rename.from, to: rename.to },
           'rename target already tracked; keeping both rows',
         );
       }
-    }
+    });
   }
 }
 

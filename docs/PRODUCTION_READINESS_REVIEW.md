@@ -51,7 +51,7 @@ gates pass; live-deployment acceptance is tracked separately in
 | H-1 | Per-IP controls trust a client-supplied `CF-Connecting-IP`; the origin is reachable directly | `apps/api/src/plugins/rate-limit.ts:28-35`; `infra/nginx/trendr.conf:68-116`; `infra/scripts/bootstrap-vps.sh:99-105` | nginx overwrites the header after `real_ip`; API accepts only a parseable IP and falls back to `request.ip`; UFW allows 80/443 only from Cloudflare ranges | 1 | Verified |
 | H-2 | Refresh reuse detection has no grace window, so concurrent refreshes revoke the whole family | `apps/api/src/services/auth.service.ts:116-148`; `apps/web/src/lib/auth.ts:33-39`; `apps/web/src/components/auth-provider.tsx:30-40` | 15 s grace returns a typed 401 without revoking or clearing; Web Locks single-flight across tabs; typed one-shot client retry; parallel-refresh test | 2 | Verified |
 | H-3 | One 5/min-per-IP auth bucket is shared with the refresh call that runs on every page load | `apps/api/src/routes/auth.ts:162-167,352-374` | Keep 5/min on magic-link, verify and logout; refresh gets 60/min per presented-cookie hash plus a 120/min per-IP guard; anonymous refresh skips it; the web client uses a non-sensitive hint and treats 429/5xx as transient | 2 | Verified |
-| H-4 | Rename-back (A→B, then B→A) breaks the ingestion chunk with a unique violation on every retry | `packages/db/src/repositories/items.repo.ts:235-315,128-131`; `packages/db/migrations/0000_init.sql:282`; `apps/worker/src/ingestion/upsert.ts:63-182` | Stub-aware merge on rename-back; in-chunk dedupe; per-item failure isolation | 3 | Planned |
+| H-4 | Rename-back (A→B, then B→A) breaks the ingestion chunk with a unique violation on every retry | `packages/db/src/repositories/items.repo.ts:235-315,128-131`; `packages/db/migrations/0000_init.sql:282`; `apps/worker/src/ingestion/upsert.ts:63-182` | Stub-aware merge on rename-back; in-chunk dedupe; per-item failure isolation | 3 | Verified |
 
 ### Medium
 
@@ -335,8 +335,9 @@ stale-backup alert; reusable CI prerequisite; SHA-pinned actions; SBOM/Trivy/cos
 
 ## Execution rules
 
-- H-2 was reproduced locally with a parallel-refresh integration test before the fix; H-4 is still
-  pending reproduction in Phase 3.
+- H-2 was reproduced locally with a parallel-refresh integration test before the fix; H-4 was
+  reproduced with a rename-back integration test that raised `23505` on
+  `items_source_upstream_uq`.
 - Author each regression test first, confirm it fails for the documented reason, then implement.
   Tests land with their fix so every commit stays green.
 - One concern per commit. If a finding needs a migration and a code change, they land together.
