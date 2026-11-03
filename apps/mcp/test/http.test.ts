@@ -30,7 +30,7 @@ describe('Streamable HTTP transport', () => {
       const transport = new StreamableHTTPClientTransport(new URL(url), {
         requestInit: { headers: { authorization: 'Bearer test-token' } },
       });
-      await client.connect(transport as unknown as Parameters<Client['connect']>[0]);
+      await client.connect(transport);
       const { tools } = await client.listTools();
       expect(tools).toHaveLength(5);
 

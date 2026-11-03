@@ -128,10 +128,7 @@ export function createMcpHttpServer(
       void server.close().catch(() => undefined);
     });
 
-    // The SDK's Transport interface marks onclose as required while its
-    // implementation exposes it as optional; the cast bridges that upstream
-    // mismatch under exactOptionalPropertyTypes.
-    await server.connect(transport as unknown as Parameters<McpServer['connect']>[0]);
+    await server.connect(transport);
     await transport.handleRequest(request, response);
   }
 
