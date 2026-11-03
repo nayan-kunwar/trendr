@@ -20,6 +20,18 @@ const MINIMAL_VALID = {
 
 const REQUIRED_KEYS: readonly string[] = Object.keys(MINIMAL_VALID);
 
+/** M-7: the smallest environment that satisfies every production guardrail. */
+const PRODUCTION_VALID = {
+  ...MINIMAL_VALID,
+  NODE_ENV: 'production',
+  API_PUBLIC_URL: 'https://trendr.example.com',
+  WEB_PUBLIC_URL: 'https://trendr.example.com',
+  CORS_ORIGINS: 'https://trendr.example.com',
+  GITHUB_TOKENS: 'ghp_real_token_value',
+  EMAIL_PROVIDER: 'resend',
+  RESEND_API_KEY: 're_real_key',
+} as const;
+
 /**
  * Boots `env.ts` in a fresh Node process (type stripping) with the given
  * environment, so `loadEnv`'s process-exit behaviour is exercised for real.
@@ -82,10 +94,8 @@ describe('@trendr/config env schema', () => {
 
   it('allows SameSite=None only where cookies are Secure', () => {
     const production = readEnv({
-      ...MINIMAL_VALID,
-      NODE_ENV: 'production',
+      ...PRODUCTION_VALID,
       COOKIE_SAME_SITE: 'none',
-      GITHUB_TOKENS: 'ghp_test',
     });
     expect(production.ok).toBe(true);
     if (production.ok) {
@@ -101,6 +111,73 @@ describe('@trendr/config env schema', () => {
 
     const strict = readEnv({ ...MINIMAL_VALID, COOKIE_SAME_SITE: 'strict' });
     expect(strict.ok).toBe(true);
+  });
+
+  it('rejects placeholder secrets and non-https origins in production (M-7)', () => {
+    const placeholder = readEnv({
+      ...PRODUCTION_VALID,
+      JWT_SECRET: 'change-me-change-me-change-me-change',
+    });
+    expect(placeholder.ok).toBe(false);
+    if (!placeholder.ok) {
+      expect(placeholder.message).toContain('JWT_SECRET');
+      expect(placeholder.message).toContain('placeholder');
+    }
+
+    const httpPublic = readEnv({
+      ...PRODUCTION_VALID,
+      API_PUBLIC_URL: 'http://trendr.example.com',
+    });
+    expect(httpPublic.ok).toBe(false);
+    if (!httpPublic.ok) {
+      expect(httpPublic.message).toContain('API_PUBLIC_URL');
+      expect(httpPublic.message).toContain('https');
+    }
+
+    const httpOrigin = readEnv({
+      ...PRODUCTION_VALID,
+      CORS_ORIGINS: 'https://trendr.example.com,http://localhost:3000',
+    });
+    expect(httpOrigin.ok).toBe(false);
+    if (!httpOrigin.ok) {
+      expect(httpOrigin.message).toContain('CORS_ORIGINS');
+    }
+  });
+
+  it('rejects development email delivery in production (M-7)', () => {
+    const logProvider = readEnv({ ...PRODUCTION_VALID, EMAIL_PROVIDER: 'log' });
+    expect(logProvider.ok).toBe(false);
+    if (!logProvider.ok) {
+      expect(logProvider.message).toContain('EMAIL_PROVIDER');
+    }
+
+    const mailpit = readEnv({
+      ...PRODUCTION_VALID,
+      EMAIL_PROVIDER: 'smtp',
+      SMTP_URL: 'smtp://mailpit:1025',
+    });
+    expect(mailpit.ok).toBe(false);
+    if (!mailpit.ok) {
+      expect(mailpit.message).toContain('SMTP_URL');
+    }
+  });
+
+  it('bounds token lifetimes (L-6)', () => {
+    expect(readEnv({ ...MINIMAL_VALID, JWT_ACCESS_TTL_SEC: '10' }).ok).toBe(false);
+    expect(readEnv({ ...MINIMAL_VALID, JWT_ACCESS_TTL_SEC: '86400' }).ok).toBe(false);
+    expect(readEnv({ ...MINIMAL_VALID, REFRESH_TTL_DAYS: '0' }).ok).toBe(false);
+    expect(readEnv({ ...MINIMAL_VALID, REFRESH_TTL_DAYS: '365' }).ok).toBe(false);
+
+    const bounded = readEnv({
+      ...MINIMAL_VALID,
+      JWT_ACCESS_TTL_SEC: '300',
+      REFRESH_TTL_DAYS: '14',
+    });
+    expect(bounded.ok).toBe(true);
+    if (bounded.ok) {
+      expect(bounded.env.JWT_ACCESS_TTL_SEC).toBe(300);
+      expect(bounded.env.REFRESH_TTL_DAYS).toBe(14);
+    }
   });
 
   it('exits with a readable message when required vars are missing', () => {

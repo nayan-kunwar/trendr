@@ -25,8 +25,10 @@ const baseEnvSchema = z.object({
   CORS_ORIGINS: csv,
   TRUST_PROXY: bool.prefault('false'),
   JWT_SECRET: z.string().min(32),
-  JWT_ACCESS_TTL_SEC: z.coerce.number().int().default(900),
-  REFRESH_TTL_DAYS: z.coerce.number().int().default(30),
+  // L-6: bounded lifetimes. The spec's 900 s / 30 d stay the defaults, but a
+  // mistyped value can no longer issue a 5-year JWT or a 10-minute refresh.
+  JWT_ACCESS_TTL_SEC: z.coerce.number().int().min(60).max(3600).default(900),
+  REFRESH_TTL_DAYS: z.coerce.number().int().min(1).max(90).default(30),
   // `none` is only valid with Secure cookies, which the API sets in production.
   // Default `lax` covers the single-origin VPS topology and same-site custom
   // subdomains; split-origin deployments on unrelated sites need `none`.
@@ -78,6 +80,10 @@ const baseEnvSchema = z.object({
   CLOUDFLARE_API_TOKEN: z.string().optional(),
 });
 
+/** M-7: values that are obviously development defaults, not real secrets. */
+const PLACEHOLDER_SECRET =
+  /(change[-_ ]?me|replace[-_ ]?me|placeholder|example|your[-_ ]|^test$|^dev$|^secret$|^password$)/i;
+
 export const EnvSchema = baseEnvSchema.superRefine((e, ctx) => {
   if (e.COOKIE_SAME_SITE === 'none' && e.NODE_ENV !== 'production') {
     ctx.addIssue({
@@ -99,6 +105,63 @@ export const EnvSchema = baseEnvSchema.superRefine((e, ctx) => {
       path: ['GITHUB_TOKENS'],
       message: 'required for ingest in production',
     });
+  }
+
+  // M-7: a production boot must not look healthy while it is unusable.
+  if (e.NODE_ENV === 'production') {
+    const secrets = [
+      ['JWT_SECRET', e.JWT_SECRET],
+      ['API_KEY_PEPPER', e.API_KEY_PEPPER],
+      ['UNSUBSCRIBE_SECRET', e.UNSUBSCRIBE_SECRET],
+      ['METRICS_TOKEN', e.METRICS_TOKEN],
+    ] as const;
+    for (const [key, value] of secrets) {
+      if (PLACEHOLDER_SECRET.test(value)) {
+        ctx.addIssue({
+          code: 'custom',
+          path: [key],
+          message: 'must be a real secret in production, not a placeholder',
+        });
+      }
+    }
+
+    for (const [key, value] of [
+      ['API_PUBLIC_URL', e.API_PUBLIC_URL],
+      ['WEB_PUBLIC_URL', e.WEB_PUBLIC_URL],
+    ] as const) {
+      if (!value.startsWith('https://')) {
+        ctx.addIssue({
+          code: 'custom',
+          path: [key],
+          message: 'must use https in production',
+        });
+      }
+    }
+    if (e.CORS_ORIGINS.some((origin) => !origin.startsWith('https://'))) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['CORS_ORIGINS'],
+        message: 'every origin must use https in production',
+      });
+    }
+
+    if (e.EMAIL_PROVIDER === 'log') {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['EMAIL_PROVIDER'],
+        message: 'log is a development provider; configure resend or smtp in production',
+      });
+    }
+    if (
+      e.EMAIL_PROVIDER === 'smtp' &&
+      /(^|\/\/)(mailpit|localhost|127\.0\.0\.1)([:/]|$)/.test(e.SMTP_URL)
+    ) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['SMTP_URL'],
+        message: 'must point at a real SMTP host in production, not mailpit/localhost',
+      });
+    }
   }
 });
 
