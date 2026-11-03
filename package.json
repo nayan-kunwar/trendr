@@ -27,7 +27,7 @@
     "prepare": "husky"
   },
   "devDependencies": {
-    "@commitlint/cli": "^19",
+    "@commitlint/cli": "^21",
     "@commitlint/config-conventional": "^19",
     "@eslint/js": "^10",
     "@testcontainers/postgresql": "^12.2.1",
