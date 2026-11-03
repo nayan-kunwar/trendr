@@ -32,6 +32,6 @@
     "tsup": "^8",
     "tsx": "^4",
     "typescript": "^5",
-    "undici": "^7"
+    "undici": "^8"
   }
 }
