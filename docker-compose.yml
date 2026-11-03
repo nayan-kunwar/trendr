@@ -11,7 +11,7 @@ x-node-env: &node-env
 
 services:
   postgres:
-    image: postgres:16-alpine # set TIMESCALE_ENABLED=true and image timescale/timescaledb:latest-pg16 for the Timescale variant
+    image: postgres:16-alpine@sha256:0cefaabd882e42bcb2a2f3dc56d3ce4770560ba62fd7f197f1a2e008fd5731ab # set TIMESCALE_ENABLED=true and image timescale/timescaledb:latest-pg16 for the Timescale variant
     command: ['postgres', '-c', 'timezone=UTC'] # partition + rollup math assumes UTC sessions (6.3); prod override adds -c shared_buffers=256MB
     environment:
       POSTGRES_USER: trendr
@@ -26,7 +26,7 @@ services:
       retries: 20
 
   redis:
-    image: redis:7-alpine
+    image: redis:7-alpine@sha256:8da19c7399dca900c6822a1cf30f9d2285585e2c4b457ff4095b0f4500054d3f
     command: ['redis-server', '--appendonly', 'yes', '--maxmemory-policy', 'noeviction'] # BullMQ requires noeviction
     ports: ['127.0.0.1:6379:6379'] # loopback only: Redis has no authentication
     volumes: [redisdata:/data]
@@ -47,6 +47,8 @@ services:
 
   api:
     build: { context: ., dockerfile: infra/docker/node.Dockerfile, args: { APP: api } }
+    security_opt: ['no-new-privileges:true']
+    cap_drop: [ALL]
     environment:
       <<: *node-env
       API_PORT: '4000'
@@ -72,6 +74,8 @@ services:
 
   worker:
     build: { context: ., dockerfile: infra/docker/node.Dockerfile, args: { APP: worker } }
+    security_opt: ['no-new-privileges:true']
+    cap_drop: [ALL]
     environment:
       <<: *node-env
       WORKER_ROLES: scheduler,ingest,scoring,notify
@@ -97,6 +101,8 @@ services:
 
   web:
     build: { context: ., dockerfile: infra/docker/web.Dockerfile }
+    security_opt: ['no-new-privileges:true']
+    cap_drop: [ALL]
     environment:
       API_INTERNAL_URL: http://api:4000
       NEXT_PUBLIC_API_URL: ${API_PUBLIC_URL:-http://localhost:4000}
@@ -108,6 +114,8 @@ services:
 
   mcp:
     build: { context: ., dockerfile: infra/docker/node.Dockerfile, args: { APP: mcp } }
+    security_opt: ['no-new-privileges:true']
+    cap_drop: [ALL]
     environment:
       <<: *node-env
       MCP_TRANSPORT: http
@@ -130,11 +138,11 @@ services:
     restart: unless-stopped
 
   mailpit:
-    image: axllent/mailpit:latest
+    image: axllent/mailpit:latest@sha256:9b3a463be15354c0f0eba91697d80e3e0d8a5623ef0e627cacc836bc17fd5231
     ports: ['8025:8025', '1025:1025']
 
   prometheus:
-    image: prom/prometheus:v2.55.1
+    image: prom/prometheus:v2.55.1@sha256:2659f4c2ebb718e7695cb9b25ffa7d6be64db013daba13e05c875451cf51b0d3
     profiles: ['obs']
     # Prometheus has no config-file env expansion (governance vote,
     # prometheus/prometheus#2357), so the bearer token is rendered into a
@@ -148,7 +156,7 @@ services:
     depends_on: [api, worker]
 
   grafana:
-    image: grafana/grafana:11.4.0
+    image: grafana/grafana:11.4.0@sha256:d8ea37798ccc41061a62ab080f2676dda6bf7815558499f901bdb0f533a456fb
     profiles: ['obs']
     environment:
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
@@ -161,7 +169,7 @@ services:
     depends_on: [prometheus]
 
   jaeger:
-    image: jaegertracing/all-in-one:1.62.0
+    image: jaegertracing/all-in-one:1.62.0@sha256:836e9b69c88afbedf7683ea7162e179de63b1f981662e83f5ebb68badadc710f
     profiles: ['obs']
     ports: ['16686:16686', '4318:4318']
 

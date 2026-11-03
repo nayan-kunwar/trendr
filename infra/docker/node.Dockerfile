@@ -1,6 +1,6 @@
 # infra/docker/node.Dockerfile — builds api | worker | mcp
 # syntax=docker/dockerfile:1.7
-ARG NODE_IMAGE=node:22-alpine
+ARG NODE_IMAGE=node:22-alpine@sha256:fe4f6d74e20370acb04ad889077d14d0f64a9c8ea6a42bc60cddf1e844699914
 FROM ${NODE_IMAGE} AS base
 ARG PNPM_VERSION=11.7.0
 ENV PNPM_HOME=/pnpm PATH=/pnpm/bin:/pnpm:$PATH

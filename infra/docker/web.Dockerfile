@@ -1,6 +1,7 @@
 # infra/docker/web.Dockerfile — Next.js standalone
 # syntax=docker/dockerfile:1.7
-FROM node:22-alpine AS base
+ARG NODE_IMAGE=node:22-alpine@sha256:fe4f6d74e20370acb04ad889077d14d0f64a9c8ea6a42bc60cddf1e844699914
+FROM ${NODE_IMAGE} AS base
 ARG PNPM_VERSION=11.7.0
 ENV PNPM_HOME=/pnpm PATH=/pnpm/bin:/pnpm:$PATH
 # Husky hooks and corepack download prompts must never run inside an image build.
@@ -36,7 +37,7 @@ ARG NEXT_PUBLIC_API_URL=http://localhost:4000
 ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL} NEXT_TELEMETRY_DISABLED=1 NEXT_STANDALONE=true
 RUN pnpm turbo run build --filter=@trendr/web...
 
-FROM node:22-alpine AS runner
+FROM ${NODE_IMAGE} AS runner
 WORKDIR /app
 ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 PORT=3000 HOSTNAME=0.0.0.0
 COPY --from=builder --chown=node:node /repo/apps/web/.next/standalone ./
