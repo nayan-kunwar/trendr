@@ -172,12 +172,34 @@ export async function runScoring(
     return { status: 'scored', runId, itemsSeen, itemsUpserted };
   } catch (error: unknown) {
     if (runId !== null) {
-      await finishRun(deps.db, runId, { status: 'failed', error: errorMessage(error) });
+      // L-5: a failing bookkeeping write must not replace the job error. Log
+      // both, retry once, then let the original failure propagate.
+      await recordFailedRun(deps.db, runId, errorMessage(error), deps.logger);
     }
     throw error;
   } finally {
     stopRenewal();
     await deps.redis.eval(RELEASE_LOCK_LUA, 1, lockKey, deps.jobId);
+  }
+}
+
+/** L-5: best-effort failed-run bookkeeping; never masks the original error. */
+async function recordFailedRun(
+  db: ScoringDeps['db'],
+  runId: bigint,
+  message: string,
+  logger?: Logger,
+): Promise<void> {
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    try {
+      await finishRun(db, runId, { status: 'failed', error: message });
+      return;
+    } catch (bookkeepingError) {
+      logger?.error(
+        { err: bookkeepingError, original: message, runId: String(runId), attempt },
+        'could not record the failed scoring run',
+      );
+    }
   }
 }
 

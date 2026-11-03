@@ -29,7 +29,11 @@ export class RunRecorder {
 
   private finished = false;
 
-  private constructor(
+  /**
+   * `static start` is the normal entry point; constructing directly is for
+   * tests that exercise bookkeeping failure handling (L-5).
+   */
+  constructor(
     private readonly db: Db,
     readonly runId: bigint,
   ) {}
@@ -45,13 +49,14 @@ export class RunRecorder {
     return new RunRecorder(db, runId);
   }
 
-  /** Close the run; a second call is a no-op (failed attempts and handlers agree). */
+  /** Close the run; a second call is a no-op once a close has succeeded. */
   async finish(
     status: 'succeeded' | 'partial' | 'failed' | 'skipped',
     error: string | null = null,
   ): Promise<void> {
     if (this.finished) return;
-    this.finished = true;
+    // L-5: mark the recorder done only after the write lands. A failed close
+    // must stay retryable instead of leaving the run row stuck in `running`.
     await finishRun(this.db, this.runId, {
       status,
       itemsSeen: this.itemsSeen,
@@ -62,5 +67,6 @@ export class RunRecorder {
       rateLimitRemaining: this.rateLimitRemaining,
       error,
     });
+    this.finished = true;
   }
 }

@@ -107,4 +107,4 @@ by `sources × cap` instead of the full score table.
   equal-timestamp-lower-id swaps.
 - `apps/worker/test/int/scoring-queue.int.test.ts`: the job result carries
   `status: 'scored'` and the run id.
-- L-5, L-8 and L-9 add their own tests as those commits land.
+- `apps/worker/test/unit/run-recorder.test.ts`: a failed close stays retryable, `failRun` retries once, logs the original error and never throws.

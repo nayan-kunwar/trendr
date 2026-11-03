@@ -188,7 +188,7 @@ export async function processIngestJob(
       recordIngestMetrics(data, recorder, result.status, startedAt);
       return result;
     }
-    await failRun(recorder, error);
+    await failRun(recorder, error, deps.logger);
     recordIngestMetrics(data, recorder, 'failed', startedAt);
     throw asJobError(error);
   }
@@ -652,11 +652,28 @@ function recordIngestMetrics(
   ingestionItems.inc({ ...labels, result: 'not_modified' }, recorder.notModified);
 }
 
-async function failRun(recorder: RunRecorder, error: unknown): Promise<void> {
-  try {
-    await recorder.finish('failed', error instanceof Error ? error.message : String(error));
-  } catch {
-    // The run row is best-effort bookkeeping; the job error is what matters.
+/**
+ * L-5: record the failed run without ever replacing the job error. A throwing
+ * bookkeeping write is logged (with the original message) and retried once;
+ * `RunRecorder.finish` only marks itself done after a successful write, so the
+ * retry really does reattempt the close.
+ */
+export async function failRun(
+  recorder: Pick<RunRecorder, 'finish'>,
+  error: unknown,
+  logger?: Pick<Logger, 'error'>,
+): Promise<void> {
+  const message = error instanceof Error ? error.message : String(error);
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    try {
+      await recorder.finish('failed', message);
+      return;
+    } catch (bookkeepingError) {
+      logger?.error(
+        { err: bookkeepingError, original: message, attempt },
+        'could not record the failed run',
+      );
+    }
   }
 }
 
