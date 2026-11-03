@@ -1,7 +1,7 @@
 # Production-readiness review remediation
 
 **Date:** 2026-11-03  
-**Status:** In progress — Phases 1–7 verified locally; Phases 8–9 planned  
+**Status:** In progress — Phases 1–8 verified locally; Phase 9 in progress  
 **Reviewed commit:** `2ad0396` (2026-11-02)  
 **Source:** `Trendr production-readiness review.pdf` (9 pages)  
 **Scope:** all 27 findings — 0 Critical, 4 High, 12 Medium, 11 Low.
@@ -75,7 +75,7 @@ gates pass; live-deployment acceptance is tracked separately in
 | ID   | Finding | Evidence | Planned remediation | Phase | Status |
 | ---- | --- | --- | --- | --- | --- |
 | L-1  | Non-atomic `INCR` then `EXPIRE`, and unbounded in-memory fallback maps | `apps/api/src/routes/auth.ts:72-73,334-335,359-360` | Lua `INCR`+`EXPIRE`; cap and evict the fallback map | 2 | Verified |
-| L-2  | Wrong contact URL in the default User-Agent, and console output in the log email sender | `packages/config/src/env.ts:44` (`nayankunwar` vs `nayan-kunwar`); `packages/email/src/index.ts:86` | Correct the URL; inject the logger | 8 | Planned |
+| L-2  | Wrong contact URL in the default User-Agent, and console output in the log email sender | `packages/config/src/env.ts:44` (`nayankunwar` vs `nayan-kunwar`); `packages/email/src/index.ts:86` | Correct the URL; inject the logger | 8 | Verified |
 | L-3  | Supply-chain and container-hardening gaps | `.github/workflows/ci.yml`; `infra/docker/node.Dockerfile` | Pin actions and base images by digest; non-root runtime; `no-new-privileges`, drop capabilities | 7 | Verified |
 | L-4  | API-key count cap is a check-then-insert race | `apps/api/src/services/api-key.service.ts:63-83` | Serialize per user with `pg_advisory_xact_lock`; parallel-create test | 7 | Verified |
 | L-5  | Error masking in run bookkeeping | `apps/worker/src/scoring/run-scoring.ts` catch path; `apps/worker/src/processors/ingest.processor.ts:118-124` | Never let bookkeeping replace the job error; log both; leave no `running` rows | 5 | Verified |
@@ -477,6 +477,6 @@ These cannot be closed in this environment and remain tracked in
 - [x] Phase 5 — M-3, L-5, L-8, L-9 fixed
 - [x] Phase 6 — M-2, M-5, M-6, M-7, L-6, L-7, L-11 fixed
 - [x] Phase 7 — M-8, M-9, M-12, L-3, L-4, L-10 fixed
-- [ ] Phase 8 — L-2 fixed
+- [x] Phase 8 — L-2 fixed
 - [ ] Phase 9 — docs, ADRs and final local matrix green
 - [ ] Live acceptance — deferred on infrastructure

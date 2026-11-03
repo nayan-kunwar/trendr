@@ -54,7 +54,7 @@ export async function recordPypiFixtures(): Promise<void> {
     throw new Error('fixtures:record calls the live PyPI APIs; set RECORD=1 to confirm.');
   }
   const userAgent =
-    process.env.HTTP_USER_AGENT ?? 'Trendr/1.0 (+https://github.com/nayankunwar/trendr)';
+    process.env.HTTP_USER_AGENT ?? 'Trendr/1.0 (+https://github.com/nayan-kunwar/trendr)';
   const now = new Date();
   await mkdir(FIXTURES_DIR, { recursive: true });
 

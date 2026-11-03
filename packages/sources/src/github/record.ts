@@ -185,7 +185,7 @@ export async function recordGitHubFixtures(): Promise<void> {
     throw new Error('GITHUB_TOKENS is not set (shell env or .env).');
   }
   const userAgent =
-    process.env.HTTP_USER_AGENT ?? 'Trendr/1.0 (+https://github.com/nayankunwar/trendr)';
+    process.env.HTTP_USER_AGENT ?? 'Trendr/1.0 (+https://github.com/nayan-kunwar/trendr)';
   const headers: Record<string, string> = {
     authorization: `Bearer ${token}`,
     'user-agent': userAgent,

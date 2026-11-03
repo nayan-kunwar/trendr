@@ -21,11 +21,21 @@ export interface EmailSender {
   send(message: EmailMessage): Promise<{ id: string }>;
 }
 
+/**
+ * L-2: minimal structured-log sink. The `log` provider writes through the
+ * caller's logger so output keeps redaction and service metadata.
+ */
+export interface EmailLogSink {
+  info(fields: Record<string, unknown>, message: string): void;
+}
+
 export interface EmailSenderOptions {
   provider: 'smtp' | 'resend' | 'log';
   from: string;
   smtpUrl?: string;
   resendApiKey?: string;
+  /** Required for the `log` provider; ignored by smtp/resend. */
+  logger?: EmailLogSink;
 }
 
 /** Dev/production SMTP sender (Mailpit locally, any SMTP relay in production). */
@@ -81,9 +91,14 @@ export class ResendEmailSender implements EmailSender {
 
 /** Test/dev fallback that keeps the send path observable without a provider. */
 export class LogEmailSender implements EmailSender {
+  constructor(private readonly logger: EmailLogSink) {}
+
   send(message: EmailMessage): Promise<{ id: string }> {
     const id = `log-${Date.now()}`;
-    console.info(`[email:log] ${message.to} — ${message.subject} (${id})`);
+    this.logger.info(
+      { to: message.to, subject: message.subject, id },
+      'email rendered by the log provider (not delivered)',
+    );
     return Promise.resolve({ id });
   }
 }
@@ -96,8 +111,12 @@ export function createEmailSender(options: EmailSenderOptions): EmailSender {
       }
       return new ResendEmailSender(options.from, options.resendApiKey);
     }
-    case 'log':
-      return new LogEmailSender();
+    case 'log': {
+      if (options.logger === undefined) {
+        throw new Error('logger is required when EMAIL_PROVIDER=log');
+      }
+      return new LogEmailSender(options.logger);
+    }
     case 'smtp':
     default:
       return new SmtpEmailSender(options.from, options.smtpUrl ?? 'smtp://mailpit:1025');

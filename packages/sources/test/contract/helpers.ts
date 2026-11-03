@@ -10,7 +10,7 @@ const ContractEnvSchema = z.object({
   CONTRACT: z.string().optional(),
   GITHUB_TOKENS: z.string().optional(),
   HF_TOKEN: z.string().optional(),
-  HTTP_USER_AGENT: z.string().default('Trendr/1.0 (+https://github.com/nayankunwar/trendr)'),
+  HTTP_USER_AGENT: z.string().default('Trendr/1.0 (+https://github.com/nayan-kunwar/trendr)'),
 });
 
 const contractEnv = ContractEnvSchema.parse(process.env);

@@ -103,6 +103,7 @@ if (roles.includes('scoring') || roles.includes('ingest') || roles.includes('not
         provider: env.EMAIL_PROVIDER,
         from: env.EMAIL_FROM,
         smtpUrl: env.SMTP_URL,
+        logger,
         ...(env.RESEND_API_KEY === undefined ? {} : { resendApiKey: env.RESEND_API_KEY }),
       }),
     );

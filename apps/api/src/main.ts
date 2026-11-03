@@ -12,6 +12,7 @@ const emailSender = createEmailSender({
   provider: env.EMAIL_PROVIDER,
   from: env.EMAIL_FROM,
   smtpUrl: env.SMTP_URL,
+  logger,
   ...(env.RESEND_API_KEY === undefined ? {} : { resendApiKey: env.RESEND_API_KEY }),
 });
 

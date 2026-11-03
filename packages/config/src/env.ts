@@ -46,7 +46,7 @@ const baseEnvSchema = z.object({
   HF_RATE_PER_5MIN: z.coerce.number().int().default(1000),
   HF_INCLUDE_DATASETS: bool.prefault('false'),
   HF_INCLUDE_SPACES: bool.prefault('false'),
-  HTTP_USER_AGENT: z.string().default('Trendr/1.0 (+https://github.com/nayankunwar/trendr)'),
+  HTTP_USER_AGENT: z.string().default('Trendr/1.0 (+https://github.com/nayan-kunwar/trendr)'),
   WORKER_ROLES: csv.prefault('scheduler,ingest,scoring,notify'),
   WORKER_CONCURRENCY_INGEST: z.coerce.number().int().default(4),
   WORKER_METRICS_PORT: z.coerce.number().int().default(9464),
