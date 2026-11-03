@@ -294,6 +294,30 @@ describe('apps/api', () => {
           payload: JSON.stringify({ email: 'a@example.com', filler: 'x'.repeat(70_000) }),
         });
         expect(response.statusCode).toBe(413);
+        expect(response.json<{ title: string; type: string }>()).toMatchObject({
+          title: 'Content Too Large',
+          type: 'https://trendr.dev/problems/payload-too-large',
+        });
+      });
+    },
+    TEST_TIMEOUT,
+  );
+
+  it(
+    'rejects an unsupported media type with a titled problem (L-7)',
+    async () => {
+      await withApp(async (app) => {
+        const response = await app.inject({
+          method: 'POST',
+          url: '/v1/auth/magic-link',
+          headers: { 'content-type': 'application/xml' },
+          payload: '<email>a@example.com</email>',
+        });
+        expect(response.statusCode).toBe(415);
+        expect(response.json<{ title: string; type: string }>()).toMatchObject({
+          title: 'Unsupported Media Type',
+          type: 'https://trendr.dev/problems/unsupported-media-type',
+        });
       });
     },
     TEST_TIMEOUT,
