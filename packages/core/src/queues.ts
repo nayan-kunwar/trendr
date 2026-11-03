@@ -152,7 +152,9 @@ export const DEFAULT_JOB_OPTS = {
   attempts: 5,
   backoff: { type: 'custom' },
   removeOnComplete: { age: 24 * 3600, count: 2000 },
-  removeOnFail: { age: 7 * 24 * 3600 },
+  // L-10: bound the failed-job list as well as its age; a stuck queue must
+  // not grow Redis without limit (the DLQ keeps the actionable copies).
+  removeOnFail: { age: 7 * 24 * 3600, count: 1000 },
 };
 
 /** Deterministic jobIds → BullMQ dedupes identical jobs (idempotency key). */

@@ -9,6 +9,7 @@ import {
   ensurePartitions,
   partitionLeadDays,
   pruneAlertEvents,
+  pruneDailyMetrics,
   pruneIngestionRuns,
   pruneScores,
   rollupDailyMetrics,
@@ -27,6 +28,9 @@ import { workerSettings, type Queues } from '../queues.js';
  * score pruning keeps the current pointer, and token cleanup is a cutoff
  * delete. The scheduler in `scheduler.ts` owns the production cadence.
  */
+
+/** Spec §6.5 — `daily_metrics` horizon (L-10). */
+export const DAILY_METRICS_RETENTION_DAYS = 400;
 
 export interface MaintenanceRetentionOptions {
   snapshotMonths: number;
@@ -70,6 +74,7 @@ export interface MaintenanceResult {
   rolledUpRows?: number;
   /** Present for `retention`. */
   droppedPartitions?: number;
+  deletedDailyMetrics?: number;
   deletedScores?: number;
   deletedAlertEvents?: number;
   deletedIngestionRuns?: number;
@@ -164,6 +169,10 @@ export async function runMaintenanceJob(
       );
       // Order matters: alert events reference score runs, so remove the
       // 180-day-old events before the 30-day run sweep can see those runs.
+      const deletedDailyMetrics = await pruneDailyMetrics(
+        options.db,
+        new Date(now.getTime() - DAILY_METRICS_RETENTION_DAYS * 86_400_000),
+      );
       const deletedAlertEvents = await pruneAlertEvents(
         options.db,
         new Date(now.getTime() - 180 * 86_400_000),
@@ -176,6 +185,7 @@ export async function runMaintenanceJob(
         {
           droppedPartitions,
           deletedScores,
+          deletedDailyMetrics,
           deletedAlertEvents,
           deletedIngestionRuns,
         },
@@ -185,6 +195,7 @@ export async function runMaintenanceJob(
         type: data.type,
         droppedPartitions,
         deletedScores,
+        deletedDailyMetrics,
         deletedAlertEvents,
         deletedIngestionRuns,
       };

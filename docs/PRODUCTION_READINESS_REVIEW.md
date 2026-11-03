@@ -83,7 +83,7 @@ gates pass; live-deployment acceptance is tracked separately in
 | L-7  | RFC 7807 titles for 413 and 415 fall back to a generic value | `apps/api/src/plugins/errors.ts` | Add both titles and problem types; inject tests | 6 | Verified |
 | L-8  | Scoring runs after every batch, so boards can reflect partial data; admin edits do not refresh leaderboards | `apps/worker/src/processors/ingest.processor.ts:564-568`; admin item patch | Delay ingest-triggered scoring to the batch window; keep admin triggers immediate; invalidate caches on edits | 5 | Verified |
 | L-9  | The all-board rebuild loads every current score row into memory | `apps/worker/src/scoring/run-scoring.ts:326-385` | Top-K-per-source window query, then the existing `buildAllBoard` | 5 | Verified |
-| L-10 | Unbounded growth: `daily_metrics`, failed-job records and topic recompute cost | `packages/core/src/queues.ts:151-156`; `render.yaml:77` | `daily_metrics` 400-day prune (spec §6.5), bounded `removeOnFail`, measure topic recompute | 7 | Planned |
+| L-10 | Unbounded growth: `daily_metrics`, failed-job records and topic recompute cost | `packages/core/src/queues.ts:151-156`; `render.yaml:77` | `daily_metrics` 400-day prune (spec §6.5), bounded `removeOnFail`, measure topic recompute | 7 | Verified |
 | L-11 | Global rate limiter fails open when Redis is unavailable | `apps/api/src/plugins/rate-limit.ts:82-92` (`skipOnError`) | Keep the spec's fail-open behavior but add a metric, error log and alert | 6 | Verified |
 
 ---

@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import {
@@ -148,9 +148,24 @@ describe('maintenance processor (spec §7.10)', () => {
       expiresAt: new Date('2026-10-01T00:00:00Z'),
     });
 
+    // L-10: `daily_metrics` older than the 400-day horizon is pruned.
+    await db.insert(dailyMetrics).values({
+      itemId,
+      metric: 'downloads',
+      day: '2025-01-01',
+      value: 5,
+    });
+
     const retained = await runMaintenanceJob(options(), { type: 'retention' });
     expect(retained).toMatchObject({ type: 'retention' });
     expect(retained.deletedIngestionRuns).toBeGreaterThanOrEqual(1);
+    expect(retained.deletedDailyMetrics).toBeGreaterThanOrEqual(1);
+
+    const oldDaily = await db
+      .select({ day: dailyMetrics.day })
+      .from(dailyMetrics)
+      .where(and(eq(dailyMetrics.itemId, itemId), eq(dailyMetrics.day, '2025-01-01')));
+    expect(oldDaily).toEqual([]);
 
     const runs = await db
       .select({ id: ingestionRuns.id })

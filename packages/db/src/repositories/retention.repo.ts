@@ -31,6 +31,31 @@ export async function pruneAlertEvents(
 }
 
 /**
+ * Spec §6.5 — `daily_metrics` is kept for 400 days. Bounded batches keep a
+ * large backlog from holding one long transaction (L-10).
+ */
+export async function pruneDailyMetrics(
+  db: DbExecutor,
+  before: Date,
+  batchSize = RETENTION_BATCH_SIZE,
+): Promise<number> {
+  const cutoff = before.toISOString().slice(0, 10);
+  return deleteInBatches(
+    db,
+    sql`
+      WITH doomed AS (
+        SELECT item_id, metric, day FROM daily_metrics
+        WHERE day < ${cutoff}::date
+        ORDER BY day
+        LIMIT ${batchSize}
+      )
+      DELETE FROM daily_metrics d USING doomed x
+      WHERE d.item_id = x.item_id AND d.metric = x.metric AND d.day = x.day
+      RETURNING 1`,
+  );
+}
+
+/**
  * Delete old `ingestion_runs` that no retained object still references.
  * Scores, the current-run pointer, and alert events all hold restrictive FKs;
  * the NOT EXISTS guards make the delete FK-safe even if a scoring run is kept
