@@ -37,7 +37,7 @@
     "eslint": "^9",
     "eslint-config-prettier": "^10",
     "fast-check": "^4.10.2",
-    "globals": "^15",
+    "globals": "^17",
     "husky": "^9",
     "lint-staged": "^15",
     "prettier": "^3",
