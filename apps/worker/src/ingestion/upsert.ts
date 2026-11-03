@@ -55,71 +55,144 @@ export interface PersistOptions {
   logger?: Logger;
 }
 
+export interface PersistResult {
+  /** Items whose row, topics, aliases and series committed. */
+  upserted: number;
+  /** Items that still failed when retried alone after the chunk rolled back. */
+  failed: number;
+}
+
+/** M-10: stop isolating after this many failures — that is systemic, not poison. */
+const MAX_ISOLATED_FAILURES = 10;
+
 /**
- * Spec §7.1 step 5 — bulk upsert of one chunk in a single transaction:
- * `items` (metadata), `item_topics`, upstream rename handling (§5.4), per-mode
- * `snapshots` + `daily_metrics`, and alias resolution. Returns how many items
- * were upserted.
+ * Spec §7.1 step 5 — bulk upsert of one chunk: `items` (metadata),
+ * `item_topics`, upstream rename handling (§5.4), per-mode `snapshots` +
+ * `daily_metrics`, and alias resolution.
+ *
+ * M-10: the chunk is de-duplicated by `(source, external_id)` first. If the
+ * transaction still fails, every item is retried in its own transaction so one
+ * poison payload cannot roll back its neighbours' snapshots. The returned
+ * `failed` count feeds the ingest run recorder and its >50% retry quota.
  */
 export async function persistNormalizedItems(
   db: Db,
   normalized: NormalizedItem[],
   options: PersistOptions,
+): Promise<PersistResult> {
+  const unique = dedupeNormalizedItems(normalized, options.logger);
+  if (unique.length === 0) return { upserted: 0, failed: 0 };
+
+  try {
+    const upserted = await db.transaction((tx) => persistChunk(tx, unique, options));
+    return { upserted, failed: 0 };
+  } catch (error) {
+    if (unique.length === 1) throw error;
+    options.logger?.error(
+      { err: error, items: unique.length },
+      'ingestion chunk failed; retrying items in isolation',
+    );
+
+    let upserted = 0;
+    let failed = 0;
+    for (const item of unique) {
+      try {
+        upserted += await db.transaction((tx) => persistChunk(tx, [item], options));
+      } catch (itemError) {
+        failed += 1;
+        options.logger?.error(
+          { err: itemError, source: item.item.source, externalId: item.item.externalId },
+          'ingestion item failed in isolation',
+        );
+        if (failed >= MAX_ISOLATED_FAILURES || failed * 2 > unique.length) {
+          throw itemError;
+        }
+      }
+    }
+    return { upserted, failed };
+  }
+}
+
+/** One transaction for one (already de-duplicated) set of normalized items. */
+async function persistChunk(
+  db: DbExecutor,
+  normalized: readonly NormalizedItem[],
+  options: PersistOptions,
 ): Promise<number> {
-  if (normalized.length === 0) return 0;
   const capturedAt =
     options.tier === undefined
       ? options.capturedAt
       : bucketCapturedAt(options.tier, options.capturedAt);
 
-  return db.transaction(async (tx) => {
-    // §5.4: detect renames via the stable `upstream_id` first, so the
-    // (source, external_id) upsert below lands on the renamed row instead of
-    // inserting a duplicate under the new name.
-    await applySourceRenames(tx, normalized, options.logger);
-    const upserted = await upsertItems(tx, normalized.map(toItemUpsert), {
-      ...(options.newItemTier === undefined ? {} : { newItemTier: options.newItemTier }),
-      // Daily jobs carry only the download series (npm/PyPI) and MCP snapshots
-      // carry only alias metrics: keep the metadata written by discovery.
-      preserveMetadata: options.mode === 'daily' || options.preserveMetadata === true,
-      preservePrimaryMetric: options.mode === 'daily' || options.preserveMetadata === true,
-    });
-    const idByExternalId = new Map(upserted.map((row) => [row.externalId, row.id]));
-    await persistTopics(tx, normalized, idByExternalId);
-    await persistAliases(tx, normalized, idByExternalId);
-
-    const snapshots: SnapshotUpsert[] = [];
-    const daily: DailyMetricUpsert[] = [];
-    for (const item of normalized) {
-      const itemId = idByExternalId.get(item.item.externalId);
-      if (itemId === undefined) {
-        continue; // upsert returns every row; defensive only
-      }
-      if (options.mode === 'snapshot') {
-        for (const point of item.snapshots) {
-          snapshots.push({
-            itemId,
-            metric: point.metric,
-            capturedAt,
-            observedAt: options.capturedAt,
-            value: point.value,
-            runId: options.runId,
-          });
-        }
-      }
-      for (const point of item.daily) {
-        daily.push({ itemId, metric: point.metric, day: point.day, value: point.value });
-      }
-    }
-
-    if (snapshots.length > 0) {
-      await upsertSnapshots(tx, snapshots, { refreshAggregates: true });
-    }
-    if (daily.length > 0) {
-      await upsertDailyMetrics(tx, daily, { refreshAggregates: true });
-    }
-    return upserted.length;
+  // §5.4: detect renames via the stable `upstream_id` first, so the
+  // (source, external_id) upsert below lands on the renamed row instead of
+  // inserting a duplicate under the new name.
+  await applySourceRenames(db, normalized, options.logger);
+  const upserted = await upsertItems(db, normalized.map(toItemUpsert), {
+    ...(options.newItemTier === undefined ? {} : { newItemTier: options.newItemTier }),
+    // Daily jobs carry only the download series (npm/PyPI) and MCP snapshots
+    // carry only alias metrics: keep the metadata written by discovery.
+    preserveMetadata: options.mode === 'daily' || options.preserveMetadata === true,
+    preservePrimaryMetric: options.mode === 'daily' || options.preserveMetadata === true,
   });
+  const idByExternalId = new Map(upserted.map((row) => [row.externalId, row.id]));
+  await persistTopics(db, normalized, idByExternalId);
+  await persistAliases(db, normalized, idByExternalId);
+
+  const snapshots: SnapshotUpsert[] = [];
+  const daily: DailyMetricUpsert[] = [];
+  for (const item of normalized) {
+    const itemId = idByExternalId.get(item.item.externalId);
+    if (itemId === undefined) {
+      continue; // upsert returns every row; defensive only
+    }
+    if (options.mode === 'snapshot') {
+      for (const point of item.snapshots) {
+        snapshots.push({
+          itemId,
+          metric: point.metric,
+          capturedAt,
+          observedAt: options.capturedAt,
+          value: point.value,
+          runId: options.runId,
+        });
+      }
+    }
+    for (const point of item.daily) {
+      daily.push({ itemId, metric: point.metric, day: point.day, value: point.value });
+    }
+  }
+
+  if (snapshots.length > 0) {
+    await upsertSnapshots(db, snapshots, { refreshAggregates: true });
+  }
+  if (daily.length > 0) {
+    await upsertDailyMetrics(db, daily, { refreshAggregates: true });
+  }
+  return upserted.length;
+}
+
+/** M-10: one upsert per natural key; the first normalized copy wins. */
+function dedupeNormalizedItems(
+  normalized: readonly NormalizedItem[],
+  logger?: Logger,
+): NormalizedItem[] {
+  const unique: NormalizedItem[] = [];
+  const seen = new Set<string>();
+  let dropped = 0;
+  for (const item of normalized) {
+    const key = `${item.item.source}\u0000${item.item.externalId}`;
+    if (seen.has(key)) {
+      dropped += 1;
+      continue;
+    }
+    seen.add(key);
+    unique.push(item);
+  }
+  if (dropped > 0) {
+    logger?.debug({ dropped, kept: unique.length }, 'dropped duplicate items from ingestion chunk');
+  }
+  return unique;
 }
 
 /** One backfill result (spec §5.1 `adapter.backfill`) → `daily_metrics`. */

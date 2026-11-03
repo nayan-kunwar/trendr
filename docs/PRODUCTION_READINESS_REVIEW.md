@@ -66,7 +66,7 @@ gates pass; live-deployment acceptance is tracked separately in
 | M-7  | Config validation lets a non-functional or weak production configuration boot | `packages/config/src/env.ts:27-35,66-68,81-103` | Production-only guardrails plus bounded token lifetimes | 6 | Planned |
 | M-8  | Backup and disaster-recovery posture is weak for a single-VPS deployment | `infra/scripts/backup.sh:54-78` | Require offsite + encryption in production; verify the dump; add a restore drill and stale-backup alert | 7 | Planned |
 | M-9  | Release pipeline is not gated on CI and ships unpinned, unsigned images | `.github/workflows/publish.yml`; `docker-compose.prod.yml:84` (`:latest` fallback) | Reusable CI prerequisite, SHA-pinned actions, SBOM/Trivy/cosign, explicit `TRENDR_TAG` | 7 | Planned |
-| M-10 | One chunk is one transaction with no in-chunk de-duplication or per-item isolation | `apps/worker/src/ingestion/upsert.ts:63-122` | Dedupe by natural key; per-item retry isolation on chunk failure | 3 | Planned |
+| M-10 | One chunk is one transaction with no in-chunk de-duplication or per-item isolation | `apps/worker/src/ingestion/upsert.ts:63-122` | Dedupe by natural key; per-item retry isolation on chunk failure | 3 | Verified |
 | M-11 | Partition maintenance only creates the current month plus three, risking a blocked create when data lands in the default partition | `apps/worker/src/processors/maintenance.processor.ts:119-130` | Create 12 months ahead; guard the default partition; alert on short lead time | 4 | Planned |
 | M-12 | Render blueprint: proxy trust unverified and memory headroom thin | `render.yaml:53-54` | Verify Render's edge behavior against its docs; keep `TRUST_PROXY` only if proxy-only; raise memory and shutdown settings | 7 | Planned |
 
@@ -390,7 +390,7 @@ These cannot be closed in this environment and remain tracked in
 
 - [x] Phase 1 — H-1 fixed and reproduced
 - [x] Phase 2 — H-2, H-3, L-1 fixed
-- [ ] Phase 3 — H-4, M-10 fixed; checkpoint after the Highs
+- [x] Phase 3 — H-4, M-10 fixed; checkpoint after the Highs
 - [ ] Phase 4 — M-1, M-4, M-11 fixed
 - [ ] Phase 5 — M-3, L-5, L-8, L-9 fixed
 - [ ] Phase 6 — M-2, M-5, M-6, M-7, L-6, L-7, L-11 fixed

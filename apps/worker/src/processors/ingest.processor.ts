@@ -329,13 +329,15 @@ async function runDiscover(input: JobRunInput, data: DiscoverJob): Promise<void>
     }
 
     if (toPersist.length > 0) {
-      recorder.itemsUpserted += await persistNormalizedItems(deps.db, toPersist, {
+      const persisted = await persistNormalizedItems(deps.db, toPersist, {
         mode: 'snapshot',
         tier: 'warm',
         capturedAt: context.now(),
         runId: recorder.runId,
         newItemTier: 'warm', // §7.1: discovered items are new ⇒ warm
       });
+      recorder.itemsUpserted += persisted.upserted;
+      recorder.itemsFailed += persisted.failed;
     }
   }
 
@@ -505,7 +507,7 @@ async function fetchAndPersist(input: FetchAndPersistInput): Promise<void> {
     }
 
     if (toPersist.length > 0) {
-      recorder.itemsUpserted += await persistNormalizedItems(deps.db, toPersist, {
+      const persisted = await persistNormalizedItems(deps.db, toPersist, {
         mode,
         tier,
         capturedAt: context.now(),
@@ -515,6 +517,8 @@ async function fetchAndPersist(input: FetchAndPersistInput): Promise<void> {
         // metadata discovered earlier. Daily jobs already preserve it.
         ...(data.source === 'mcp' ? { preserveMetadata: true } : {}),
       });
+      recorder.itemsUpserted += persisted.upserted;
+      recorder.itemsFailed += persisted.failed;
     }
   }
 

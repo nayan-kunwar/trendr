@@ -184,7 +184,7 @@ describe('MCP alias persistence and derived snapshots (spec §7.3.6)', () => {
       runId: null,
       newItemTier: 'warm',
     });
-    expect(inserted).toBe(1);
+    expect(inserted.upserted).toBe(1);
 
     const mcp = await itemByExternalId(ITEM);
     expect(mcp).not.toBeNull();

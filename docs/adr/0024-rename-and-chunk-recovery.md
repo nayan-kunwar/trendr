@@ -86,8 +86,9 @@ arrays therefore contain one row per natural key, which also removes the
 If the chunk transaction fails, each de-duplicated item is retried in its own
 transaction so a single poison item cannot discard the rest. The function
 returns `{ upserted, failed }`; the ingest processor adds both to its run
-recorder so the existing "more than half failed" quota can classify the run as
-partial or retry it.
+recorder, so isolated failures make the run `partial`. More than half failing
+(or ten failures in one chunk) rethrows from the persistence boundary so the
+job-level retry engages.
 
 Thresholds and scope:
 
