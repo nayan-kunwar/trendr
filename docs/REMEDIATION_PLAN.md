@@ -47,9 +47,9 @@ environment.
 
 | Item | Evidence |
 | --- | --- |
-| Repo state | `main` synced with `origin/main`; latest code commit `2ad0396` |
-| Unit suite | 79 files / 577 tests pass locally (2026-11-02) |
-| Latest CI | Run `41501249324` for `2ad0396`: security, lint/typecheck/unit, integration and compose-smoke all green |
+| Repo state | `main` synced with `origin/main`; remediation at `a22dcac`, toolchain queue cleared through `d1f5193` |
+| Unit suite | 85 files / 612 tests pass locally (2026-11-03) |
+| Latest CI | Run `41710700703` for `d1f5193`: security, lint/typecheck/unit, integration and compose-smoke all green |
 | Security gate | `pnpm audit --prod --audit-level high` green since `a839fc2`; `deepmerge@4.3.1` remains an accepted low-risk advisory |
 | Integration gate | time-dependent partition fixture fixed; `snapshots_default` assertion passes since `3ff3441` |
 | Compose flake | corepack retry added in `f2ee1d7`; compose smoke green in `41448937581` |
