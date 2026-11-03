@@ -750,6 +750,8 @@ export interface AdminItemPatch {
 
 export interface AdminItemPatchResult {
   id: bigint;
+  /** Owning source; the admin service invalidates that source's board caches (L-8). */
+  source: Source;
   tier: Tier;
   flags: string[];
   updatedAt: Date;
@@ -784,6 +786,7 @@ export async function patchItemAdmin(
 
   const [row] = await db.update(items).set(set).where(eq(items.id, itemId)).returning({
     id: items.id,
+    source: items.source,
     tier: items.tier,
     flags: items.flags,
     updatedAt: items.updatedAt,

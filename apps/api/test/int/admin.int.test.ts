@@ -416,6 +416,16 @@ describe('admin endpoints (task 4.6, spec §10.1/§10.5)', () => {
 
   it('patches item tier/flags and invalidates the cached detail', async () => {
     await redis.set(redisKeys.item(itemId), JSON.stringify({ stale: true }), 'EX', 300);
+    // L-8: an edit must also drop the cards and board metadata so the next
+    // leaderboard read is served from SQL instead of a stale cache.
+    const staleKeys = [
+      redisKeys.card(itemId, '24h'),
+      redisKeys.leaderboardMeta('github', '24h'),
+      redisKeys.leaderboardMeta('all', '7d'),
+    ];
+    for (const key of staleKeys) {
+      await redis.set(key, JSON.stringify({ stale: true }), 'EX', 300);
+    }
 
     const response = await app.inject({
       method: 'PATCH',
@@ -435,6 +445,9 @@ describe('admin endpoints (task 4.6, spec §10.1/§10.5)', () => {
       .where(eq(items.id, itemId));
     expect(row).toMatchObject({ tier: 'hot', flags: ['manual_hidden'] });
     expect(await redis.get(redisKeys.item(itemId))).toBeNull();
+    for (const key of staleKeys) {
+      expect(await redis.get(key), `${key} was invalidated`).toBeNull();
+    }
 
     const invalidFlag = await app.inject({
       method: 'PATCH',

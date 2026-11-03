@@ -48,8 +48,8 @@ export interface AdminDeps {
   db: Db;
   redis: Redis;
   queues: ApiQueues;
-  /** Best-effort cache invalidation (`item:{id}`, §9.3); omitted in unit tests. */
-  invalidate?: (key: string) => Promise<void>;
+  /** Best-effort cache invalidation (§9.3); omitted in unit tests. */
+  invalidate?: (...keys: string[]) => Promise<void>;
   now?: () => Date;
 }
 
@@ -485,7 +485,18 @@ export async function patchAdminItem(
   if (row === null) {
     throw new NotFoundError('item not found');
   }
-  await deps.invalidate?.(redisKeys.item(row.id));
+  // L-8: an item edit must not wait for the next scoring run to be visible.
+  // Drop the detail, every card and the board metadata for the item's source
+  // (and the combined board), so the next leaderboard read falls back to SQL.
+  const invalidated = [redisKeys.item(row.id)];
+  for (const window of WINDOWS) {
+    invalidated.push(
+      redisKeys.card(row.id, window),
+      redisKeys.leaderboardMeta(row.source, window),
+      redisKeys.leaderboardMeta('all', window),
+    );
+  }
+  await deps.invalidate?.(...invalidated);
   return {
     id: row.id.toString(),
     tier: row.tier,

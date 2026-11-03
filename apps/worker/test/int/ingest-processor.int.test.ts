@@ -502,6 +502,10 @@ describe('ingest processor (spec §7.1/§7.7)', () => {
       const jobs = await queues.scoring.getJobs(['waiting', 'delayed', 'active'], 0, 100);
       return jobs.find((candidate) => (candidate.id ?? '').startsWith('score.github.'));
     }, 'scoring enqueue');
+    // L-8: the request waits for the end of the ten-minute slot, so a
+    // multi-batch fan-out finishes before the board rebuild.
+    expect(scoring.opts.delay).toBeGreaterThan(0);
+    expect(scoring.opts.delay).toBeLessThanOrEqual(600_000);
     await scoring.remove();
 
     const stored = await queues.ingest.github.getJob(id);

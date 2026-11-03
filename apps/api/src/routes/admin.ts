@@ -60,9 +60,9 @@ export function registerAdminRoutes(app: FastifyInstance, options: AdminRoutesOp
     db: app.db,
     redis: app.redis,
     queues: resolveAdminQueues(app.hasDecorator('db'), app.hasDecorator('redis'), options.queues),
-    invalidate: async (key) => {
+    invalidate: async (...keys) => {
       if (app.hasDecorator('cache')) {
-        await app.cache.invalidate(key);
+        await app.cache.invalidate(...keys);
       }
     },
     ...(options.now === undefined ? {} : { now: options.now }),

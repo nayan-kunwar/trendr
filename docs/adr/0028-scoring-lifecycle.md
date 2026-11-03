@@ -74,8 +74,14 @@ already dedupes runs requested inside one slot, so a whole fan-out produces one
 job that executes at the slot boundary, after the batch window. Admin and
 scheduled triggers stay immediate.
 
-Admin item patches invalidate the leaderboard cache keys for the item's source
-in addition to `item:{id}`, so a tier/flag edit is visible on the next read.
+Ingest completions pass `slot: scoringSlot(now)` and
+`delayMs = delayToNextScoringSlot(now)`; admin and scheduled triggers pass
+neither. The slot is ten minutes (`SCORING_SLOT_MS`).
+
+Admin item patches invalidate `item:{id}`, every `card:{id}:{window}`, and
+`lbmeta:{source}:{window}` plus `lbmeta:all:{window}`. A missing `lbmeta` makes
+the leaderboard route fall back to SQL (fresh item state, new ETag) instead of
+serving a stale Redis board; the next scoring run republishes the metadata.
 
 ### 4. Bounded all-board load (L-9)
 
@@ -107,4 +113,9 @@ by `sources × cap` instead of the full score table.
   equal-timestamp-lower-id swaps.
 - `apps/worker/test/int/scoring-queue.int.test.ts`: the job result carries
   `status: 'scored'` and the run id.
+- `apps/worker/test/unit/scoring-schedule.test.ts` and the ingest processor
+  integration test: the delay is inside one slot and the enqueued scoring job
+  carries it.
+- `apps/api/test/int/admin.int.test.ts`: a patch clears the item, card and
+  board-metadata keys.
 - `apps/worker/test/unit/run-recorder.test.ts`: a failed close stays retryable, `failRun` retries once, logs the original error and never throws.

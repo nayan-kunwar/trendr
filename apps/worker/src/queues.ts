@@ -102,6 +102,19 @@ export async function closeQueues(queues: Queues): Promise<void> {
  */
 export { scoringSlot };
 
+/**
+ * L-8: ingest-triggered scoring waits for the end of the current ten-minute
+ * slot, so a snapshot fan-out finishes its batches before one board rebuild
+ * runs. Admin and scheduled triggers stay immediate.
+ */
+export const SCORING_SLOT_MS = 10 * 60_000;
+
+/** Milliseconds until the next scoring slot; `0` when `at` is exactly on one. */
+export function delayToNextScoringSlot(at: Date): number {
+  const remainder = at.getTime() % SCORING_SLOT_MS;
+  return remainder === 0 ? 0 : SCORING_SLOT_MS - remainder;
+}
+
 export interface EnqueueScoringInput {
   source: Source;
   windows?: readonly Window[];

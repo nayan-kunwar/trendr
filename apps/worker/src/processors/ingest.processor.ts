@@ -46,7 +46,14 @@ import {
   persistNormalizedItems,
 } from '../ingestion/upsert.js';
 import { ingestionDuration, ingestionItems, rateLimitWait, sourceApiMetrics } from '../metrics.js';
-import { enqueueScoringRun, workerSettings, type Queues, type ScoringResult } from '../queues.js';
+import {
+  delayToNextScoringSlot,
+  enqueueScoringRun,
+  scoringSlot,
+  workerSettings,
+  type Queues,
+  type ScoringResult,
+} from '../queues.js';
 
 type DiscoverJob = Extract<IngestJob, { type: 'discover' }>;
 type SnapshotFanoutJob = Extract<IngestJob, { type: 'snapshot-fanout' }>;
@@ -565,10 +572,24 @@ function assertFailureQuota(recorder: RunRecorder): void {
   }
 }
 
-/** Spec §7.1 step 7 — a successful snapshot/daily triggers a scoring run. */
+/**
+ * Spec §7.1 step 7 — a successful snapshot/daily requests a scoring run.
+ *
+ * L-8: the request is delayed to the end of the current ten-minute slot so a
+ * multi-batch fan-out scores once, after its whole batch window, instead of
+ * publishing a partial board from every batch. The deterministic slot job id
+ * still dedupes every completion inside one slot into a single job.
+ */
 async function enqueueScoring(deps: IngestDeps, source: Source): Promise<void> {
   if (deps.scoringQueue === undefined) return;
-  await enqueueScoringRun(deps.scoringQueue, { source, trigger: 'ingest' });
+  const at = (deps.now ?? (() => new Date()))();
+  const delayMs = delayToNextScoringSlot(at);
+  await enqueueScoringRun(deps.scoringQueue, {
+    source,
+    trigger: 'ingest',
+    slot: scoringSlot(at),
+    ...(delayMs === 0 ? {} : { delayMs }),
+  });
 }
 
 async function loadTrackedItem(
