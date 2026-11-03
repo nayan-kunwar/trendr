@@ -60,7 +60,7 @@ export function summariseHistory(
 ): HistorySummary {
   const first = points[0]?.v ?? 0;
   const last = points.at(-1)?.v ?? 0;
-  let maxDailyGain = 0;
+  let maxDailyGain: number;
   if (kind === 'daily_count') {
     maxDailyGain = points.reduce((max, point) => Math.max(max, point.v), 0);
   } else if (kind === 'cumulative') {
