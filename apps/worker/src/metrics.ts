@@ -47,6 +47,18 @@ export const scoringAnomalies = new Counter({
   registers: [registry],
 });
 
+/**
+ * `trendr_scoring_runs_total{source,outcome}` — M-3: one `compute-scores` job
+ * either ran or was skipped because another worker held the source lock. A
+ * skipped job used to look like a successful run with no `ingestion_runs` row.
+ */
+export const scoringRunsTotal = new Counter({
+  name: 'trendr_scoring_runs_total',
+  help: 'Scoring job outcomes: scored, or skipped because the source lock was held.',
+  labelNames: ['source', 'outcome'],
+  registers: [registry],
+});
+
 /** `trendr_dlq_jobs_total{queue}` — jobs parked in `dead-letter` (spec §7.7, §14.1). */
 export const dlqJobsTotal = new Counter({
   name: 'trendr_dlq_jobs_total',

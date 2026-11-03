@@ -158,7 +158,9 @@ describe('scoring queue processor', () => {
     expect(job.id).toBe('score.mcp.2026-10-18T12-00');
 
     const result = await job.waitUntilFinished(events, 30_000);
-    expect(result).toEqual({ source: 'mcp', windows: ['24h'] });
+    // M-3: the job reports whether it scored or skipped.
+    expect(result).toMatchObject({ source: 'mcp', windows: ['24h'], status: 'scored' });
+    expect(result.runId).toMatch(/^\d+$/);
 
     const run = single(
       await db

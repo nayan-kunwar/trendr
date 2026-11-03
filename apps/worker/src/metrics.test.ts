@@ -22,6 +22,7 @@ const WORKER_METRICS = [
   'trendr_scoring_duration_seconds',
   'trendr_scoring_items',
   'trendr_scoring_anomalies_total',
+  'trendr_scoring_runs_total',
   'trendr_data_freshness_seconds',
   'trendr_alerts_fired_total',
   'trendr_emails_sent_total',

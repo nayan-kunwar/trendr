@@ -51,8 +51,13 @@ export function createScoringWorker(
         ...(options.notifyQueue === undefined ? {} : { notifyQueue: options.notifyQueue }),
         ...(options.logger === undefined ? {} : { logger: options.logger }),
       };
-      await runScoring(parsed.data.source, parsed.data.windows, deps);
-      return { source: parsed.data.source, windows: parsed.data.windows };
+      const outcome = await runScoring(parsed.data.source, parsed.data.windows, deps);
+      return {
+        source: parsed.data.source,
+        windows: parsed.data.windows,
+        status: outcome.status,
+        ...(outcome.status === 'scored' ? { runId: outcome.runId.toString() } : {}),
+      };
     },
     {
       connection: options.connection,

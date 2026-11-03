@@ -19,12 +19,14 @@ import {
   items,
   scoreRunsCurrent,
   scores,
+  startRun,
+  swapCurrentRun,
   type Connection,
   type Db,
 } from '@trendr/db';
 import { seed } from '@trendr/db/seed';
 
-import { scoringItems } from '../../src/metrics.js';
+import { scoringItems, scoringRunsTotal } from '../../src/metrics.js';
 import { runScoring, type NotifyQueue } from '../../src/scoring/run-scoring.js';
 
 /**
@@ -228,13 +230,19 @@ describe('runScoring (§8.4, task 2.4)', () => {
     const lockKey = redisKeys.scoreLock('npm');
     await redis.set(lockKey, 'another-worker', 'PX', 30_000);
 
-    await runScoring('npm', ['24h'], {
+    const outcome = await runScoring('npm', ['24h'], {
       db,
       redis,
       jobId: 'int-scoring-locked',
       now: () => ANCHOR,
       notifyQueue,
     });
+    // M-3: a lock-held job reports `skipped`, not a silent success.
+    expect(outcome).toEqual({ status: 'skipped', reason: 'lock-held' });
+    const skipped = (await scoringRunsTotal.get()).values.find(
+      (value) => value.labels.source === 'npm' && value.labels.outcome === 'skipped',
+    );
+    expect(skipped?.value).toBeGreaterThanOrEqual(1);
 
     const runs = single(
       await db
@@ -246,6 +254,63 @@ describe('runScoring (§8.4, task 2.4)', () => {
     expect(await redis.get(lockKey)).toBe('another-worker');
 
     await redis.del(lockKey);
+  });
+
+  it('never moves the current-run pointer backwards (M-3)', async () => {
+    const before = single(
+      await db
+        .select()
+        .from(scoreRunsCurrent)
+        .where(and(eq(scoreRunsCurrent.source, 'github'), eq(scoreRunsCurrent.window, '7d'))),
+    );
+
+    const newerRunId = await startRun(db, {
+      source: 'github',
+      jobType: 'score',
+      jobId: 'int-scoring-newer-run',
+    });
+    const newer = new Date(before.computedAt.getTime() + 3_600_000);
+    expect(
+      await swapCurrentRun(db, {
+        source: 'github',
+        window: '7d',
+        runId: newerRunId,
+        computedAt: newer,
+      }),
+    ).toBe(true);
+
+    // A late-finishing older run must not clobber the newer pointer.
+    expect(
+      await swapCurrentRun(db, {
+        source: 'github',
+        window: '7d',
+        runId: before.runId,
+        computedAt: before.computedAt,
+      }),
+    ).toBe(false);
+    const stillNewer = single(
+      await db
+        .select()
+        .from(scoreRunsCurrent)
+        .where(and(eq(scoreRunsCurrent.source, 'github'), eq(scoreRunsCurrent.window, '7d'))),
+    );
+    expect(stillNewer.runId).toBe(newerRunId);
+
+    // An equal timestamp with a lower run id is also stale.
+    expect(
+      await swapCurrentRun(db, {
+        source: 'github',
+        window: '7d',
+        runId: before.runId,
+        computedAt: newer,
+      }),
+    ).toBe(false);
+
+    // Restore the pointer directly; the swap API is monotonic by design.
+    await db
+      .update(scoreRunsCurrent)
+      .set({ runId: before.runId, computedAt: before.computedAt })
+      .where(and(eq(scoreRunsCurrent.source, 'github'), eq(scoreRunsCurrent.window, '7d')));
   });
 
   it('fans out evaluate-alerts with the deterministic jobId', async () => {

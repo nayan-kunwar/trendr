@@ -1740,6 +1740,7 @@ Appendix B.
 | `PartitionWindowBlockedError`         | error class    | M-11    | Pre-flight failure before partition DDL                                   |
 | `trendr_partition_lead_days`          | metric         | M-11    | Partition lead in days; `PartitionLeadShort` alerts below 60              |
 | `PartitionLeadShort`                  | alert          | M-11    | Warns when the partition lead is under 60 days                            |
+| `trendr_scoring_runs_total{outcome}`  | metric         | M-3     | Scored runs vs skips caused by a held source lock                         |
 
 ## Environment quirks worth knowing
 

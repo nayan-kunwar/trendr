@@ -63,6 +63,10 @@ export interface Queues {
 export interface ScoringResult {
   source: Source;
   windows: Window[];
+  /** M-3: `skipped` means another worker held the per-source lock. */
+  status: 'scored' | 'skipped';
+  /** Present when `status` is `scored`. */
+  runId?: string;
 }
 
 export function createQueues(connection: Redis): Queues {

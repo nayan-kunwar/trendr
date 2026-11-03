@@ -35,7 +35,7 @@ import {
 } from '@trendr/db';
 import type { Logger } from '@trendr/logger';
 
-import { scoringAnomalies, scoringDuration, scoringItems } from '../metrics.js';
+import { scoringAnomalies, scoringDuration, scoringItems, scoringRunsTotal } from '../metrics.js';
 import { publishLeaderboards } from './publish-leaderboards.js';
 
 /**
@@ -46,8 +46,10 @@ import { publishLeaderboards } from './publish-leaderboards.js';
  * combined-board rebuild (§8.2 step 9) and the `evaluate-alerts` fan-out.
  */
 
-/** §8.4: `lock:score:{source}` is held for at most the length of a run. */
+/** §8.4: `lock:score:{source}` is held while a run executes. */
 const LOCK_TTL_MS = 120_000;
+/** M-3: renew well before the TTL, so a long run cannot lose the lock mid-swap. */
+const LOCK_RENEW_MS = 30_000;
 /** §8.6 burst second pass: hourly increments are loaded for the top raw candidates only. */
 const BURST_CANDIDATES = 500;
 const HOUR_MS = 3_600_000;
@@ -55,6 +57,15 @@ const HOUR_MS = 3_600_000;
 /** Released only when the value still matches, so a lost lock is never stolen (spec §8.4). */
 const RELEASE_LOCK_LUA =
   "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end";
+
+/** M-3: extend only a lock this job still owns. */
+const RENEW_LOCK_LUA =
+  "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('pexpire', KEYS[1], ARGV[2]) else return 0 end";
+
+/** M-3: what one `compute-scores` job did; a lock-held skip is not a run. */
+export type ScoringOutcome =
+  | { status: 'scored'; runId: bigint; itemsSeen: number; itemsUpserted: number }
+  | { status: 'skipped'; reason: 'lock-held' };
 
 /**
  * Structural slice of the BullMQ `notify` queue. Keeping it structural means
@@ -104,16 +115,21 @@ export async function runScoring(
   source: Source,
   windows: readonly Window[],
   deps: ScoringDeps,
-): Promise<void> {
+): Promise<ScoringOutcome> {
   const lockKey = redisKeys.scoreLock(source);
   const acquired = await deps.redis.set(lockKey, deps.jobId, 'PX', LOCK_TTL_MS, 'NX');
   if (acquired !== 'OK') {
+    scoringRunsTotal.inc({ source, outcome: 'skipped' });
     deps.logger?.info(
       { source, jobId: deps.jobId },
       'scoring run skipped: lock held by another job',
     );
-    return;
+    return { status: 'skipped', reason: 'lock-held' };
   }
+
+  // M-3: the TTL is a lease, not a hard deadline. Renew it while the run is
+  // alive so a slow board rebuild cannot let a second worker in.
+  const stopRenewal = startLockRenewal(deps.redis, lockKey, deps.jobId, deps.logger);
 
   let runId: bigint | null = null;
   let itemsSeen = 0;
@@ -152,14 +168,40 @@ export async function runScoring(
     }
 
     await finishRun(deps.db, runId, { status: 'succeeded', itemsSeen, itemsUpserted });
+    scoringRunsTotal.inc({ source, outcome: 'scored' });
+    return { status: 'scored', runId, itemsSeen, itemsUpserted };
   } catch (error: unknown) {
     if (runId !== null) {
       await finishRun(deps.db, runId, { status: 'failed', error: errorMessage(error) });
     }
     throw error;
   } finally {
+    stopRenewal();
     await deps.redis.eval(RELEASE_LOCK_LUA, 1, lockKey, deps.jobId);
   }
+}
+
+/**
+ * M-3: keep the scoring lease alive for as long as the run executes. Returns
+ * the stop function; the timer is unref'd so it never holds the process open.
+ */
+export function startLockRenewal(
+  redis: Pick<Redis, 'eval'>,
+  lockKey: string,
+  jobId: string,
+  logger?: Pick<Logger, 'warn'>,
+): () => void {
+  const timer = setInterval(() => {
+    void redis
+      .eval(RENEW_LOCK_LUA, 1, lockKey, jobId, String(LOCK_TTL_MS))
+      .catch((error: unknown) => {
+        logger?.warn({ err: error, lockKey }, 'could not renew the scoring lock');
+      });
+  }, LOCK_RENEW_MS);
+  timer.unref();
+  return () => {
+    clearInterval(timer);
+  };
 }
 
 interface WindowResult {

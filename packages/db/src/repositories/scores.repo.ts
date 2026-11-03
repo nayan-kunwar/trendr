@@ -62,15 +62,25 @@ export interface CurrentRunSwap {
   computedAt: Date;
 }
 
-/** Atomically point `score_runs_current` at the freshly finished run (spec §8.4). */
-export async function swapCurrentRun(db: DbExecutor, swap: CurrentRunSwap): Promise<void> {
-  await db
+/**
+ * Atomically point `score_runs_current` at the freshly finished run (spec §8.4).
+ *
+ * M-3: the swap is monotonic. A run that finishes late (retry, slow rebuild,
+ * out-of-order worker) must not replace a newer current run, so the upsert
+ * only applies when `(computed_at, run_id)` strictly advances. The boolean
+ * result says whether the pointer moved.
+ */
+export async function swapCurrentRun(db: DbExecutor, swap: CurrentRunSwap): Promise<boolean> {
+  const rows = await db
     .insert(scoreRunsCurrent)
     .values(swap)
     .onConflictDoUpdate({
       target: [scoreRunsCurrent.source, scoreRunsCurrent.window],
       set: { runId: swap.runId, computedAt: swap.computedAt },
-    });
+      setWhere: sql`(${scoreRunsCurrent.computedAt}, ${scoreRunsCurrent.runId}) < (${swap.computedAt}, ${swap.runId})`,
+    })
+    .returning({ runId: scoreRunsCurrent.runId });
+  return rows.length > 0;
 }
 
 /**
