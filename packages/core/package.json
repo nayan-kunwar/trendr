@@ -19,7 +19,7 @@
   },
   "devDependencies": {
     "eslint": "^9",
-    "ioredis": "^5.11.1",
+    "ioredis": "^6.0.0",
     "tsup": "^8",
     "typescript": "^5"
   },

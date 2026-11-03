@@ -28,7 +28,7 @@
   "devDependencies": {
     "@types/node": "^22",
     "eslint": "^9",
-    "ioredis": "^5.11.1",
+    "ioredis": "^6.0.0",
     "tsup": "^8",
     "tsx": "^4",
     "typescript": "^5",

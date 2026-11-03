@@ -23,7 +23,7 @@
     "@trendr/sources": "workspace:*",
     "bullmq": "^6.3.16",
     "drizzle-orm": "^0.45.4",
-    "ioredis": "^5",
+    "ioredis": "^6",
     "prom-client": "^15",
     "react": "^19.3.1"
   },
