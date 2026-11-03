@@ -408,10 +408,26 @@ restored 37 tables / 118 680 items from a 37 MB dump.
 
 1. `chore: fix the User-Agent contact URL and email log output`
 
+**Status (2026-11-03):** fixed. The default `HTTP_USER_AGENT` (and the four adapter
+record fixtures) now point at `github.com/nayan-kunwar/trendr`; the `log` email provider takes an
+`EmailLogSink` and the API/worker pass their pino logger, so its output keeps redaction and service
+fields. `packages/email/src/index.test.ts` covers both.
+
 ### Phase 9 — Documentation and final verification
 
 1. `docs: record review outcomes and naming additions`
 2. Final gate: full local matrix, Compose smoke, production compose config, `nginx -t`.
+
+**Status (2026-11-03):** documentation complete — the ledger marks all 27 findings verified, ADRs
+0022–0033 record the decisions, `SPEC_REVIEW.md` lists every new name and deviation (R-52–R-56),
+and the runbook covers backups/restore, partitions, rate limiting and the release tag. Final local
+matrix: see the line below.
+
+**Final local matrix (2026-11-03):** `pnpm lint` ✅ · `pnpm typecheck` ✅ · unit **85 files / 612
+tests** ✅ · integration **34 files / 173 tests** ✅ · Compose smoke healthy (`/healthz`, `/readyz`
+200) ✅ · `docker compose -f docker-compose.prod.yml config` with an explicit `TRENDR_TAG` ✅ ·
+`nginx -t` on the updated proxy config ✅ · backup dump verified and **restore drill passed** (37
+tables, 118 680 items) ✅ · `promtool check rules` (9 rules) ✅.
 
 ---
 
@@ -478,5 +494,5 @@ These cannot be closed in this environment and remain tracked in
 - [x] Phase 6 — M-2, M-5, M-6, M-7, L-6, L-7, L-11 fixed
 - [x] Phase 7 — M-8, M-9, M-12, L-3, L-4, L-10 fixed
 - [x] Phase 8 — L-2 fixed
-- [ ] Phase 9 — docs, ADRs and final local matrix green
+- [x] Phase 9 — docs, ADRs and final local matrix green
 - [ ] Live acceptance — deferred on infrastructure
