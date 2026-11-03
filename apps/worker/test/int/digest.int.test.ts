@@ -181,6 +181,7 @@ describe('weekly digest (task 7.4)', () => {
       window: '7d',
       runId: githubRun,
       computedAt: NOW,
+      force: true,
     });
     const arxivRun = await startRun(connection.db, {
       source: 'arxiv',
@@ -193,6 +194,7 @@ describe('weekly digest (task 7.4)', () => {
       window: '7d',
       runId: arxivRun,
       computedAt: NOW,
+      force: true,
     });
 
     const [watchlist] = await connection.db

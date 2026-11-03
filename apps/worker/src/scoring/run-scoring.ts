@@ -134,6 +134,8 @@ export async function runScoring(
   let runId: bigint | null = null;
   let itemsSeen = 0;
   let itemsUpserted = 0;
+  /** M-3: windows this run actually made current (a newer run may already own one). */
+  const currentWindows: Window[] = [];
 
   try {
     runId = await startRun(deps.db, { source, jobType: 'score', jobId: deps.jobId });
@@ -143,6 +145,16 @@ export async function runScoring(
       const result = await scoreWindow(deps, source, window, runId, t);
       itemsSeen += result.seen;
       itemsUpserted += result.inserted;
+      if (result.current) {
+        currentWindows.push(window);
+      } else {
+        // M-3: a newer run already owns the pointer. Its board is newer than
+        // ours, so publishing this run would roll the board backwards.
+        deps.logger?.warn(
+          { source, window, runId: String(runId) },
+          'scoring run finished behind a newer run; board left untouched',
+        );
+      }
     }
 
     // The combined board spans all sources, so it is rebuilt after every run
@@ -157,14 +169,17 @@ export async function runScoring(
 
     // Spec §8.4/§9.2: the source and combined boards are published only after
     // every rank_all placement is persisted; diff events follow the last swap.
-    await publishLeaderboards(deps, source, windows, runId, { computedAt: t });
+    // M-3: only windows whose swap succeeded.
+    if (currentWindows.length > 0) {
+      await publishLeaderboards(deps, source, currentWindows, runId, { computedAt: t });
 
-    if (deps.notifyQueue !== undefined) {
-      await deps.notifyQueue.add(
-        'evaluate-alerts',
-        { type: 'evaluate-alerts', scoreRunId: String(runId), source },
-        { jobId: jobId.evaluateAlerts(String(runId)) },
-      );
+      if (deps.notifyQueue !== undefined) {
+        await deps.notifyQueue.add(
+          'evaluate-alerts',
+          { type: 'evaluate-alerts', scoreRunId: String(runId), source },
+          { jobId: jobId.evaluateAlerts(String(runId)) },
+        );
+      }
     }
 
     await finishRun(deps.db, runId, { status: 'succeeded', itemsSeen, itemsUpserted });
@@ -231,6 +246,8 @@ interface WindowResult {
   seen: number;
   /** Eligible rows actually written. */
   inserted: number;
+  /** M-3: false when a newer run already owned `score_runs_current`. */
+  current: boolean;
 }
 
 async function scoreWindow(
@@ -371,13 +388,14 @@ async function scoreWindow(
   }));
 
   let inserted = 0;
+  let current = false;
   await deps.db.transaction(async (tx) => {
     inserted = await insertScores(tx, rows);
-    await swapCurrentRun(tx, { source, window, runId, computedAt: t });
+    current = await swapCurrentRun(tx, { source, window, runId, computedAt: t });
   });
 
   scoringDuration.observe({ source, window }, (Date.now() - startedAt) / 1000);
-  return { seen: cumulative.length + daily.length, inserted };
+  return { seen: cumulative.length + daily.length, inserted, current };
 }
 
 /** Rows `buildAllBoard` can rank; a subset of the current run's scores (M-3/L-9). */

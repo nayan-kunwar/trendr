@@ -830,6 +830,7 @@ describe('GET /v1/trending over real Postgres + Redis (task 3.2)', () => {
           window: '24h',
           runId: githubRun,
           computedAt: COMPUTED_AT,
+          force: true,
         });
       }
     });
@@ -862,6 +863,7 @@ describe('GET /v1/trending over real Postgres + Redis (task 3.2)', () => {
           window: '24h',
           runId: githubRun,
           computedAt: COMPUTED_AT,
+          force: true,
         });
       }
     });

@@ -347,6 +347,9 @@ item, card and board-metadata keys. L-9 bounds the all-board load to the per-sou
 `buildAllBoard`. ADR 0028. New tests: `scoring-lock.test.ts`, `run-recorder.test.ts`,
 `scoring-schedule.test.ts`, plus the extended `run-scoring`, `scoring-queue`, `ingest-processor`
 and `admin` integration suites.
+**Local gate (labelled local):** `pnpm lint`, `pnpm typecheck`, 602 unit tests (84 files), 170
+integration tests (34 files), and Compose smoke (`postgres redis migrate api worker web mcp`
+healthy, `/healthz`/`/readyz` 200).
 
 ### Phase 6 — API edge and operations (M-2, M-5, M-6, M-7, L-6, L-7, L-11)
 

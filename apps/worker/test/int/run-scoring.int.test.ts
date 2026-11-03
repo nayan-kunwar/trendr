@@ -281,7 +281,8 @@ describe('runScoring (§8.4, task 2.4)', () => {
       FROM scores s
       JOIN score_runs_current c
         ON c.source = s.source AND c.window = s.window AND c.run_id = s.run_id
-      WHERE s.window = ${window}`);
+      WHERE s.window = ${window}
+      ORDER BY s.z_score DESC, s.percentile DESC, s.final_score DESC, s.item_id`);
     const expected = buildAllBoard(
       full.rows.map((row) => ({
         itemId: BigInt(row.itemId),
@@ -294,9 +295,12 @@ describe('runScoring (§8.4, task 2.4)', () => {
     const candidates = await loadAllBoardCandidates(db, window);
     expect(candidates.length).toBeGreaterThanOrEqual(expected.length);
 
+    // Join the current pointer: older runs may still carry `rank_all` from
+    // when they were current, and readers never see those rows.
     const persisted = await db
       .select({ itemId: scores.itemId, rank: scores.rankAll })
       .from(scores)
+      .innerJoin(scoreRunsCurrent, currentRunJoin)
       .where(and(eq(scores.window, window), isNotNull(scores.rankAll)));
     expect(persisted).toHaveLength(expected.length);
     const byId = new Map(persisted.map((row) => [row.itemId.toString(), row.rank]));
@@ -305,6 +309,40 @@ describe('runScoring (§8.4, task 2.4)', () => {
         placement.rank,
       );
     }
+  });
+
+  it('leaves a newer board alone when the run cannot become current (M-3)', async () => {
+    const current = single(
+      await db
+        .select()
+        .from(scoreRunsCurrent)
+        .where(and(eq(scoreRunsCurrent.source, 'github'), eq(scoreRunsCurrent.window, '7d'))),
+    );
+    const metaBefore = await redis.hgetall(redisKeys.leaderboardMeta('github', '7d'));
+    const enqueuedBefore = enqueued.length;
+
+    // An hour earlier than the seeded run: it completes, but the monotonic
+    // swap refuses it, so it must not republish the board.
+    const outcome = await runScoring('github', ['7d'], {
+      db,
+      redis,
+      jobId: 'int-scoring-stale-run',
+      now: () => new Date(ANCHOR.getTime() - 3_600_000),
+      notifyQueue,
+    });
+    expect(outcome.status).toBe('scored');
+
+    const after = single(
+      await db
+        .select()
+        .from(scoreRunsCurrent)
+        .where(and(eq(scoreRunsCurrent.source, 'github'), eq(scoreRunsCurrent.window, '7d'))),
+    );
+    expect(after.runId).toBe(current.runId);
+    expect(await redis.hgetall(redisKeys.leaderboardMeta('github', '7d'))).toEqual(metaBefore);
+    expect(
+      enqueued.slice(enqueuedBefore).some((entry) => entry.data.type === 'evaluate-alerts'),
+    ).toBe(false);
   });
 
   it('never moves the current-run pointer backwards (M-3)', async () => {

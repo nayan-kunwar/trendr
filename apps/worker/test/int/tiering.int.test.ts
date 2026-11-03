@@ -312,7 +312,14 @@ describe('tiering (spec §7.8, task 4.5)', () => {
         rankSource: 42,
       },
     ]);
-    await swapCurrentRun(db, { source: 'github', window: '7d', runId, computedAt });
+    // M-3 makes the swap monotonic; this fixture owns the pointer it sets.
+    await swapCurrentRun(db, {
+      source: 'github',
+      window: '7d',
+      runId,
+      computedAt,
+      force: true,
+    });
 
     const job = await queues.maintenance.add(
       'retier-items',

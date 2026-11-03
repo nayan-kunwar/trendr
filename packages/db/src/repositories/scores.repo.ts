@@ -60,6 +60,11 @@ export interface CurrentRunSwap {
   window: Window;
   runId: bigint;
   computedAt: Date;
+  /**
+   * M-3: bypass the monotonic guard. Only for an explicit operator rollback or
+   * a test fixture that owns the pointer; `runScoring` never sets it.
+   */
+  force?: boolean;
 }
 
 /**
@@ -71,13 +76,18 @@ export interface CurrentRunSwap {
  * result says whether the pointer moved.
  */
 export async function swapCurrentRun(db: DbExecutor, swap: CurrentRunSwap): Promise<boolean> {
+  const { force, ...value } = swap;
   const rows = await db
     .insert(scoreRunsCurrent)
-    .values(swap)
+    .values(value)
     .onConflictDoUpdate({
       target: [scoreRunsCurrent.source, scoreRunsCurrent.window],
       set: { runId: swap.runId, computedAt: swap.computedAt },
-      setWhere: sql`(${scoreRunsCurrent.computedAt}, ${scoreRunsCurrent.runId}) < (${swap.computedAt}, ${swap.runId})`,
+      ...(force === true
+        ? {}
+        : {
+            setWhere: sql`(${scoreRunsCurrent.computedAt}, ${scoreRunsCurrent.runId}) < (${swap.computedAt}, ${swap.runId})`,
+          }),
     })
     .returning({ runId: scoreRunsCurrent.runId });
   return rows.length > 0;

@@ -54,6 +54,13 @@ inserted (they are valid data and retention prunes them); they simply never
 become current. Because `computed_at` is floored to the hour, the run id is the
 tie-breaker, and run ids are identity-increasing.
 
+A refused swap also stops the publication step: `scoreWindow` reports whether
+it became current, and `runScoring` publishes only those windows and only then
+fans out `evaluate-alerts`. Without that guard a late run would overwrite the
+newer board in Redis even though the pointer stayed put. `CurrentRunSwap.force`
+is the explicit escape hatch for an operator rollback or a fixture that owns
+the pointer; `runScoring` never sets it.
+
 `runScoring` returns a discriminated outcome — `{status:'scored', runId, …}` or
 `{status:'skipped', reason:'lock-held'}` — and the scoring job returns
 `{source, windows, status, runId?}`. A new counter
@@ -110,7 +117,8 @@ by `sources × cap` instead of the full score table.
   pexpire arguments, stop behaviour, logged renewal failure.
 - `apps/worker/test/int/run-scoring.int.test.ts`: lock-held runs return
   `skipped` and increment the counter; `swapCurrentRun` refuses older and
-  equal-timestamp-lower-id swaps.
+  equal-timestamp-lower-id swaps; a run that cannot become current leaves the
+  board metadata and the alert fan-out untouched.
 - `apps/worker/test/int/scoring-queue.int.test.ts`: the job result carries
   `status: 'scored'` and the run id.
 - `apps/worker/test/unit/scoring-schedule.test.ts` and the ingest processor
