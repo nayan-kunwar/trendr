@@ -39,6 +39,7 @@ export function registerApiKeyRoutes(
     return {
       db: app.db,
       pepper: options.pepper,
+      ...(app.hasDecorator('redis') ? { redis: app.redis } : {}),
       ...(options.now === undefined ? {} : { now: options.now }),
     };
   };

@@ -1743,6 +1743,7 @@ Appendix B.
 | `trendr_scoring_runs_total{outcome}`  | metric         | M-3     | Scored runs vs skips caused by a held source lock                         |
 | `trendr_rate_limit_degraded_total`    | metric         | L-11    | Rate-limit store failures after which the API failed open                 |
 | `admin_audit_log`                     | table          | M-6     | Durable operator mutation trail (actor, action, target, payload)          |
+| `apikey:lookup:{prefix}`              | Redis key      | M-2     | 60 s API-key row cache, invalidated on revoke                              |
 
 ## Environment quirks worth knowing
 

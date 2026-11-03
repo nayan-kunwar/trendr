@@ -70,6 +70,9 @@ export const redisKeys = {
   /** `apikey:last-used:{id}` — NX marker so `api_keys.last_used_at` writes at most once a minute (spec §10.5). */
   apiKeyLastUsed: (id: string): string => `apikey:last-used:${id}`,
 
+  /** M-2: `apikey:lookup:{prefix}` — short-lived API-key row cache (60 s), invalidated on revoke. */
+  apiKeyLookup: (prefix: string): string => `apikey:lookup:${prefix}`,
+
   /** `apirl:magic:{sha256(email)}` — per-address magic-link issuance (3/h, §10.5). */
   magicLinkBucket: (emailHash: string): string => `apirl:magic:${emailHash}`,
 

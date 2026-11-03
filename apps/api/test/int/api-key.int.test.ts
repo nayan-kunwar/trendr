@@ -9,6 +9,7 @@ import { hashApiKey, redisKeys } from '@trendr/core';
 import { apiKeys, createDb, users, type Connection } from '@trendr/db';
 
 import { buildApp } from '../../src/app.js';
+import { revokeApiKeyForCurrentUser } from '../../src/services/api-key.service.js';
 
 /**
  * Task 3.5 acceptance over real Postgres + Redis: the 61st anonymous request
@@ -39,6 +40,7 @@ const key3 = keyMaterial(3);
 let connection: Connection;
 let redis: Redis;
 let primaryKeyId = '';
+let ownerId = '';
 
 beforeAll(async () => {
   connection = createDb(DATABASE_URL, { max: 2 });
@@ -54,6 +56,7 @@ beforeAll(async () => {
   if (userId === undefined) {
     throw new Error('failed to insert int api-key user');
   }
+  ownerId = userId;
 
   const primary = await db
     .insert(apiKeys)
@@ -205,6 +208,60 @@ describe('X-API-Key auth and rate-limit tiers (task 3.5)', () => {
         });
       }
     });
+  });
+
+  it('caches prefix lookups and drops the cache on revoke (M-2)', async () => {
+    await resetRateLimitCounters();
+    const raw = `dt_live_intcache_${SECRET_SUFFIX}`;
+    const prefix = 'dt_live_intcache';
+    const [created] = await connection.db
+      .insert(apiKeys)
+      .values({
+        userId: ownerId,
+        name: 'int cache',
+        prefix,
+        keyHash: hashApiKey(PEPPER, raw),
+        scopes: ['read'],
+      })
+      .returning({ id: apiKeys.id });
+    const keyId = created?.id;
+    if (keyId === undefined) throw new Error('failed to insert cache fixture');
+    const cacheKey = redisKeys.apiKeyLookup(prefix);
+    await redis.del(cacheKey);
+
+    try {
+      await withApp(async (app) => {
+        const first = await app.inject({
+          method: 'GET',
+          url: '/healthz',
+          headers: { 'x-api-key': raw },
+        });
+        expect(first.statusCode).toBe(200);
+
+        const cached = await redis.get(cacheKey);
+        expect(cached).not.toBeNull();
+        const ttl = await redis.ttl(cacheKey);
+        expect(ttl).toBeGreaterThan(0);
+        expect(ttl).toBeLessThanOrEqual(60);
+
+        await revokeApiKeyForCurrentUser(
+          { db: connection.db, pepper: PEPPER, redis },
+          ownerId,
+          keyId,
+        );
+        expect(await redis.get(cacheKey)).toBeNull();
+
+        const afterRevoke = await app.inject({
+          method: 'GET',
+          url: '/healthz',
+          headers: { 'x-api-key': raw },
+        });
+        expect(afterRevoke.statusCode).toBe(401);
+      });
+    } finally {
+      await connection.db.delete(apiKeys).where(eq(apiKeys.id, keyId));
+      await redis.del(cacheKey);
+    }
   });
 
   it('touches last_used_at at most once per minute (Redis debounce)', async () => {

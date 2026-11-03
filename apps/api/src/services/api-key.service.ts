@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto';
 
-import { ConflictError, NotFoundError, createApiKeyMaterial } from '@trendr/core';
+import type { Redis } from 'ioredis';
+
+import { ConflictError, NotFoundError, createApiKeyMaterial, redisKeys } from '@trendr/core';
 import {
   countActiveApiKeysForUser,
   insertApiKey,
@@ -45,6 +47,8 @@ function toDto(row: ApiKeySummary): ApiKeyBody {
 export interface ApiKeyServiceDeps {
   db: Db;
   pepper: string;
+  /** M-2: invalidates the API-key lookup cache on revoke. */
+  redis?: Redis;
   now?: () => Date;
 }
 
@@ -98,4 +102,6 @@ export async function revokeApiKeyForCurrentUser(
   const now = deps.now?.() ?? new Date();
   const row = await revokeApiKey(deps.db, userId, keyId, now);
   if (row === null) throw new NotFoundError('API key not found');
+  // M-2: the authentication cache must not keep a revoked key alive.
+  await deps.redis?.del(redisKeys.apiKeyLookup(row.prefix)).catch(() => undefined);
 }

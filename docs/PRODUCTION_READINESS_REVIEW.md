@@ -58,7 +58,7 @@ gates pass; live-deployment acceptance is tracked separately in
 | ID   | Finding | Evidence | Planned remediation | Phase | Status |
 | ---- | --- | --- | --- | --- | --- |
 | M-1  | Unauthenticated trigram search cannot use its index and scans the whole `items` table per distinct query | `packages/db/src/repositories/search.repo.ts:166-194`; `items_name_trgm_idx` is on raw `display_name`, the query uses `lower(display_name)` | Functional GIN index on `lower(display_name)`; indexable `%>` predicate; confirmed with `EXPLAIN` | 4 | Verified |
-| M-2  | API-key check runs before the rate limiter, with an uncached database lookup per request | `apps/api/src/plugins/api-key.ts:72-98`; plugin order in `apps/api/src/app.ts` | Short Redis cache for key lookups with explicit invalidation; nginx `limit_req`/`limit_conn` flood guard | 6 | Planned |
+| M-2  | API-key check runs before the rate limiter, with an uncached database lookup per request | `apps/api/src/plugins/api-key.ts:72-98`; plugin order in `apps/api/src/app.ts` | Short Redis cache for key lookups with explicit invalidation; nginx `limit_req`/`limit_conn` flood guard | 6 | Verified |
 | M-3  | Scoring lock expires after 120 s with no renewal, the current-run swap is unconditional, and a skipped run reports success | `apps/worker/src/scoring/run-scoring.ts:50,109-115,310-313` | Renew the lock; monotonic swap; return an explicit `skipped` result and metric | 5 | Verified |
 | M-4  | Missing indexes on `scores(run_id)` and `alert_events(score_run_id)` make retention and FK checks scan | `packages/db/src/repositories/retention.repo.ts:39-60`; `0000_init.sql` index list | Add both indexes in one migration; `EXPLAIN` before/after | 4 | Verified |
 | M-5  | SSE connection counter leaks on crash, locking users out for up to 24 h | `apps/api/src/routes/stream.ts:27,125-142,185-196` | 90 s lease refreshed by the 25 s heartbeat; decrement-once; expiry test | 6 | Verified |
@@ -210,6 +210,7 @@ If the owner prefers editing Appendix B directly, that is a one-line process cha
 | `apirl:auth:refresh:{sha256-prefix}` | Redis key | Per-session refresh bucket (H-3) |
 | `apirl:auth:refresh:ip:{ip}` | Redis key | Coarse per-IP guard for random-cookie floods (H-3) |
 | `admin_audit_log` | table | Durable admin mutation audit (M-6) |
+| `apikey:lookup:{prefix}` | Redis key | 60 s API-key row cache, invalidated on revoke (M-2) |
 | `trendr_auth_refresh_reuse_total{outcome}` | metric | Grace vs theft-classified reuse (H-2) |
 | `trendr_rate_limit_degraded_total` | metric | Limiter fail-open visibility (L-11) |
 | `items_display_name_trgm_idx` | GIN index | Functional trigram index on `lower(display_name)` for the search fallback (M-1) |

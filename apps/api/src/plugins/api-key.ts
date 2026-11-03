@@ -1,5 +1,6 @@
 import fp from 'fastify-plugin';
 import type { Redis } from 'ioredis';
+import { z } from 'zod';
 
 import {
   UnauthorizedError,
@@ -8,7 +9,7 @@ import {
   parseApiKey,
   redisKeys,
 } from '@trendr/core';
-import { findApiKeyByPrefix, touchApiKeyLastUsed } from '@trendr/db';
+import { findApiKeyByPrefix, touchApiKeyLastUsed, type ApiKeyRecord } from '@trendr/db';
 
 declare module 'fastify' {
   interface FastifyRequest {
@@ -38,6 +39,61 @@ export interface ApiKeyPluginOptions {
 
 /** Spec §10.5: `last_used_at` is written at most once per minute. */
 export const API_KEY_DEBOUNCE_MS = 60_000;
+
+/** M-2: how long a prefix lookup may be served from Redis before the DB. */
+export const API_KEY_LOOKUP_TTL_SECONDS = 60;
+
+/**
+ * M-2: the cache payload is our own row, but it crosses a process boundary
+ * (Redis), so it is validated like any external input. `keyHash` is base64 and
+ * the timestamps are ISO strings.
+ */
+const CachedApiKeySchema = z.object({
+  id: z.string(),
+  userId: z.string(),
+  prefix: z.string(),
+  scopes: z.array(z.string()),
+  rateLimitPerMin: z.number(),
+  keyHash: z.string(),
+  revokedAt: z.string().nullable(),
+  expiresAt: z.string().nullable(),
+});
+
+function toCached(record: ApiKeyRecord): string {
+  return JSON.stringify({
+    id: record.id,
+    userId: record.userId,
+    prefix: record.prefix,
+    scopes: record.scopes,
+    rateLimitPerMin: record.rateLimitPerMin,
+    keyHash: record.keyHash.toString('base64'),
+    revokedAt: record.revokedAt?.toISOString() ?? null,
+    expiresAt: record.expiresAt?.toISOString() ?? null,
+  });
+}
+
+function fromCached(raw: string): ApiKeyRecord | undefined {
+  try {
+    const parsed = CachedApiKeySchema.safeParse(JSON.parse(raw));
+    if (!parsed.success) return undefined;
+    const row = parsed.data;
+    return {
+      id: row.id,
+      userId: row.userId,
+      prefix: row.prefix,
+      scopes: row.scopes,
+      rateLimitPerMin: row.rateLimitPerMin,
+      keyHash: Buffer.from(row.keyHash, 'base64'),
+      revokedAt: row.revokedAt === null ? null : new Date(row.revokedAt),
+      expiresAt: row.expiresAt === null ? null : new Date(row.expiresAt),
+    };
+  } catch {
+    return undefined;
+  }
+}
+
+/** Negative-cache marker: no `api_keys` row has this prefix. */
+const API_KEY_CACHE_MISS = '0';
 
 /**
  * `X-API-Key` authentication (spec §10.5, §15): shape check, unique-prefix
@@ -83,7 +139,38 @@ export const registerApiKey = fp<ApiKeyPluginOptions>(
         throw new UnauthorizedError('invalid API key');
       }
 
-      const record = await findApiKeyByPrefix(app.db, parsed.prefix);
+      // M-2: a per-request DB lookup made a flood of distinct prefixes a
+      // database amplifier. The row (or the miss) is cached for 60 s; revoke
+      // deletes the entry explicitly.
+      const cacheKey = redisKeys.apiKeyLookup(parsed.prefix);
+      let record: ApiKeyRecord | null | undefined;
+      if (redis !== undefined) {
+        try {
+          const cached = await redis.get(cacheKey);
+          if (cached === API_KEY_CACHE_MISS) {
+            record = null;
+          } else if (cached !== null) {
+            record = fromCached(cached) ?? undefined;
+          }
+        } catch (error) {
+          app.log.warn({ err: error }, 'api-key lookup cache read failed');
+        }
+      }
+      if (record === undefined) {
+        record = await findApiKeyByPrefix(app.db, parsed.prefix);
+        if (redis !== undefined) {
+          redis
+            .set(
+              cacheKey,
+              record === null ? API_KEY_CACHE_MISS : toCached(record),
+              'EX',
+              API_KEY_LOOKUP_TTL_SECONDS,
+            )
+            .catch((error: unknown) => {
+              app.log.warn({ err: error }, 'api-key lookup cache write failed');
+            });
+        }
+      }
       if (record === null) {
         throw new UnauthorizedError('invalid API key');
       }
