@@ -24,7 +24,7 @@
   "devDependencies": {
     "@types/node": "^22",
     "eslint": "^10",
-    "tsup": "^8",
+    "tsup": "^9",
     "typescript": "^5"
   }
 }
