@@ -1,7 +1,7 @@
 # Production-readiness review remediation
 
 **Date:** 2026-11-03  
-**Status:** In progress — Phase 1 (H-1) verified locally; Phases 2–9 planned  
+**Status:** In progress — Phases 1–3 (all four High findings) verified locally; Phases 4–9 planned  
 **Reviewed commit:** `2ad0396` (2026-11-02)  
 **Source:** `Trendr production-readiness review.pdf` (9 pages)  
 **Scope:** all 27 findings — 0 Critical, 4 High, 12 Medium, 11 Low.
@@ -271,6 +271,18 @@ capped in-memory counters. ADRs 0022 and 0023.
 Key changes: target-stub detection and merge; temporary-id staging for swaps; natural-key dedupe;
 per-item retry isolation with a failure threshold. ADR 0024. This is the checkpoint after the four
 High findings.
+
+**Status (2026-11-03):** fixed. H-4 reproduced locally first: B→A returned `target-exists`, the
+following upsert raised `23505` on `items_source_upstream_uq`. M-10 reproduced as a duplicate-key
+chunk failure and as a full-chunk rollback from one poison item. Local gate green —
+`pnpm lint`, `pnpm typecheck`, 595 unit tests (81 files), 158 integration tests (32 files). The
+regression suites are `packages/db/test/int/renames.int.test.ts` (rename-back with engagement and
+alias merge, two-item swap, A→B→C chain) and
+`apps/worker/test/int/upsert-isolation.int.test.ts` (duplicate natural keys, poison item isolation).
+Compose smoke also green: `postgres redis migrate api worker web mcp` came up healthy,
+`/healthz` and `/readyz` returned 200, and `scripts/auth-smoke.mjs` passed. The smoke run needed a
+host-port override because a native PostgreSQL owns 5432 on this machine; the committed compose file
+is unchanged. Live VPS acceptance is still in the deferred list.
 
 ### Phase 4 — Database, search and partitions (M-1, M-4, M-11)
 
