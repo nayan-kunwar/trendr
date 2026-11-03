@@ -121,6 +121,15 @@ function isoDay(date: Date): string {
   return date.toISOString().slice(0, 10);
 }
 
+/** GitHub error bodies are JSON, but a proxy or gateway may return text. */
+function failureMessage(body: string): string | null {
+  try {
+    return (JSON.parse(body) as { message?: string }).message ?? null;
+  } catch {
+    return null;
+  }
+}
+
 async function request(
   path: string,
   init: RequestInit,
@@ -273,12 +282,7 @@ export async function recordGitHubFixtures(): Promise<void> {
     { ...headers, accept: STAR_ACCEPT },
   );
   await writeFixture('stargazers-listing.json', listing.body, tokens);
-  let listingMessage: string | null = null;
-  try {
-    listingMessage = (JSON.parse(listing.body) as { message?: string }).message ?? null;
-  } catch {
-    listingMessage = null;
-  }
+  const listingMessage = failureMessage(listing.body);
 
   const meta = {
     recordedAt: now.toISOString(),
