@@ -24,6 +24,8 @@ declare module 'fastify' {
     observeCache: (cache: CacheKind, result: CacheResult) => void;
     /** Counter `trendr_auth_refresh_reuse_total{outcome}` (H-2). */
     observeRefreshReuse: (outcome: RefreshReuseOutcome) => void;
+    /** Counter `trendr_rate_limit_degraded_total` (L-11). */
+    observeRateLimitDegraded: () => void;
   }
 }
 
@@ -77,6 +79,17 @@ export function registerMetrics(app: FastifyInstance, options: MetricsOptions = 
   });
   app.decorate('observeRefreshReuse', (outcome: RefreshReuseOutcome) => {
     refreshReuse.inc({ outcome });
+  });
+
+  // L-11 — the limiter fails open when Redis is unavailable (spec §9.3); this
+  // counter makes the degraded window visible instead of silently unlimited.
+  const rateLimitDegraded = new Counter({
+    name: 'trendr_rate_limit_degraded_total',
+    help: 'Rate-limit store failures after which the API failed open.',
+    registers: [registry],
+  });
+  app.decorate('observeRateLimitDegraded', () => {
+    rateLimitDegraded.inc();
   });
 
   // Spec §14.1 — scrape-time pool counters; no series when the API has no DB.

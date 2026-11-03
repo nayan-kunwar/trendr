@@ -1741,6 +1741,7 @@ Appendix B.
 | `trendr_partition_lead_days`          | metric         | M-11    | Partition lead in days; `PartitionLeadShort` alerts below 60              |
 | `PartitionLeadShort`                  | alert          | M-11    | Warns when the partition lead is under 60 days                            |
 | `trendr_scoring_runs_total{outcome}`  | metric         | M-3     | Scored runs vs skips caused by a held source lock                         |
+| `trendr_rate_limit_degraded_total`    | metric         | L-11    | Rate-limit store failures after which the API failed open                 |
 
 ## Environment quirks worth knowing
 

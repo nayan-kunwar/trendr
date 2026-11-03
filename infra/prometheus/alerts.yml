@@ -49,6 +49,13 @@ groups:
         annotations:
           summary: 'snapshots_default holds {{ $value }} rows'
           description: 'Creating a partition for that range will fail (spec 6.3); run create-partitions and inspect.'
+      - alert: RateLimitDegraded
+        expr: increase(trendr_rate_limit_degraded_total[15m]) > 0
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: 'The API rate limiter is failing open'
+          description: 'Redis rate-limit commands failed in the last 15 minutes. The API keeps serving (spec 9.3) but requests are unlimited while this persists.'
       - alert: PartitionLeadShort
         expr: trendr_partition_lead_days < 60
         for: 1h

@@ -73,6 +73,49 @@ export function resolveRateLimitMax(request: FastifyRequest, anonymousMax: numbe
 }
 
 /**
+ * L-11: observe the rate-limit store's command failures. `skipOnError` keeps
+ * the API serving (spec §9.3), but the failure must be countable and logged.
+ *
+ * `@fastify/rate-limit` installs two Lua commands on the client and calls them
+ * with a node-style callback; the proxy wraps that callback so the plugin's
+ * behaviour is untouched. Every other property is forwarded (and methods keep
+ * their `this` binding, which ioredis relies on).
+ */
+export function observeRateLimitRedis<T extends object>(
+  redis: T,
+  onError: (error: unknown) => void,
+): T {
+  return new Proxy(redis, {
+    get(target, property) {
+      const value = Reflect.get(target, property, target);
+      if (typeof value !== 'function') {
+        return value;
+      }
+      const name = String(property);
+      if (name !== 'rateLimit' && name !== 'rateLimitRead') {
+        return value.bind(target) as unknown;
+      }
+      return (...args: unknown[]): unknown => {
+        const callback = args.at(-1);
+        if (typeof callback !== 'function') {
+          return (value as (...inner: unknown[]) => unknown).apply(target, args);
+        }
+        const wrapped = (error: unknown, result: unknown): void => {
+          if (error) {
+            onError(error);
+          }
+          (callback as (innerError: unknown, innerResult: unknown) => void)(error, result);
+        };
+        return (value as (...inner: unknown[]) => unknown).apply(target, [
+          ...args.slice(0, -1),
+          wrapped,
+        ]);
+      };
+    },
+  });
+}
+
+/**
  * @fastify/rate-limit with the Redis store (spec §10.5): IETF draft headers
  * (`RateLimit-Limit`/`-Remaining`/`-Reset`, `Retry-After`) and fail-open when
  * Redis is unavailable, because the API can still serve from Postgres (§9.3).
@@ -87,6 +130,15 @@ export async function registerRateLimit(
 ): Promise<void> {
   const trustProxy = options.trustProxy ?? false;
   const anonymousMax = options.max ?? ANONYMOUS_MAX;
+  const redis =
+    options.redis === undefined
+      ? undefined
+      : observeRateLimitRedis(options.redis, (error) => {
+          app.log.error({ err: error }, 'rate-limit store failed; failing open (spec §9.3)');
+          if (app.hasDecorator('observeRateLimitDegraded')) {
+            app.observeRateLimitDegraded();
+          }
+        });
   await app.register(rateLimit, {
     global: true,
     max: (request) => resolveRateLimitMax(request, anonymousMax),
@@ -96,6 +148,6 @@ export async function registerRateLimit(
     skipOnError: true,
     // Spec §9.1: `apirl:{keyId|ip}` is the inbound API rate-limit key space.
     nameSpace: API_RATE_LIMIT_KEY_PREFIX,
-    ...(options.redis ? { redis: options.redis } : {}),
+    ...(redis ? { redis } : {}),
   });
 }

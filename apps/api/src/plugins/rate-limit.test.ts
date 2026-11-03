@@ -4,7 +4,14 @@ import { describe, expect, it } from 'vitest';
 import { buildApp } from '../app.js';
 import type { AuthenticatedApiKey } from './api-key.js';
 import type { AuthenticatedUser } from './auth.js';
-import { ADMIN_MAX, USER_MAX, clientIp, rateLimitKey, resolveRateLimitMax } from './rate-limit.js';
+import {
+  ADMIN_MAX,
+  USER_MAX,
+  clientIp,
+  observeRateLimitRedis,
+  rateLimitKey,
+  resolveRateLimitMax,
+} from './rate-limit.js';
 
 function fakeRequest(
   headers: Record<string, string>,
@@ -28,6 +35,84 @@ async function withApp(
     await app.close();
   }
 }
+
+describe('rate-limit store observability (L-11)', () => {
+  it('reports store failures and keeps the plugin callback contract', async () => {
+    const failures: unknown[] = [];
+    const seen: (Error | null)[] = [];
+    const client = {
+      calls: 0,
+      rateLimit(
+        _key: string,
+        _ttl: number,
+        _max: number,
+        _a: boolean,
+        _b: boolean,
+        cb: (error: Error | null, result: unknown) => void,
+      ) {
+        this.calls += 1;
+        cb(new Error('redis down'), null);
+      },
+      other(): string {
+        return 'forwarded';
+      },
+    };
+
+    const observed = observeRateLimitRedis(client, (error) => failures.push(error));
+    await new Promise<void>((resolve) => {
+      observed.rateLimit('k', 60_000, 60, false, false, (error) => {
+        seen.push(error);
+        resolve();
+      });
+    });
+
+    expect(client.calls).toBe(1);
+    expect(failures).toHaveLength(1);
+    expect(failures[0]).toBeInstanceOf(Error);
+    expect(seen[0]).toBeInstanceOf(Error);
+    // Non-limiter members keep working and keep their `this` binding.
+    expect(observed.other()).toBe('forwarded');
+  });
+
+  it('does not report successful store calls', async () => {
+    const failures: unknown[] = [];
+    const client = {
+      rateLimit(
+        _key: string,
+        _ttl: number,
+        _max: number,
+        _a: boolean,
+        _b: boolean,
+        cb: (error: Error | null, result: unknown) => void,
+      ) {
+        cb(null, [1, 60_000]);
+      },
+    };
+    const observed = observeRateLimitRedis(client, (error) => {
+      failures.push(error);
+    });
+    await new Promise<void>((resolve) => {
+      observed.rateLimit('k', 60_000, 60, false, false, () => {
+        resolve();
+      });
+    });
+    expect(failures).toHaveLength(0);
+  });
+
+  it('exposes the degraded counter when the limiter is enabled', async () => {
+    await withApp(DEPS, async (app) => {
+      expect(app.hasDecorator('observeRateLimitDegraded')).toBe(true);
+      app.observeRateLimitDegraded();
+      const response = await app.inject({
+        method: 'GET',
+        url: '/metrics',
+        headers: { authorization: `Bearer ${DEPS.metricsToken}` },
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.body).toContain('trendr_rate_limit_degraded_total 1');
+    });
+  });
+});
 
 describe('clientIp (spec §10.5)', () => {
   it('prefers CF-Connecting-IP only behind a trusted proxy', () => {
