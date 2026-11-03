@@ -1,7 +1,12 @@
 import Fastify from 'fastify';
 import { describe, expect, it } from 'vitest';
 
-import { refreshCookieOptions, registerAuthRoutes } from './auth.js';
+import {
+  REFRESH_IP_MAX,
+  REFRESH_SESSION_MAX,
+  refreshCookieOptions,
+  registerAuthRoutes,
+} from './auth.js';
 
 describe('refresh cookie configuration', () => {
   it('uses SameSite=Lax for same-site deployments by default', () => {
@@ -27,5 +32,12 @@ describe('refresh cookie configuration', () => {
     expect(() => {
       registerAuthRoutes(app, { cookieSameSite: 'none', cookieSecure: false });
     }).toThrow('requires secure cookies');
+  });
+});
+
+describe('refresh rate limits (H-3)', () => {
+  it('keeps the strict sign-in budget but gives refresh a higher session budget', () => {
+    expect(REFRESH_SESSION_MAX).toBe(60);
+    expect(REFRESH_IP_MAX).toBe(120);
   });
 });

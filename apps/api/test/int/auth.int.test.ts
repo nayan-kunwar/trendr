@@ -10,6 +10,7 @@ import { authTokens, createDb, users, type Connection } from '@trendr/db';
 import { SmtpEmailSender } from '@trendr/email';
 
 import { buildApp } from '../../src/app.js';
+import type { AuthRoutesOptions } from '../../src/routes/auth.js';
 
 /**
  * Task 7.1 acceptance over real Postgres + Redis + Mailpit: magic links are
@@ -149,6 +150,32 @@ function refresh(
     },
     ...(remoteAddress === undefined ? {} : { remoteAddress }),
   });
+}
+
+async function withAuthApp(
+  auth: Partial<AuthRoutesOptions>,
+  run: (scoped: FastifyInstance) => Promise<void>,
+): Promise<void> {
+  const scoped = await buildApp({
+    db: connection,
+    redis,
+    jwtSecret: JWT_SECRET,
+    rateLimit: { max: 1_000 },
+    auth: {
+      emailSender: new SmtpEmailSender('Trendr <digest@localhost>', SMTP_URL),
+      webPublicUrl: 'http://localhost:3000',
+      adminEmails,
+      authRateLimitMax: 1_000,
+      cookieSecure: true,
+      ...auth,
+    },
+  });
+  try {
+    await scoped.ready();
+    await run(scoped);
+  } finally {
+    await scoped.close();
+  }
 }
 
 function problemType(response: LightMyRequestResponse): string {
@@ -294,6 +321,63 @@ describe('magic-link auth and refresh rotation (task 7.1)', () => {
     const successor = refreshCookie(winner);
     const retried = await refresh(app, successor);
     expect(retried.statusCode, retried.body).toBe(200);
+  });
+
+  it('gives refresh a separate bucket and skips anonymous refreshes (H-3)', async () => {
+    const remoteAddress = '198.51.100.201';
+    await redis.del(`apirl:auth:${remoteAddress}`);
+
+    const { cookie } = await login(newEmail('refresh-bucket'));
+    await withAuthApp(
+      { authRateLimitMax: 1, refreshRateLimitMax: 2, refreshIpRateLimitMax: 1_000 },
+      async (scoped) => {
+        // The strict sign-in bucket is max 1; refresh must not consume it.
+        const first = await refresh(scoped, cookie, remoteAddress);
+        expect(first.statusCode, first.body).toBe(200);
+
+        // The bucket is keyed by the presented cookie: replaying the rotated
+        // cookie is grace on the second hit and rate limited on the third.
+        const replay = await refresh(scoped, cookie, remoteAddress);
+        expect(replay.statusCode).toBe(401);
+        expect(problemType(replay)).toBe('https://trendr.dev/problems/refresh-rotated');
+
+        const blocked = await refresh(scoped, cookie, remoteAddress);
+        expect(blocked.statusCode).toBe(429);
+        expect(blocked.headers['content-type']).toContain('application/problem+json');
+
+        // A legitimate rotation gets a fresh bucket and still works.
+        const successor = refreshCookie(first);
+        const rotated = await refresh(scoped, successor, remoteAddress);
+        expect(rotated.statusCode, rotated.body).toBe(200);
+      },
+    );
+  });
+
+  it('lets anonymous refresh skip the buckets entirely (H-3)', async () => {
+    const remoteAddress = '198.51.100.202';
+    await withAuthApp({ refreshRateLimitMax: 1, refreshIpRateLimitMax: 1 }, async (scoped) => {
+      for (let index = 0; index < 3; index += 1) {
+        const anonymous = await refresh(scoped, undefined, remoteAddress);
+        expect(anonymous.statusCode).toBe(401);
+      }
+
+      const { cookie } = await login(newEmail('anonymous-skip'));
+      const first = await refresh(scoped, cookie, remoteAddress);
+      expect(first.statusCode, first.body).toBe(200);
+    });
+  });
+
+  it('caps random-cookie floods with a coarse per-IP refresh guard (H-3)', async () => {
+    const remoteAddress = '198.51.100.203';
+    await redis.del(`apirl:auth:refresh:ip:${remoteAddress}`);
+    await withAuthApp({ refreshRateLimitMax: 60, refreshIpRateLimitMax: 2 }, async (scoped) => {
+      for (let index = 0; index < 2; index += 1) {
+        const response = await refresh(scoped, `random-${randomUUID()}`, remoteAddress);
+        expect(response.statusCode).toBe(401);
+      }
+      const blocked = await refresh(scoped, `random-${randomUUID()}`, remoteAddress);
+      expect(blocked.statusCode).toBe(429);
+    });
   });
 
   it('patches and clears the display name for the authenticated user', async () => {

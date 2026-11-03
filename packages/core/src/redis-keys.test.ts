@@ -62,6 +62,13 @@ describe('redisKeys (spec §9.1)', () => {
     expect(redisKeys.sseConnections('key:abc')).toBe('apirl:sse:key:abc');
   });
 
+  it('builds the refresh rate-limit keys', () => {
+    expect(redisKeys.authRefreshBucket('deadbeefdeadbeef')).toBe(
+      'apirl:auth:refresh:deadbeefdeadbeef',
+    );
+    expect(redisKeys.authRefreshIpBucket('2001:db8::1')).toBe('apirl:auth:refresh:ip:2001:db8::1');
+  });
+
   it('exports the inbound rate-limit prefix and the events channel', () => {
     expect(API_RATE_LIMIT_KEY_PREFIX).toBe('apirl:');
     expect(LEADERBOARD_EVENTS_CHANNEL).toBe('events:leaderboard');

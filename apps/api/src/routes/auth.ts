@@ -9,6 +9,7 @@ import {
   UnauthorizedError,
   UnavailableError,
   hashToken,
+  redisKeys,
 } from '@trendr/core';
 import { deleteUser, findUserById, updateUserDisplayName, type UserRecord } from '@trendr/db';
 
@@ -45,6 +46,11 @@ const REFRESH_COOKIE = 'dt_refresh';
 const REFRESH_COOKIE_PATH = '/v1/auth';
 const MAGIC_LINKS_PER_EMAIL_PER_HOUR = 3;
 
+/** H-3: refresh is machine-driven, so it gets its own per-session budget. */
+export const REFRESH_SESSION_MAX = 60;
+/** H-3: coarse per-IP guard so random cookies cannot create unbounded keys. */
+export const REFRESH_IP_MAX = 120;
+
 /** SameSite mode for the refresh cookie (env: COOKIE_SAME_SITE). */
 export type RefreshCookieSameSite = 'lax' | 'strict' | 'none';
 
@@ -72,6 +78,7 @@ export function refreshCookieOptions(
 /** Per-process fallback when Redis is absent (tests/tooling). */
 const memoryMagicLinkCounters = new Map<string, { count: number; resetAt: number }>();
 const memoryAuthCounters = new Map<string, { count: number; resetAt: number }>();
+const memoryRefreshCounters = new Map<string, { count: number; resetAt: number }>();
 
 export interface AuthRoutesOptions {
   /** Omitted only by tooling builds (OpenAPI export). */
@@ -91,8 +98,12 @@ export interface AuthRoutesOptions {
    * Suffix List treats as separate sites) need `none` plus `cookieSecure`.
    */
   cookieSameSite?: RefreshCookieSameSite;
-  /** Spec §10.5 auth tier: 5 requests/min per IP across `/v1/auth/*`. */
+  /** Spec §10.5 auth tier: 5 requests/min per IP for magic-link/verify/logout. */
   authRateLimitMax?: number;
+  /** H-3: per-session refresh budget (default 60/min); override for tests. */
+  refreshRateLimitMax?: number;
+  /** H-3: coarse per-IP refresh guard (default 120/min); override for tests. */
+  refreshIpRateLimitMax?: number;
   /** Env TRUST_PROXY: use the same trusted-client-IP derivation as the global limiter. */
   trustProxy?: boolean;
   /** Injectable clock (tests). */
@@ -160,10 +171,39 @@ export function registerAuthRoutes(app: FastifyInstance, options: AuthRoutesOpti
     config: { cacheControl: CACHE_CONTROL.privateNoStore },
   };
 
-  const authRequestGuard = async (request: FastifyRequest): Promise<void> => {
+  const strictAuthGuard = async (request: FastifyRequest): Promise<void> => {
     const ip = clientIp(request, trustProxy);
     if (!(await allowAuthRequest(app, ip, options.authRateLimitMax ?? 5))) {
       throw new RateLimitedError('too many authentication requests; try again in a minute');
+    }
+  };
+
+  /**
+   * H-3: refresh keeps the cookie-authenticated request path usable on every
+   * page load. Anonymous calls (no cookie) skip the limiter entirely so every
+   * visitor does not create a key; the session hash gets 60/min and a coarse
+   * per-IP guard stops random-cookie floods before they mint more keys.
+   */
+  const refreshGuard = async (request: FastifyRequest): Promise<void> => {
+    const raw = getRefreshCookie(request);
+    if (raw === undefined) return;
+
+    const ip = clientIp(request, trustProxy);
+    const ipAllowed = await allowRefreshRequest(
+      app,
+      redisKeys.authRefreshIpBucket(ip),
+      options.refreshIpRateLimitMax ?? REFRESH_IP_MAX,
+    );
+    if (!ipAllowed) {
+      throw new RateLimitedError('too many refresh attempts; try again shortly');
+    }
+    const sessionAllowed = await allowRefreshRequest(
+      app,
+      redisKeys.authRefreshBucket(refreshSessionHash(raw)),
+      options.refreshRateLimitMax ?? REFRESH_SESSION_MAX,
+    );
+    if (!sessionAllowed) {
+      throw new RateLimitedError('too many refresh attempts; try again shortly');
     }
   };
 
@@ -173,7 +213,7 @@ export function registerAuthRoutes(app: FastifyInstance, options: AuthRoutesOpti
       config: {
         cacheControl: CACHE_CONTROL.privateNoStore,
       },
-      onRequest: authRequestGuard,
+      onRequest: strictAuthGuard,
       schema: {
         body: MagicLinkBody,
         response: { 202: AuthMessageResponse },
@@ -204,7 +244,7 @@ export function registerAuthRoutes(app: FastifyInstance, options: AuthRoutesOpti
       config: {
         cacheControl: CACHE_CONTROL.privateNoStore,
       },
-      onRequest: authRequestGuard,
+      onRequest: strictAuthGuard,
       schema: {
         body: VerifyMagicLinkBody,
         response: { 200: AuthSessionResponse },
@@ -226,7 +266,7 @@ export function registerAuthRoutes(app: FastifyInstance, options: AuthRoutesOpti
       config: {
         cacheControl: CACHE_CONTROL.privateNoStore,
       },
-      onRequest: authRequestGuard,
+      onRequest: refreshGuard,
       schema: { response: { 200: AuthSessionResponse } },
     },
     async (request, reply) => {
@@ -257,7 +297,7 @@ export function registerAuthRoutes(app: FastifyInstance, options: AuthRoutesOpti
       config: {
         cacheControl: CACHE_CONTROL.privateNoStore,
       },
-      onRequest: authRequestGuard,
+      onRequest: strictAuthGuard,
     },
     async (request, reply) => {
       await revokeRefreshSession(app.db, getRefreshCookie(request), options.now?.() ?? new Date());
@@ -359,7 +399,7 @@ async function allowMagicLink(app: FastifyInstance, email: string, now: Date): P
   return existing.count <= MAGIC_LINKS_PER_EMAIL_PER_HOUR;
 }
 
-/** Spec §10.5 auth tier: 5 requests/min per IP, shared by every `/v1/auth/*` route. */
+/** Spec §10.5 auth tier: 5 requests/min per IP for magic-link/verify/logout. */
 async function allowAuthRequest(app: FastifyInstance, ip: string, max: number): Promise<boolean> {
   if (max <= 0) return true;
   const key = `apirl:auth:${ip}`;
@@ -382,4 +422,37 @@ async function allowAuthRequest(app: FastifyInstance, ip: string, max: number): 
   }
   existing.count += 1;
   return existing.count <= max;
+}
+
+/** H-3: one fixed 60 s window per refresh bucket (session hash or IP guard). */
+async function allowRefreshRequest(
+  app: FastifyInstance,
+  key: string,
+  max: number,
+): Promise<boolean> {
+  if (max <= 0) return true;
+  const now = Date.now();
+
+  if (app.hasDecorator('redis')) {
+    try {
+      const count = await app.redis.incr(key);
+      if (count === 1) await app.redis.expire(key, 60);
+      return count <= max;
+    } catch {
+      // Degrade to the process-local counter when Redis is unavailable.
+    }
+  }
+
+  const existing = memoryRefreshCounters.get(key);
+  if (existing === undefined || existing.resetAt <= now) {
+    memoryRefreshCounters.set(key, { count: 1, resetAt: now + 60_000 });
+    return true;
+  }
+  existing.count += 1;
+  return existing.count <= max;
+}
+
+/** H-2/H-3: stable, short key for one refresh session (never the raw token). */
+function refreshSessionHash(rawToken: string): string {
+  return hashToken(rawToken).subarray(0, 8).toString('hex');
 }

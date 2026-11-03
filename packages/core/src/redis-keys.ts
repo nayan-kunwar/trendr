@@ -70,6 +70,13 @@ export const redisKeys = {
   /** `apikey:last-used:{id}` — NX marker so `api_keys.last_used_at` writes at most once a minute (spec §10.5). */
   apiKeyLastUsed: (id: string): string => `apikey:last-used:${id}`,
 
+  /** `apirl:auth:refresh:{sha256-prefix}` — per-session refresh budget (60/min, H-3). */
+  authRefreshBucket: (sessionHashPrefix: string): string =>
+    `apirl:auth:refresh:${sessionHashPrefix}`,
+
+  /** `apirl:auth:refresh:ip:{ip}` — coarse guard against random-cookie floods (H-3). */
+  authRefreshIpBucket: (ip: string): string => `apirl:auth:refresh:ip:${ip}`,
+
   /** `apirl:sse:{keyId|ip}` — concurrent SSE stream counter with INCR/DECR (spec §9.1, §10.5). */
   sseConnections: (identity: string): string => `apirl:sse:${identity}`,
 
