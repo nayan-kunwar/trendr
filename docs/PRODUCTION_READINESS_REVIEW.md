@@ -1,7 +1,7 @@
 # Production-readiness review remediation
 
 **Date:** 2026-11-03  
-**Status:** In progress — Phases 1–5 verified locally; Phases 6–9 planned  
+**Status:** In progress — Phases 1–6 verified locally; Phases 7–9 planned  
 **Reviewed commit:** `2ad0396` (2026-11-02)  
 **Source:** `Trendr production-readiness review.pdf` (9 pages)  
 **Scope:** all 27 findings — 0 Critical, 4 High, 12 Medium, 11 Low.
@@ -365,6 +365,20 @@ Key changes: Redis key cache with invalidation; nginx `limit_req`/`limit_conn`; 
 `admin_audit_log`; production guardrails and bounded TTLs; 413/415 titles; degraded-limiter metric
 and alert. ADRs 0031, 0032 and 0033.
 
+**Status (2026-11-03):** fixed. API-key prefix lookups are cached for 60 s (positive and negative)
+and invalidated on revoke; nginx applies `limit_req`/`limit_conn` to `/v1/`. SSE counters are a
+90 s lease refreshed by the heartbeat. `admin_audit_log` records every admin mutation, with the
+item patch written in the same transaction. Production config must use https, real secrets, a real
+email transport and bounded token lifetimes. 413/415 map to titled problem responses, and a
+failing rate-limit store increments `trendr_rate_limit_degraded_total` behind the
+`RateLimitDegraded` alert. ADRs 0031, 0032 and 0033. New tests: the API-key cache/revoke test, the
+SSE TTL assertion, the admin audit assertions, config guardrail cases, the 413/415 problem bodies
+and the limiter-observer unit tests.
+
+**Local gate (labelled local):** `pnpm lint`, `pnpm typecheck`, 609 unit tests (84 files), 172
+integration tests (34 files), and Compose smoke (`postgres redis migrate api worker web mcp`
+healthy, `/healthz`/`/readyz` 200, migration 0007 applied on the existing volume).
+
 ### Phase 7 — Deployment and supply chain (M-8, M-9, M-12, L-3, L-4, L-10)
 
 1. `fix(infra): require verified offsite backups`
@@ -450,7 +464,7 @@ These cannot be closed in this environment and remain tracked in
 - [x] Phase 3 — H-4, M-10 fixed; checkpoint after the Highs
 - [x] Phase 4 — M-1, M-4, M-11 fixed
 - [x] Phase 5 — M-3, L-5, L-8, L-9 fixed
-- [ ] Phase 6 — M-2, M-5, M-6, M-7, L-6, L-7, L-11 fixed
+- [x] Phase 6 — M-2, M-5, M-6, M-7, L-6, L-7, L-11 fixed
 - [ ] Phase 7 — M-8, M-9, M-12, L-3, L-4, L-10 fixed
 - [ ] Phase 8 — L-2 fixed
 - [ ] Phase 9 — docs, ADRs and final local matrix green
