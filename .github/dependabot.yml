@@ -4,23 +4,24 @@ updates:
     directory: '/'
     schedule:
       interval: weekly
-    # Majors get their own PR so a TypeScript/ESLint/Next jump can be reviewed
-    # and tested on its own (they have repeatedly broken the toolchain when
-    # bundled with fifteen unrelated updates).
     open-pull-requests-limit: 10
     groups:
+      # Minor and patch updates arrive grouped; they are version bumps.
       production-minor:
         dependency-type: production
         update-types: [minor, patch]
-      production-major:
-        dependency-type: production
-        update-types: [major]
       development-minor:
         dependency-type: development
         update-types: [minor, patch]
-      development-major:
-        dependency-type: development
+      # Production majors are rare enough that one grouped PR is a readable
+      # unit (the ioredis 6 + Next 16 pair landed as a single migration).
+      production-major:
+        dependency-type: production
         update-types: [major]
+      # No development-major group on purpose: dev majors are migrations, not
+      # version bumps. A twelve-package group bundled TypeScript 7 (which
+      # typescript-eslint rejects) with six unrelated upgrades and produced a
+      # failure with no attributable cause. See docs/TOOLCHAIN_UPGRADES.md.
     ignore:
       # The runtime is Node 22; @types/node majors track newer Node lines and
       # would let the code compile against APIs the runtime does not have.
