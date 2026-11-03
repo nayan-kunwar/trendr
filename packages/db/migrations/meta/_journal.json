@@ -36,6 +36,13 @@
       "when": 1793679180639,
       "tag": "0004_display_name_trgm",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1793679304911,
+      "tag": "0005_retention_fk_indexes",
+      "breakpoints": true
     }
   ]
 }

@@ -125,6 +125,9 @@ export const alertEvents = pgTable(
     index('alert_events_pending_idx')
       .on(t.deliveryStatus)
       .where(sql`${t.deliveryStatus} = 'pending'`),
+    // M-4: retention deletes `ingestion_runs` and the FK on `score_run_id`
+    // otherwise scans `alert_events` per deleted run.
+    index('alert_events_score_run_idx').on(t.scoreRunId),
   ],
 );
 

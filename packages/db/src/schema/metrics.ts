@@ -67,6 +67,9 @@ export const scores = pgTable(
     primaryKey({ columns: [t.itemId, t.window, t.runId] }),
     index('scores_board_idx').on(t.source, t.window, t.runId, t.finalScore.desc()),
     index('scores_item_time_idx').on(t.itemId, t.window, t.computedAt.desc()),
+    // M-4: retention deletes runs and Postgres checks `scores.run_id` on every
+    // `ingestion_runs` delete; without this the FK check scans the table.
+    index('scores_run_idx').on(t.runId),
   ],
 );
 
