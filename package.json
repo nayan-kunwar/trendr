@@ -28,7 +28,7 @@
   },
   "devDependencies": {
     "@commitlint/cli": "^19",
-    "@commitlint/config-conventional": "^19",
+    "@commitlint/config-conventional": "^21",
     "@eslint/js": "^10",
     "@testcontainers/postgresql": "^12.2.1",
     "@testcontainers/redis": "^12.2.1",
