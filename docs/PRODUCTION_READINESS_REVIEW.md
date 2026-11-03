@@ -1,7 +1,7 @@
 # Production-readiness review remediation
 
 **Date:** 2026-11-03  
-**Status:** In progress — Phases 1–4 verified locally; Phases 5–9 planned  
+**Status:** In progress — Phases 1–5 verified locally; Phases 6–9 planned  
 **Reviewed commit:** `2ad0396` (2026-11-02)  
 **Source:** `Trendr production-readiness review.pdf` (9 pages)  
 **Scope:** all 27 findings — 0 Critical, 4 High, 12 Medium, 11 Low.
@@ -82,7 +82,7 @@ gates pass; live-deployment acceptance is tracked separately in
 | L-6  | No bounds on token lifetimes | `packages/config/src/env.ts:28-29` | Bound access-token seconds and refresh days | 6 | Planned |
 | L-7  | RFC 7807 titles for 413 and 415 fall back to a generic value | `apps/api/src/plugins/errors.ts` | Add both titles and problem types; inject tests | 6 | Planned |
 | L-8  | Scoring runs after every batch, so boards can reflect partial data; admin edits do not refresh leaderboards | `apps/worker/src/processors/ingest.processor.ts:564-568`; admin item patch | Delay ingest-triggered scoring to the batch window; keep admin triggers immediate; invalidate caches on edits | 5 | Verified |
-| L-9  | The all-board rebuild loads every current score row into memory | `apps/worker/src/scoring/run-scoring.ts:326-385` | Top-K-per-source window query, then the existing `buildAllBoard` | 5 | Planned |
+| L-9  | The all-board rebuild loads every current score row into memory | `apps/worker/src/scoring/run-scoring.ts:326-385` | Top-K-per-source window query, then the existing `buildAllBoard` | 5 | Verified |
 | L-10 | Unbounded growth: `daily_metrics`, failed-job records and topic recompute cost | `packages/core/src/queues.ts:151-156`; `render.yaml:77` | `daily_metrics` 400-day prune (spec §6.5), bounded `removeOnFail`, measure topic recompute | 7 | Planned |
 | L-11 | Global rate limiter fails open when Redis is unavailable | `apps/api/src/plugins/rate-limit.ts:82-92` (`skipOnError`) | Keep the spec's fail-open behavior but add a metric, error log and alert | 6 | Planned |
 
@@ -338,6 +338,16 @@ Key changes: 30 s lock renewal; conditional monotonic swap; explicit `skipped` r
 errors logged with the original; slot-delayed ingest scoring plus immediate admin trigger; top-K
 per source load before `buildAllBoard`. ADR 0028.
 
+**Status (2026-11-03):** fixed. M-3 renews the 120 s source lease every 30 s and makes
+`swapCurrentRun` advance only on `(computed_at, run_id)`; a lock-held job now returns
+`{status: 'skipped'}` and increments `trendr_scoring_runs_total`. L-5 keeps `RunRecorder.finish`
+retryable and logs bookkeeping failures next to the original error without masking it. L-8 delays
+ingest-triggered scoring to the next ten-minute slot and makes admin item patches invalidate the
+item, card and board-metadata keys. L-9 bounds the all-board load to the per-source cap before
+`buildAllBoard`. ADR 0028. New tests: `scoring-lock.test.ts`, `run-recorder.test.ts`,
+`scoring-schedule.test.ts`, plus the extended `run-scoring`, `scoring-queue`, `ingest-processor`
+and `admin` integration suites.
+
 ### Phase 6 — API edge and operations (M-2, M-5, M-6, M-7, L-6, L-7, L-11)
 
 1. `perf(api): cache API-key lookups and add an edge flood guard`
@@ -435,7 +445,7 @@ These cannot be closed in this environment and remain tracked in
 - [x] Phase 2 — H-2, H-3, L-1 fixed
 - [x] Phase 3 — H-4, M-10 fixed; checkpoint after the Highs
 - [x] Phase 4 — M-1, M-4, M-11 fixed
-- [ ] Phase 5 — M-3, L-5, L-8, L-9 fixed
+- [x] Phase 5 — M-3, L-5, L-8, L-9 fixed
 - [ ] Phase 6 — M-2, M-5, M-6, M-7, L-6, L-7, L-11 fixed
 - [ ] Phase 7 — M-8, M-9, M-12, L-3, L-4, L-10 fixed
 - [ ] Phase 8 — L-2 fixed

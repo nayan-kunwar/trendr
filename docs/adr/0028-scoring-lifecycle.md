@@ -118,4 +118,7 @@ by `sources × cap` instead of the full score table.
   carries it.
 - `apps/api/test/int/admin.int.test.ts`: a patch clears the item, card and
   board-metadata keys.
+- `apps/worker/test/int/run-scoring.int.test.ts`: the bounded candidate load
+  never exceeds `sources × cap`, and the persisted `rank_all` board equals a
+  full in-memory `buildAllBoard` rebuild.
 - `apps/worker/test/unit/run-recorder.test.ts`: a failed close stays retryable, `failRun` retries once, logs the original error and never throws.

@@ -380,6 +380,61 @@ async function scoreWindow(
   return { seen: cumulative.length + daily.length, inserted };
 }
 
+/** Rows `buildAllBoard` can rank; a subset of the current run's scores (M-3/L-9). */
+export interface AllBoardCandidate {
+  itemId: bigint;
+  source: Source;
+  zScore: number;
+  percentile: number;
+  finalScore: number;
+}
+
+/**
+ * L-9: load only the rows that can place on the combined board. The per-source
+ * cap is `max(1, floor(maxShare × topN))`, so a source's rows beyond that rank
+ * can never be placed. Ordering matches `buildAllBoard`'s sort, with `item_id`
+ * as a deterministic tie-break.
+ */
+export async function loadAllBoardCandidates(
+  db: DbExecutor,
+  window: Window,
+  options: { topN?: number; maxShare?: number } = {},
+): Promise<AllBoardCandidate[]> {
+  const topN = options.topN ?? ALL_BOARD_TOP_N;
+  const maxShare = options.maxShare ?? ALL_BOARD_MAX_SHARE;
+  const perSourceCap = Math.max(1, Math.floor(maxShare * topN));
+
+  const result = await db.execute<{
+    itemId: string;
+    source: Source;
+    zScore: number;
+    percentile: number;
+    finalScore: number;
+  }>(sql`
+    SELECT ranked."itemId", ranked.source, ranked."zScore", ranked.percentile, ranked."finalScore"
+    FROM (
+      SELECT s.item_id::text AS "itemId", s.source AS source, s.z_score AS "zScore",
+             s.percentile AS percentile, s.final_score AS "finalScore",
+             row_number() OVER (
+               PARTITION BY s.source
+               ORDER BY s.z_score DESC, s.percentile DESC, s.final_score DESC, s.item_id
+             ) AS rn
+      FROM scores s
+      JOIN score_runs_current c
+        ON c.source = s.source AND c.window = s.window AND c.run_id = s.run_id
+      WHERE s.window = ${window}
+    ) ranked
+    WHERE ranked.rn <= ${perSourceCap}`);
+
+  return result.rows.map((row) => ({
+    itemId: BigInt(row.itemId),
+    source: row.source,
+    zScore: row.zScore,
+    percentile: row.percentile,
+    finalScore: row.finalScore,
+  }));
+}
+
 /**
  * Spec §8.2 step 9 — rank the combined board across the current runs of every
  * source for one window and persist the placements as `scores.rank_all`.
@@ -392,30 +447,12 @@ export async function rebuildAllBoard(
   window: Window,
   options: { topN?: number; maxShare?: number } = {},
 ): Promise<number> {
-  const result = await db.execute<{
-    itemId: string;
-    source: Source;
-    zScore: number;
-    percentile: number;
-    finalScore: number;
-  }>(sql`
-    SELECT s.item_id::text AS "itemId", s.source AS source, s.z_score AS "zScore",
-           s.percentile AS percentile, s.final_score AS "finalScore"
-    FROM scores s
-    JOIN score_runs_current c
-      ON c.source = s.source AND c.window = s.window AND c.run_id = s.run_id
-    WHERE s.window = ${window}`);
-
-  const placements = buildAllBoard(
-    result.rows.map((row) => ({
-      itemId: BigInt(row.itemId),
-      source: row.source,
-      zScore: row.zScore,
-      percentile: row.percentile,
-      finalScore: row.finalScore,
-    })),
-    { topN: options.topN ?? ALL_BOARD_TOP_N, maxShare: options.maxShare ?? ALL_BOARD_MAX_SHARE },
-  );
+  const topN = options.topN ?? ALL_BOARD_TOP_N;
+  const maxShare = options.maxShare ?? ALL_BOARD_MAX_SHARE;
+  const placements = buildAllBoard(await loadAllBoardCandidates(db, window, { topN, maxShare }), {
+    topN,
+    maxShare,
+  });
 
   await db.transaction(async (tx) => {
     await tx.execute(sql`

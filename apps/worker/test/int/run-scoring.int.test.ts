@@ -1,4 +1,4 @@
-import { and, count, countDistinct, eq, max, min, sql } from 'drizzle-orm';
+import { and, count, countDistinct, eq, isNotNull, max, min, sql } from 'drizzle-orm';
 import { Redis } from 'ioredis';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
@@ -7,6 +7,7 @@ import {
   ALL_BOARD_TOP_N,
   SOURCES,
   WINDOWS,
+  buildAllBoard,
   jobId,
   redisKeys,
   type NotifyJob,
@@ -27,7 +28,11 @@ import {
 import { seed } from '@trendr/db/seed';
 
 import { scoringItems, scoringRunsTotal } from '../../src/metrics.js';
-import { runScoring, type NotifyQueue } from '../../src/scoring/run-scoring.js';
+import {
+  loadAllBoardCandidates,
+  runScoring,
+  type NotifyQueue,
+} from '../../src/scoring/run-scoring.js';
 
 /**
  * Task 2.4 acceptance (spec §18): a scoring run over the seeded database
@@ -254,6 +259,52 @@ describe('runScoring (§8.4, task 2.4)', () => {
     expect(await redis.get(lockKey)).toBe('another-worker');
 
     await redis.del(lockKey);
+  });
+
+  it('loads only the rows that can place on the combined board (L-9)', async () => {
+    const window = '7d';
+
+    // The bound: never more than the per-source cap per source.
+    const bounded = await loadAllBoardCandidates(db, window, { topN: 4, maxShare: 0.5 });
+    expect(bounded.length).toBeLessThanOrEqual(SOURCES.length * 2);
+
+    // Equivalence: the persisted board matches a full in-memory rebuild.
+    const full = await db.execute<{
+      itemId: string;
+      source: Source;
+      zScore: number;
+      percentile: number;
+      finalScore: number;
+    }>(sql`
+      SELECT s.item_id::text AS "itemId", s.source AS source, s.z_score AS "zScore",
+             s.percentile AS percentile, s.final_score AS "finalScore"
+      FROM scores s
+      JOIN score_runs_current c
+        ON c.source = s.source AND c.window = s.window AND c.run_id = s.run_id
+      WHERE s.window = ${window}`);
+    const expected = buildAllBoard(
+      full.rows.map((row) => ({
+        itemId: BigInt(row.itemId),
+        source: row.source,
+        zScore: row.zScore,
+        percentile: row.percentile,
+        finalScore: row.finalScore,
+      })),
+    );
+    const candidates = await loadAllBoardCandidates(db, window);
+    expect(candidates.length).toBeGreaterThanOrEqual(expected.length);
+
+    const persisted = await db
+      .select({ itemId: scores.itemId, rank: scores.rankAll })
+      .from(scores)
+      .where(and(eq(scores.window, window), isNotNull(scores.rankAll)));
+    expect(persisted).toHaveLength(expected.length);
+    const byId = new Map(persisted.map((row) => [row.itemId.toString(), row.rank]));
+    for (const placement of expected) {
+      expect(byId.get(placement.itemId.toString()), `rank for ${placement.itemId}`).toBe(
+        placement.rank,
+      );
+    }
   });
 
   it('never moves the current-run pointer backwards (M-3)', async () => {
