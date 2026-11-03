@@ -98,26 +98,27 @@ policy and incident checklists — live in the [runbook](./docs/runbook.md).
 
 Key variables — the full annotated list is in [`.env.example`](./.env.example).
 
-| Variable                        | Default                           | Purpose                                      |
-| ------------------------------- | --------------------------------- | -------------------------------------------- |
-| `NODE_ENV` / `LOG_LEVEL`        | `development` / `info`            | Runtime mode and pino level                  |
-| `DATABASE_URL`                  | `…localhost:5432/trendr`          | Postgres connection (compose overrides host) |
-| `REDIS_URL`                     | `redis://localhost:6379`          | Cache, queue and rate-limit store            |
-| `API_PORT`                      | `4000`                            | Fastify listen port                          |
-| `CORS_ORIGINS`                  | `http://localhost:3000`           | Allowed browser origins                      |
-| `JWT_SECRET` / `API_KEY_PEPPER` | `change-me…`                      | Auth signing / key hashing (replace in prod) |
-| `UNSUBSCRIBE_SECRET`            | `change-me…`                      | HMAC key for alert/digest unsubscribe links  |
-| `METRICS_TOKEN`                 | `change-me-metrics-token`         | Bearer token for `/metrics`                  |
-| `WORKER_ROLES`                  | `scheduler,ingest,scoring,notify` | Comma-separated worker roles                 |
-| `WORKER_METRICS_PORT`           | `9464`                            | Worker health/metrics port (never published) |
-| `SCHEDULER_ENABLED`             | `true`                            | Enables BullMQ job schedulers                |
-| `GITHUB_TOKENS` / `HF_TOKEN`    | empty                             | Upstream credentials (worker only)           |
-| `EMAIL_PROVIDER` / `SMTP_URL`   | `smtp` / `…localhost:1025`        | Email delivery (Mailpit locally)             |
-| `MCP_TRANSPORT` / `MCP_PORT`    | `http` / `4100`                   | MCP server mode and port                     |
-| `MCP_API_KEY`                   | empty                             | Read-only API key used by MCP tool calls     |
-| `MCP_HTTP_AUTH_TOKENS`          | empty                             | Comma-separated bearer tokens for `/mcp`     |
-| `API_INTERNAL_URL`              | `http://api:4000`                 | API base URL used by the MCP server          |
-| `NEXT_PUBLIC_API_URL`           | `http://localhost:4000`           | Browser-facing API base (web image only)     |
+| Variable                                 | Default                           | Purpose                                                          |
+| ---------------------------------------- | --------------------------------- | ---------------------------------------------------------------- |
+| `NODE_ENV` / `LOG_LEVEL`                 | `development` / `info`            | Runtime mode and pino level                                      |
+| `DATABASE_URL`                           | `…localhost:5432/trendr`          | Postgres connection (compose overrides host)                     |
+| `REDIS_URL`                              | `redis://localhost:6379`          | Cache, queue and rate-limit store                                |
+| `API_PORT`                               | `4000`                            | Fastify listen port                                              |
+| `CORS_ORIGINS`                           | `http://localhost:3000`           | Allowed browser origins                                          |
+| `TRUST_PROXY` / `TRUST_CF_CONNECTING_IP` | `false` / `false`                 | Trust the platform proxy / nginx's `CF-Connecting-IP` (VPS only) |
+| `JWT_SECRET` / `API_KEY_PEPPER`          | `change-me…`                      | Auth signing / key hashing (replace in prod)                     |
+| `UNSUBSCRIBE_SECRET`                     | `change-me…`                      | HMAC key for alert/digest unsubscribe links                      |
+| `METRICS_TOKEN`                          | `change-me-metrics-token`         | Bearer token for `/metrics`                                      |
+| `WORKER_ROLES`                           | `scheduler,ingest,scoring,notify` | Comma-separated worker roles                                     |
+| `WORKER_METRICS_PORT`                    | `9464`                            | Worker health/metrics port (never published)                     |
+| `SCHEDULER_ENABLED`                      | `true`                            | Enables BullMQ job schedulers                                    |
+| `GITHUB_TOKENS` / `HF_TOKEN`             | empty                             | Upstream credentials (worker only)                               |
+| `EMAIL_PROVIDER` / `SMTP_URL`            | `smtp` / `…localhost:1025`        | Email delivery (Mailpit locally)                                 |
+| `MCP_TRANSPORT` / `MCP_PORT`             | `http` / `4100`                   | MCP server mode and port                                         |
+| `MCP_API_KEY`                            | empty                             | Read-only API key used by MCP tool calls                         |
+| `MCP_HTTP_AUTH_TOKENS`                   | empty                             | Comma-separated bearer tokens for `/mcp`                         |
+| `API_INTERNAL_URL`                       | `http://api:4000`                 | API base URL used by the MCP server                              |
+| `NEXT_PUBLIC_API_URL`                    | `http://localhost:4000`           | Browser-facing API base (web image only)                         |
 
 ## API examples
 

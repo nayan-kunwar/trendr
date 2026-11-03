@@ -1660,7 +1660,7 @@ be re-checked later. Decisions with alternatives get an ADR in [`docs/adr/`](./a
 | Render web | 512 MB, 750 instance-hours/workspace/month, 5 GB bandwidth, 500 pipeline minutes, 15-minute idle spin-down, no private inbound | Demo only; the Blueprint keeps web and MCP free and accepts cold starts |
 | Render Postgres | 1 GB, one per workspace, expires 30 days after creation (14-day grace), no backups/pooling | Not durable; the Blueprint uses paid `0.5c-1g` with a 15 GB disk |
 | Render Key Value | 25 MB, one per workspace, in-memory, 50 connections, no persistence | Cannot hold BullMQ jobs across a restart; paid `256mb` with `noeviction` + `journal-snapshot` |
-| Render worker | None | Scheduler/ingest require the paid `0.5c-512mb` minimum |
+| Render worker | None | Scheduler/ingest require a paid plan; M-12 runs it on `1c-2g` |
 | Neon Postgres | 1 GB/project, 20 GB/account, 100 CU-hours/project, 5 GB egress, 5-minute scale-to-zero | The 0.5 GB assumption is conservative, but `daily_metrics` retention is missing (below) |
 | Upstash Redis | 250 MB, 500K commands/month, 10 GB bandwidth | BullMQ polling/blocking burns the command quota; cache-only |
 | Resend | 3,000 emails/month, 100/day | Sufficient for magic links and a small digest list; the sender domain must be verified |

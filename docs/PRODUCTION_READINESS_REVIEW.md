@@ -1,7 +1,7 @@
 # Production-readiness review remediation
 
 **Date:** 2026-11-03  
-**Status:** In progress — Phases 1–6 verified locally; Phases 7–9 planned  
+**Status:** In progress — Phases 1–7 verified locally; Phases 8–9 planned  
 **Reviewed commit:** `2ad0396` (2026-11-02)  
 **Source:** `Trendr production-readiness review.pdf` (9 pages)  
 **Scope:** all 27 findings — 0 Critical, 4 High, 12 Medium, 11 Low.
@@ -393,6 +393,17 @@ stale-backup alert; reusable CI prerequisite; SHA-pinned actions; SBOM/Trivy/cos
 `TRENDR_TAG`; Render memory/health/shutdown settings; advisory-lock key cap; 400-day
 `daily_metrics` prune and bounded `removeOnFail`. ADRs 0027, 0029 and 0030.
 
+**Status (2026-11-03):** fixed. Backups now require an age recipient and S3 target unless
+`REQUIRE_OFFSITE=0`, verify every dump with `pg_restore --list`, and publish a last-success metric
+for `BackupStale`; `restore-drill.sh` restores the newest archive into a scratch database. Releases
+call the full CI workflow as a gate, pin every action by SHA, attach SBOM/provenance, fail on
+HIGH/CRITICAL Trivy findings and sign with keyless cosign. Base images are digest-pinned, node
+services drop all capabilities, and the prod compose file requires `TRENDR_TAG`. Render runs
+`1c-2g` with larger heaps/shutdown delays, and `CF-Connecting-IP` is only trusted behind the VPS
+nginx (`TRUST_CF_CONNECTING_IP`). API-key creation is serialized per user, and `daily_metrics` is
+pruned at 400 days with bounded failed-job history. ADRs 0027, 0029 and 0030. The local drill
+restored 37 tables / 118 680 items from a 37 MB dump.
+
 ### Phase 8 — Hygiene (L-2)
 
 1. `chore: fix the User-Agent contact URL and email log output`
@@ -465,7 +476,7 @@ These cannot be closed in this environment and remain tracked in
 - [x] Phase 4 — M-1, M-4, M-11 fixed
 - [x] Phase 5 — M-3, L-5, L-8, L-9 fixed
 - [x] Phase 6 — M-2, M-5, M-6, M-7, L-6, L-7, L-11 fixed
-- [ ] Phase 7 — M-8, M-9, M-12, L-3, L-4, L-10 fixed
+- [x] Phase 7 — M-8, M-9, M-12, L-3, L-4, L-10 fixed
 - [ ] Phase 8 — L-2 fixed
 - [ ] Phase 9 — docs, ADRs and final local matrix green
 - [ ] Live acceptance — deferred on infrastructure
