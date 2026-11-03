@@ -72,6 +72,7 @@ sum by (cache) (rate(trendr_cache_requests_total{result="hit"}[15m]))
   / clamp_min(sum by (cache) (rate(trendr_cache_requests_total[15m])), 1e-9)
 time() < trendr_source_token_expires_timestamp_seconds
 max(trendr_snapshots_default_rows)
+max(trendr_partition_lead_days)
 ```
 
 Worker metrics are scraped from a separate registry; use the Prometheus
@@ -82,7 +83,8 @@ example `trendr_db_pool_connections`).
 
 All jobs are idempotent. The CLI enqueues the real BullMQ job onto the
 `maintenance` queue and waits for completion, so the **running worker** executes
-it and updates worker gauges (especially `trendr_snapshots_default_rows`).
+it and updates worker gauges (especially `trendr_snapshots_default_rows` and
+`trendr_partition_lead_days`).
 
 ```bash
 # Build once (or rebuild after a deploy).
@@ -180,12 +182,19 @@ LEFT JOIN ingestion_runs r ON r.id = s.run_id
 WHERE r.id IS NULL;
 ```
 
-### Partition guard (ISS-7)
+### Partition guard (ISS-7, M-11)
 
 `snapshots_default` must stay empty. A non-zero
 `trendr_snapshots_default_rows` means a date range was written before its
-monthly partition existed, and `CREATE TABLE ... PARTITION OF` for that range
-will fail. Run `create-partitions`; if the gauge stays non-zero, inspect:
+monthly partition existed. `create-partitions` provisions twelve months ahead
+and stores the remaining lead in `trendr_partition_lead_days`; the
+`PartitionLeadShort` alert fires below 60 days, long before inserts can reach
+the default partition.
+
+Since M-11 the job pre-flights the default partition: if any row inside the
+requested window is sitting in `snapshots_default`, it fails with
+`PartitionWindowBlockedError` before trying any DDL. Run `create-partitions`;
+if the gauge stays non-zero, inspect:
 
 ```sql
 SELECT min(captured_at), max(captured_at), count(*)

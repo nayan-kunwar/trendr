@@ -1,7 +1,7 @@
 # Production-readiness review remediation
 
 **Date:** 2026-11-03  
-**Status:** In progress — Phases 1–3 (all four High findings) verified locally; Phases 4–9 planned  
+**Status:** In progress — Phases 1–4 verified locally; Phases 5–9 planned  
 **Reviewed commit:** `2ad0396` (2026-11-02)  
 **Source:** `Trendr production-readiness review.pdf` (9 pages)  
 **Scope:** all 27 findings — 0 Critical, 4 High, 12 Medium, 11 Low.
@@ -67,7 +67,7 @@ gates pass; live-deployment acceptance is tracked separately in
 | M-8  | Backup and disaster-recovery posture is weak for a single-VPS deployment | `infra/scripts/backup.sh:54-78` | Require offsite + encryption in production; verify the dump; add a restore drill and stale-backup alert | 7 | Planned |
 | M-9  | Release pipeline is not gated on CI and ships unpinned, unsigned images | `.github/workflows/publish.yml`; `docker-compose.prod.yml:84` (`:latest` fallback) | Reusable CI prerequisite, SHA-pinned actions, SBOM/Trivy/cosign, explicit `TRENDR_TAG` | 7 | Planned |
 | M-10 | One chunk is one transaction with no in-chunk de-duplication or per-item isolation | `apps/worker/src/ingestion/upsert.ts:63-122` | Dedupe by natural key; per-item retry isolation on chunk failure | 3 | Verified |
-| M-11 | Partition maintenance only creates the current month plus three, risking a blocked create when data lands in the default partition | `apps/worker/src/processors/maintenance.processor.ts:119-130` | Create 12 months ahead; guard the default partition; alert on short lead time | 4 | Planned |
+| M-11 | Partition maintenance only creates the current month plus three, risking a blocked create when data lands in the default partition | `apps/worker/src/processors/maintenance.processor.ts:119-130` | Create 12 months ahead; guard the default partition; alert on short lead time | 4 | Verified |
 | M-12 | Render blueprint: proxy trust unverified and memory headroom thin | `render.yaml:53-54` | Verify Render's edge behavior against its docs; keep `TRUST_PROXY` only if proxy-only; raise memory and shutdown settings | 7 | Planned |
 
 ### Low
@@ -212,7 +212,14 @@ If the owner prefers editing Appendix B directly, that is a one-line process cha
 | `admin_audit_log` | table | Durable admin mutation audit (M-6) |
 | `trendr_auth_refresh_reuse_total{outcome}` | metric | Grace vs theft-classified reuse (H-2) |
 | `trendr_rate_limit_degraded_total` | metric | Limiter fail-open visibility (L-11) |
-| `trendr_partition_lead_days` | gauge | Months of partitions created ahead (M-11) |
+| `items_display_name_trgm_idx` | GIN index | Functional trigram index on `lower(display_name)` for the search fallback (M-1) |
+| `TRIGRAM_WORD_SIMILARITY_THRESHOLD` | constant | 0.15 word-similarity floor, scoped to the fallback transaction (M-1) |
+| `scores_run_idx`, `alert_events_score_run_idx` | btree indexes | Retention `NOT EXISTS` scans and FK checks (M-4) |
+| `snapshot_partition_lead_days()` | SQL function | Days until the newest monthly partition ends (M-11) |
+| `snapshot_partition_window_rows()` | SQL function | Default-partition rows blocking a creation window (M-11) |
+| `PartitionWindowBlockedError` | error class | Pre-flight refusal before partition DDL (M-11) |
+| `trendr_partition_lead_days` | gauge | Days of monthly partitions provisioned ahead (M-11) |
+| `PartitionLeadShort` | alert | Partition lead below 60 days (M-11) |
 | `trendr.hasSession` | localStorage key | Non-sensitive web session hint (H-3); never a credential |
 
 ## Decisions to record as ADRs
@@ -222,13 +229,15 @@ If the owner prefers editing Appendix B directly, that is a one-line process cha
 | 0022 | Refresh reuse grace | 15 s benign 401, no revoke/clear inside the window | 2 |
 | 0023 | Refresh rate-limit bucket | Separate session-hash bucket plus IP guard | 2 |
 | 0024 | Rename-stub merge and chunk isolation | Merge target stub into the live row; dedupe; per-item retry | 3 |
-| 0025 | Admin audit log | Durable table written with each mutation | 6 |
-| 0026 | Production config guardrails | Fail boot on weak/placeholder production settings | 6 |
+| 0025 | Trigram search index | Functional GIN index and the indexable `%>` predicate | 4 |
+| 0026 | Partition lead time | Twelve months ahead, pre-flight default-partition guard | 4 |
 | 0027 | Release supply chain | CI-gated, SHA-pinned, signed, scanned images | 7 |
 | 0028 | Scoring cadence | Delay ingest-triggered scoring to the batch window; admin immediate | 5 |
 | 0029 | Retention horizons | 400-day `daily_metrics`, bounded failed jobs | 7 |
 | 0030 | Render proxy trust | Verify edge behavior; keep `TRUST_PROXY` only when proxy-only | 7 |
 | 0031 | API-key lookup cache | Short Redis cache with explicit invalidation | 6 |
+| 0032 | Admin audit log | Durable table written with each mutation | 6 |
+| 0033 | Production config guardrails | Fail boot on weak/placeholder production settings | 6 |
 
 ---
 
@@ -295,6 +304,28 @@ indexes; 12-month partition lead; default-partition guard; `trendr_partition_lea
 Migrations are forward-only. M-1 is the benchmark-driven revisit of the K-02 deferral recorded in
 [`AUDIT.md`](../AUDIT.md).
 
+**Status (2026-11-03):** fixed. The index alone was not enough: `word_similarity(...) > 0` is not
+indexable, confirmed with `EXPLAIN` against a functional GIN index (`Seq Scan` even with
+`enable_seqscan = off`). The fallback now predicates with `lower(display_name) %> lower(q)` and
+lowers `pg_trgm.word_similarity_threshold` to 0.15 inside its own transaction; the §18
+`nxt` → `vercel/next.js` pair (≈0.29) still matches and the planner selects
+`items_display_name_trgm_idx`. ADRs 0025 and 0026. New integration tests:
+`packages/db/test/int/search-index.int.test.ts` (index definition, plan, acceptance pair, GUC
+leak), `packages/db/test/int/retention-index.int.test.ts` (both retention indexes planned),
+and the extended `partitions.int.test.ts` / `maintenance.int.test.ts` (lead days, blocked
+window). `apps/api/test/int/search.int.test.ts` (15 tests) still passes.
+For M-4, `EXPLAIN` on the pre-migration database picked a `Seq Scan` for
+`alert_events` and a full index-only scan of the `scores` primary key; the new `scores_run_idx` and
+`alert_events_score_run_idx` are selected after migration (asserted by
+`retention-index.int.test.ts` with `enable_seqscan = off`).
+
+**Local gate (labelled local, not live acceptance):** `pnpm lint`, `pnpm typecheck`, 595 unit
+tests (81 files), 167 integration tests (34 files), and Compose smoke — `postgres redis migrate api
+worker web mcp` healthy, `/healthz` and `/readyz` 200, `scripts/auth-smoke.mjs` PASS, migrations
+0004–0006 applied forward on the existing compose volume, and
+`docker compose exec worker node dist/maintenance-cli.js create-partitions` returned
+`{defaultRows: 0, leadDays: 393}`.
+
 ### Phase 5 — Scoring (M-3, L-5, L-8, L-9)
 
 1. `fix(worker): renew the scoring lock and swap runs monotonically`
@@ -317,7 +348,7 @@ per source load before `buildAllBoard`. ADR 0028.
 
 Key changes: Redis key cache with invalidation; nginx `limit_req`/`limit_conn`; 90 s SSE lease;
 `admin_audit_log`; production guardrails and bounded TTLs; 413/415 titles; degraded-limiter metric
-and alert. ADRs 0025, 0026 and 0031.
+and alert. ADRs 0031, 0032 and 0033.
 
 ### Phase 7 — Deployment and supply chain (M-8, M-9, M-12, L-3, L-4, L-10)
 
@@ -402,7 +433,7 @@ These cannot be closed in this environment and remain tracked in
 - [x] Phase 1 — H-1 fixed and reproduced
 - [x] Phase 2 — H-2, H-3, L-1 fixed
 - [x] Phase 3 — H-4, M-10 fixed; checkpoint after the Highs
-- [ ] Phase 4 — M-1, M-4, M-11 fixed
+- [x] Phase 4 — M-1, M-4, M-11 fixed
 - [ ] Phase 5 — M-3, L-5, L-8, L-9 fixed
 - [ ] Phase 6 — M-2, M-5, M-6, M-7, L-6, L-7, L-11 fixed
 - [ ] Phase 7 — M-8, M-9, M-12, L-3, L-4, L-10 fixed

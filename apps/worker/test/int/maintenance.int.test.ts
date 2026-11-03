@@ -99,12 +99,21 @@ async function cleanup(): Promise<void> {
 describe('maintenance processor (spec §7.10)', () => {
   it('creates partitions and reports the default partition gauge', async () => {
     const rows: number[] = [];
+    const lead: number[] = [];
     const result = await runMaintenanceJob(
-      options({ metrics: { setSnapshotsDefaultRows: (value) => rows.push(value) } }),
+      options({
+        metrics: {
+          setSnapshotsDefaultRows: (value) => rows.push(value),
+          setPartitionLeadDays: (value) => lead.push(value),
+        },
+      }),
       { type: 'create-partitions' },
     );
-    expect(result).toEqual({ type: 'create-partitions', defaultRows: 0 });
+    expect(result).toMatchObject({ type: 'create-partitions', defaultRows: 0 });
     expect(rows).toEqual([0]);
+    // M-11: twelve months ahead, so the newest partition ends ~13 months out.
+    expect(result.leadDays).toBeGreaterThan(300);
+    expect(lead).toEqual([result.leadDays]);
   });
 
   it('rolls up the previous UTC day idempotently', async () => {

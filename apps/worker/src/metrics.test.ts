@@ -1,6 +1,11 @@
 import { afterAll, describe, expect, it } from 'vitest';
 
-import { registry, setDbPoolStats, snapshotsDefaultRows } from './metrics.js';
+import {
+  partitionLeadDaysGauge,
+  registry,
+  setDbPoolStats,
+  snapshotsDefaultRows,
+} from './metrics.js';
 
 /** Spec §14.1 — the worker registry exposes every metric owned by the worker. */
 const WORKER_METRICS = [
@@ -22,6 +27,7 @@ const WORKER_METRICS = [
   'trendr_emails_sent_total',
   'trendr_db_pool_connections',
   'trendr_snapshots_default_rows',
+  'trendr_partition_lead_days',
   'trendr_source_token_expires_timestamp_seconds',
 ];
 
@@ -33,6 +39,7 @@ describe('worker metrics registry (spec §14.1)', () => {
   it('registers every worker metric name', async () => {
     setDbPoolStats({ totalCount: 1, idleCount: 0, waitingCount: 0 });
     snapshotsDefaultRows.set(0);
+    partitionLeadDaysGauge.set(365);
     const text = await registry.metrics();
     for (const name of WORKER_METRICS) {
       expect(text, `${name} is registered`).toContain(`# HELP ${name}`);

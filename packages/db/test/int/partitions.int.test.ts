@@ -3,13 +3,20 @@ import { sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { createDb, type Connection, type Db } from '../../src/client.js';
-import { dropOldPartitions, ensurePartitions } from '../../src/partitions.js';
+import {
+  dropOldPartitions,
+  ensurePartitions,
+  PartitionWindowBlockedError,
+  partitionLeadDays,
+} from '../../src/partitions.js';
 
 /**
  * Task 1.2 acceptance: `0001_partitions.sql` on a fresh PG16 — partitions exist
  * for −2..+3 months, bounds are UTC midnights even in a `TimeZone='Asia/Kolkata'`
  * session, the database default answers `SHOW TimeZone` with UTC, inserts route
  * to the right partition and `dropOldPartitions` removes an old one.
+ *
+ * M-11 adds the twelve-month lead and the `snapshots_default` pre-flight guard.
  */
 
 const PARTITION_NAME_RE = '^snapshots_\\d{4}_\\d{2}$';
@@ -148,6 +155,40 @@ describe('snapshot partitions (0001_partitions.sql)', () => {
     await db.execute(sql`
       DELETE FROM snapshots WHERE item_id = ${itemId}::bigint`);
     await db.execute(sql`DELETE FROM items WHERE id = ${itemId}::bigint`);
+  });
+
+  it('reports the partition lead in days (M-11)', async () => {
+    await ensurePartitions(db, 0, 12);
+    // Twelve months ahead means the newest partition ends ~13 months out.
+    expect(await partitionLeadDays(db)).toBeGreaterThan(300);
+  });
+
+  it('refuses to create partitions that snapshots_default would block (M-11)', async () => {
+    // A row 18 months out has no monthly partition yet, so it lands in the
+    // default catch-all. Widening the window to cover it must fail before DDL.
+    const inserted = await db.execute<{ id: string }>(sql`
+      INSERT INTO items (source, kind, external_id, name, display_name, url, primary_metric)
+      VALUES ('github'::source_t, 'repo'::item_kind_t, 'acme/m11-guard-fixture',
+              'm11-guard', 'acme/m11-guard',
+              'https://github.com/acme/m11-guard', 'stars'::metric_t)
+      RETURNING id`);
+    const itemId = inserted.rows[0]?.id;
+    if (itemId === undefined) throw new Error('guard fixture item was not inserted');
+
+    try {
+      await db.execute(sql`
+        INSERT INTO snapshots (item_id, metric, captured_at, value)
+        VALUES (${itemId}::bigint, 'stars'::metric_t, now() + interval '18 months', 1)`);
+
+      await expect(ensurePartitions(db, 0, 18)).rejects.toBeInstanceOf(PartitionWindowBlockedError);
+      const missing = await db.execute<{ absent: boolean }>(sql`
+        SELECT to_regclass('snapshots_' || to_char(now() + interval '18 months', 'YYYY_MM')) IS NULL AS absent`);
+      // The guard runs before DDL, so the blocked window is untouched.
+      expect(missing.rows[0]?.absent).toBe(true);
+    } finally {
+      await db.execute(sql`DELETE FROM snapshots WHERE item_id = ${itemId}::bigint`);
+      await db.execute(sql`DELETE FROM items WHERE id = ${itemId}::bigint`);
+    }
   });
 
   it('dropOldPartitions removes an old partition and reports the count', async () => {

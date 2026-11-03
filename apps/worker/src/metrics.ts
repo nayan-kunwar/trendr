@@ -165,6 +165,17 @@ export const snapshotsDefaultRows = new Gauge({
   registers: [registry],
 });
 
+/**
+ * `trendr_partition_lead_days` — set by `maintenance:create-partitions` (M-11).
+ * Days from today to the upper bound of the newest monthly `snapshots`
+ * partition. The `PartitionLeadShort` alert fires when it drops below 60.
+ */
+export const partitionLeadDaysGauge = new Gauge({
+  name: 'trendr_partition_lead_days',
+  help: 'Days of monthly snapshots partitions provisioned ahead of today.',
+  registers: [registry],
+});
+
 interface PoolStats {
   totalCount: number;
   idleCount: number;

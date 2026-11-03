@@ -1692,6 +1692,7 @@ be re-checked later. Decisions with alternatives get an ADR in [`docs/adr/`](./a
 | R-52 | H-2: concurrent refreshes with one cookie revoked the whole family and signed every tab out. | A used token replayed within 15 s returns typed `refresh-rotated` 401 with `Retry-After`, without revoking or clearing; outside the window reuse still revokes. Web Locks plus a typed one-shot retry in the client. Deliberate §10.5 deviation; ADR-0022. |
 | R-53 | H-3: refresh shared the 5/min sign-in bucket, so routine page loads could 429 and the old client treated that as signed out. | Magic-link/verify/logout keep 5/min; refresh gets 60/min per presented-cookie hash plus a 120/min per-IP guard; anonymous refresh skips the buckets; client uses `trendr.hasSession` and treats 429/5xx as transient. Deliberate §10.5 deviation; ADR-0023. |
 | R-54 | M-1: the §7.5 trigram fallback used `word_similarity(...) > 0`, which no GIN index can serve, and the only trigram index was on raw `display_name`. | Function moved to the indexable `lower(display_name) %> lower(q)` operator with a transaction-scoped `pg_trgm.word_similarity_threshold` of 0.15, backed by `items_display_name_trgm_idx`. The candidate floor rises from “any shared trigram” to 0.15 word similarity; the §18 `nxt` → `next.js` pair (≈0.29) still matches. ADR-0025. |
+| R-55 | M-11: §6.3 bootstraps only two months back and three ahead, so a missed create-partitions run can put rows in `snapshots_default` and then block the overlapping partition. | Twelve months ahead, a pre-flight guard that refuses the whole window before DDL, `trendr_partition_lead_days` and the `PartitionLeadShort` alert. ADR-0026. |
 
 - **Agent rules file:** `CLAUDE.md` was renamed to `AGENTS.md` so agent tooling that reads
   `AGENTS.md` picks it up automatically. The content is still the verbatim Section 0 rules;
@@ -1711,8 +1712,8 @@ be re-checked later. Decisions with alternatives get an ADR in [`docs/adr/`](./a
 - Two fixes deviate from §10.5 and are recorded as R-52/R-53 with ADR-0022/0023: the 15 s
   refresh-reuse grace (H-2) and the separate refresh rate-limit bucket (H-3), together with the
   naming additions for the new Redis keys and metrics.
-- M-1 ships with a deliberate change to the documented behaviour and is recorded as R-54 with
-  ADR-0025.
+- M-1 and M-11 also ship with deliberate changes to the documented behaviour and are recorded as
+  R-54/R-55 with ADR-0025/0026.
 
 ## Naming additions (production-readiness remediation)
 
@@ -1734,6 +1735,11 @@ Appendix B.
 | `trendr.hasSession`                   | localStorage key | H-3   | Non-sensitive web session hint; never a credential                        |
 | `items_display_name_trgm_idx`         | GIN index      | M-1     | Functional trigram index on `lower(display_name)` used by the search fallback |
 | `TRIGRAM_WORD_SIMILARITY_THRESHOLD`   | constant       | M-1     | 0.15 word-similarity floor for the fallback, set per transaction          |
+| `snapshot_partition_lead_days()`      | SQL function   | M-11    | Days until the newest monthly partition's upper bound                     |
+| `snapshot_partition_window_rows()`    | SQL function   | M-11    | Default-partition rows that would block a create-partitions window        |
+| `PartitionWindowBlockedError`         | error class    | M-11    | Pre-flight failure before partition DDL                                   |
+| `trendr_partition_lead_days`          | metric         | M-11    | Partition lead in days; `PartitionLeadShort` alerts below 60              |
+| `PartitionLeadShort`                  | alert          | M-11    | Warns when the partition lead is under 60 days                            |
 
 ## Environment quirks worth knowing
 

@@ -11,7 +11,13 @@ import { effectiveHfRatePer5Min } from '@trendr/sources';
 import { registerIngestAdapters } from './ingestion/adapters.js';
 import { instrumentWorker, meteredEmailSender } from './instrumentation.js';
 import { startMetricsServer } from './metrics-server.js';
-import { rateLimitWait, registry, setDbPoolStats, snapshotsDefaultRows } from './metrics.js';
+import {
+  partitionLeadDaysGauge,
+  rateLimitWait,
+  registry,
+  setDbPoolStats,
+  snapshotsDefaultRows,
+} from './metrics.js';
 import { startFreshnessPoller } from './pollers/freshness.js';
 import { startQueueDepthPoller } from './pollers/queue-depth.js';
 import { createIngestWorker } from './processors/ingest.processor.js';
@@ -79,6 +85,9 @@ if (roles.includes('scoring') || roles.includes('ingest') || roles.includes('not
       metrics: {
         setSnapshotsDefaultRows: (rows: number) => {
           snapshotsDefaultRows.set(rows);
+        },
+        setPartitionLeadDays: (days: number) => {
+          partitionLeadDaysGauge.set(days);
         },
       },
     });

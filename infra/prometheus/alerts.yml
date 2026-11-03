@@ -49,3 +49,10 @@ groups:
         annotations:
           summary: 'snapshots_default holds {{ $value }} rows'
           description: 'Creating a partition for that range will fail (spec 6.3); run create-partitions and inspect.'
+      - alert: PartitionLeadShort
+        expr: trendr_partition_lead_days < 60
+        for: 1h
+        labels: { severity: warning }
+        annotations:
+          summary: 'Only {{ $value }} days of snapshots partitions remain'
+          description: 'M-11: create-partitions provisions twelve months ahead. A lead under 60 days means it stopped running or is failing; inserts will land in snapshots_default when the lead reaches zero.'

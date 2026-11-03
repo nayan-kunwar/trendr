@@ -7,6 +7,7 @@ import {
   deleteExpiredAuthTokens,
   dropOldPartitions,
   ensurePartitions,
+  partitionLeadDays,
   pruneAlertEvents,
   pruneIngestionRuns,
   pruneScores,
@@ -17,7 +18,7 @@ import type { Logger } from '@trendr/logger';
 
 import { attachDeadLetter } from '../dlq.js';
 import { runRetierItems, type HotMaxBySource, type RetierSummary } from '../ingestion/tiering.js';
-import { snapshotsDefaultRows } from '../metrics.js';
+import { partitionLeadDaysGauge, snapshotsDefaultRows } from '../metrics.js';
 import { workerSettings, type Queues } from '../queues.js';
 
 /**
@@ -35,6 +36,8 @@ export interface MaintenanceRetentionOptions {
 
 export interface MaintenanceMetrics {
   setSnapshotsDefaultRows(rows: number): void;
+  /** M-11: days of monthly partitions provisioned ahead of today. */
+  setPartitionLeadDays(days: number): void;
 }
 
 export interface MaintenanceProcessorOptions {
@@ -60,6 +63,8 @@ export interface MaintenanceResult {
   retier?: RetierSummary;
   /** Present for `create-partitions`. */
   defaultRows?: number;
+  /** Present for `create-partitions` (M-11). */
+  leadDays?: number;
   /** Present for `rollup-daily`. */
   day?: string;
   rolledUpRows?: number;
@@ -117,16 +122,31 @@ export async function runMaintenanceJob(
   const now = options.now?.() ?? new Date();
   switch (data.type) {
     case 'create-partitions': {
-      await ensurePartitions(options.db, 0, 3);
+      // M-11: a twelve-month lead absorbs an outage longer than a quarter; the
+      // guard inside `ensurePartitions` refuses to run DDL when
+      // `snapshots_default` already holds rows in the window.
+      await ensurePartitions(options.db, 0, 12);
       const defaultRows = await countSnapshotsDefault(options.db);
+      const leadDays = await partitionLeadDays(options.db);
       const metrics = options.metrics ?? {
         setSnapshotsDefaultRows: (rows: number) => {
           snapshotsDefaultRows.set(rows);
         },
+        setPartitionLeadDays: (days: number) => {
+          partitionLeadDaysGauge.set(days);
+        },
       };
       metrics.setSnapshotsDefaultRows(defaultRows);
-      options.logger?.info({ defaultRows }, 'snapshot partitions ensured');
-      return { type: data.type, defaultRows };
+      metrics.setPartitionLeadDays(leadDays);
+      if (defaultRows > 0) {
+        options.logger?.error(
+          { defaultRows, leadDays },
+          'snapshots_default is not empty — partition creation will be blocked for overlapping months',
+        );
+      } else {
+        options.logger?.info({ defaultRows, leadDays }, 'snapshot partitions ensured');
+      }
+      return { type: data.type, defaultRows, leadDays };
     }
     case 'rollup-daily': {
       const day = previousUtcDay(now);
