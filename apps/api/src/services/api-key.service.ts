@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
+import { sql } from 'drizzle-orm';
 import type { Redis } from 'ioredis';
 
 import { ConflictError, NotFoundError, createApiKeyMaterial, redisKeys } from '@trendr/core';
@@ -64,9 +65,6 @@ export async function createApiKeyForCurrentUser(
   userId: string,
   input: CreateApiKeyInput,
 ): Promise<{ apiKey: ApiKeyBody; key: string }> {
-  if ((await countActiveApiKeysForUser(deps.db, userId)) >= MAX_ACTIVE_KEYS) {
-    throw new ConflictError(`at most ${MAX_ACTIVE_KEYS} active API keys are allowed`);
-  }
   const now = deps.now?.() ?? new Date();
   const expiresAt =
     input.expiresInDays === undefined
@@ -75,15 +73,24 @@ export async function createApiKeyForCurrentUser(
 
   const material = createApiKeyMaterial(deps.pepper);
   try {
-    const row = await insertApiKey(deps.db, {
-      id: randomUUID(),
-      userId,
-      name: input.name,
-      prefix: material.prefix,
-      keyHash: material.hash,
-      scopes: ['read'],
-      rateLimitPerMin: 120,
-      expiresAt,
+    // L-4: the count-then-insert was a race — two parallel creates could both
+    // see four active keys. A transaction-scoped advisory lock serializes
+    // creates per user (the hash is stable across processes and connections).
+    const row = await deps.db.transaction(async (tx) => {
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${userId}, 0))`);
+      if ((await countActiveApiKeysForUser(tx, userId)) >= MAX_ACTIVE_KEYS) {
+        throw new ConflictError(`at most ${MAX_ACTIVE_KEYS} active API keys are allowed`);
+      }
+      return insertApiKey(tx, {
+        id: randomUUID(),
+        userId,
+        name: input.name,
+        prefix: material.prefix,
+        keyHash: material.hash,
+        scopes: ['read'],
+        rateLimitPerMin: 120,
+        expiresAt,
+      });
     });
     return { apiKey: toDto(row), key: material.raw };
   } catch (error) {

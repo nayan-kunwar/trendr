@@ -77,7 +77,7 @@ gates pass; live-deployment acceptance is tracked separately in
 | L-1  | Non-atomic `INCR` then `EXPIRE`, and unbounded in-memory fallback maps | `apps/api/src/routes/auth.ts:72-73,334-335,359-360` | Lua `INCR`+`EXPIRE`; cap and evict the fallback map | 2 | Verified |
 | L-2  | Wrong contact URL in the default User-Agent, and console output in the log email sender | `packages/config/src/env.ts:44` (`nayankunwar` vs `nayan-kunwar`); `packages/email/src/index.ts:86` | Correct the URL; inject the logger | 8 | Planned |
 | L-3  | Supply-chain and container-hardening gaps | `.github/workflows/ci.yml`; `infra/docker/node.Dockerfile` | Pin actions and base images by digest; non-root runtime; `no-new-privileges`, drop capabilities | 7 | Planned |
-| L-4  | API-key count cap is a check-then-insert race | `apps/api/src/services/api-key.service.ts:63-83` | Serialize per user with `pg_advisory_xact_lock`; parallel-create test | 7 | Planned |
+| L-4  | API-key count cap is a check-then-insert race | `apps/api/src/services/api-key.service.ts:63-83` | Serialize per user with `pg_advisory_xact_lock`; parallel-create test | 7 | Verified |
 | L-5  | Error masking in run bookkeeping | `apps/worker/src/scoring/run-scoring.ts` catch path; `apps/worker/src/processors/ingest.processor.ts:118-124` | Never let bookkeeping replace the job error; log both; leave no `running` rows | 5 | Verified |
 | L-6  | No bounds on token lifetimes | `packages/config/src/env.ts:28-29` | Bound access-token seconds and refresh days | 6 | Verified |
 | L-7  | RFC 7807 titles for 413 and 415 fall back to a generic value | `apps/api/src/plugins/errors.ts` | Add both titles and problem types; inject tests | 6 | Verified |

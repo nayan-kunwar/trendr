@@ -5,11 +5,14 @@ import type { FastifyInstance } from 'fastify';
 import { Redis } from 'ioredis';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { hashApiKey, redisKeys } from '@trendr/core';
-import { apiKeys, createDb, users, type Connection } from '@trendr/db';
+import { ConflictError, hashApiKey, redisKeys } from '@trendr/core';
+import { apiKeys, countActiveApiKeysForUser, createDb, users, type Connection } from '@trendr/db';
 
 import { buildApp } from '../../src/app.js';
-import { revokeApiKeyForCurrentUser } from '../../src/services/api-key.service.js';
+import {
+  createApiKeyForCurrentUser,
+  revokeApiKeyForCurrentUser,
+} from '../../src/services/api-key.service.js';
 
 /**
  * Task 3.5 acceptance over real Postgres + Redis: the 61st anonymous request
@@ -261,6 +264,39 @@ describe('X-API-Key auth and rate-limit tiers (task 3.5)', () => {
     } finally {
       await connection.db.delete(apiKeys).where(eq(apiKeys.id, keyId));
       await redis.del(cacheKey);
+    }
+  });
+
+  it('serializes parallel creates at the five-key cap (L-4)', async () => {
+    const [fresh] = await connection.db
+      .insert(users)
+      .values({
+        email: `${EMAIL_PREFIX}race-${randomUUID()}@example.test`,
+        displayName: 'Int API key race',
+      })
+      .returning({ id: users.id });
+    const raceUser = fresh?.id;
+    if (raceUser === undefined) throw new Error('failed to insert race user');
+
+    try {
+      const results = await Promise.allSettled(
+        Array.from({ length: 6 }, (_, index) =>
+          createApiKeyForCurrentUser({ db: connection.db, pepper: PEPPER }, raceUser, {
+            name: `race ${index}`,
+          }),
+        ),
+      );
+      const fulfilled = results.filter((result) => result.status === 'fulfilled');
+      const rejected = results.filter(
+        (result): result is PromiseRejectedResult => result.status === 'rejected',
+      );
+      expect(fulfilled).toHaveLength(5);
+      expect(rejected).toHaveLength(1);
+      expect(rejected[0]?.reason).toBeInstanceOf(ConflictError);
+      expect(await countActiveApiKeysForUser(connection.db, raceUser)).toBe(5);
+    } finally {
+      await connection.db.delete(apiKeys).where(eq(apiKeys.userId, raceUser));
+      await connection.db.delete(users).where(eq(users.id, raceUser));
     }
   });
 
