@@ -1688,6 +1688,8 @@ be re-checked later. Decisions with alternatives get an ADR in [`docs/adr/`](./a
 | R-49 | `deepmerge@4.3.1` (`GHSA-gcqx-w48m-w2h4`, low) reaches the worker through the email renderer; no `4.3.2` release is published. | Accepted. The dependency is only used while rendering email content, and the advisory has no available fix yet. |
 | R-50 | Fixed integration-test anchors start at 2026-08-20, but migrations create only the current month −2/+3 window, so the 2026-11-01 run routed 3,792 seed rows into `snapshots_default` and failed the ISS-7 assertion. | `test/global-setup.ts` now creates partitions from 2026-08-01, and the seed test asserts `snapshots_default` stays empty. Production behaviour is unchanged. |
 | R-51 | The 2026-10-29 `compose-smoke` job failed on a transient corepack download during image build. | Both node Dockerfiles retry the pinned pnpm install three times before failing the build. |
+| R-52 | H-2: concurrent refreshes with one cookie revoked the whole family and signed every tab out. | A used token replayed within 15 s returns typed `refresh-rotated` 401 with `Retry-After`, without revoking or clearing; outside the window reuse still revokes. Web Locks plus a typed one-shot retry in the client. Deliberate §10.5 deviation; ADR-0022. |
+| R-53 | H-3: refresh shared the 5/min sign-in bucket, so routine page loads could 429 and the old client treated that as signed out. | Magic-link/verify/logout keep 5/min; refresh gets 60/min per presented-cookie hash plus a 120/min per-IP guard; anonymous refresh skips the buckets; client uses `trendr.hasSession` and treats 429/5xx as transient. Deliberate §10.5 deviation; ADR-0023. |
 
 - **Agent rules file:** `CLAUDE.md` was renamed to `AGENTS.md` so agent tooling that reads
   `AGENTS.md` picks it up automatically. The content is still the verbatim Section 0 rules;
@@ -1720,6 +1722,12 @@ Appendix B.
 | `trendr-cloudflare-ips.timer`         | systemd unit   | H-1     | Weekly refresh (Sunday 03:30 UTC)                                          |
 | `infra/cloudflare/ips.txt`            | generated file | H-1     | Canonical Cloudflare range list shared by nginx and the firewall          |
 | `nginx-real-ip.conf`, `nginx-geo.conf` | generated file | H-1     | `set_real_ip_from` and `geo` allowlist includes                           |
+| `apirl:magic:{sha256(email)}`         | Redis key      | L-1     | Per-address magic-link issuance window (3/h) at 60 s–1 h granularity      |
+| `apirl:auth:{ip}`                     | Redis key      | H-3     | Strict 5/min sign-in bucket for magic-link/verify/logout                  |
+| `apirl:auth:refresh:{sha256-prefix}`  | Redis key      | H-3     | Per-presented-cookie refresh budget (60/min)                              |
+| `apirl:auth:refresh:ip:{ip}`          | Redis key      | H-3     | Coarse per-IP refresh guard (120/min)                                     |
+| `trendr_auth_refresh_reuse_total{outcome}` | metric    | H-2     | Grace vs theft-classified refresh reuse                                   |
+| `trendr.hasSession`                   | localStorage key | H-3   | Non-sensitive web session hint; never a credential                        |
 
 ## Environment quirks worth knowing
 

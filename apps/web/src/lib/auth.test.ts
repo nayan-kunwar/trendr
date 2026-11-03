@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+const SESSION_HINT_KEY = 'trendr.hasSession';
 const USER = {
   id: '3f2504e0-4f89-41d3-9a0c-0305e82c3301',
   email: 'ada@example.test',
@@ -22,7 +23,7 @@ function problemResponse(status: number, type: string): Response {
   return jsonResponse(
     {
       type: `https://trendr.dev/problems/${type}`,
-      title: 'Unauthorized',
+      title: status === 429 ? 'Too Many Requests' : 'Unauthorized',
       status,
       instance: '/v1/auth/refresh',
       requestId: 'req-test',
@@ -50,6 +51,75 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+describe('session hint (H-3)', () => {
+  it('does not call refresh for anonymous visitors', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const auth = await loadAuth();
+
+    await expect(auth.refreshSession()).resolves.toBeNull();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('records the hint after verification and clears it on sign-out', async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(sessionResponse('access-1'));
+    vi.stubGlobal('fetch', fetchMock);
+    const auth = await loadAuth();
+
+    await auth.verifyMagicLink('magic-token');
+    expect(localStorage.getItem(SESSION_HINT_KEY)).toBe('1');
+
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('offline')));
+    await auth.signOut();
+    expect(localStorage.getItem(SESSION_HINT_KEY)).toBeNull();
+    expect(auth.getAccessToken()).toBeNull();
+  });
+});
+
+describe('refresh error handling (H-3)', () => {
+  it('clears the session on a definitive 401', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(sessionResponse('access-1'))
+      .mockResolvedValueOnce(problemResponse(401, 'unauthorized'));
+    vi.stubGlobal('fetch', fetchMock);
+    const auth = await loadAuth();
+    await auth.verifyMagicLink('magic-token');
+
+    await expect(auth.refreshSession()).resolves.toBeNull();
+    expect(auth.getAccessToken()).toBeNull();
+    expect(localStorage.getItem(SESSION_HINT_KEY)).toBeNull();
+  });
+
+  it('keeps a valid session when refresh is rate limited', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(sessionResponse('access-1'))
+      .mockResolvedValueOnce(problemResponse(429, 'rate-limited'));
+    vi.stubGlobal('fetch', fetchMock);
+    const auth = await loadAuth();
+    await auth.verifyMagicLink('magic-token');
+
+    await expect(auth.refreshSession()).resolves.toBeNull();
+    expect(auth.getAccessToken()).toBe('access-1');
+    expect(localStorage.getItem(SESSION_HINT_KEY)).toBe('1');
+  });
+
+  it('keeps a valid session when the API is unavailable', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(sessionResponse('access-1'))
+      .mockRejectedValueOnce(new Error('network down'));
+    vi.stubGlobal('fetch', fetchMock);
+    const auth = await loadAuth();
+    await auth.verifyMagicLink('magic-token');
+
+    await expect(auth.refreshSession()).resolves.toBeNull();
+    expect(auth.getAccessToken()).toBe('access-1');
+    expect(localStorage.getItem(SESSION_HINT_KEY)).toBe('1');
+  });
+});
+
 describe('refresh rotation races (H-2)', () => {
   it('retries once when another tab already rotated the cookie', async () => {
     const fetchMock = vi
@@ -57,6 +127,7 @@ describe('refresh rotation races (H-2)', () => {
       .mockResolvedValueOnce(problemResponse(401, 'refresh-rotated'))
       .mockResolvedValueOnce(sessionResponse('access-2'));
     vi.stubGlobal('fetch', fetchMock);
+    localStorage.setItem(SESSION_HINT_KEY, '1');
     const auth = await loadAuth();
 
     await expect(auth.refreshSession()).resolves.toMatchObject({ email: USER.email });
@@ -64,18 +135,17 @@ describe('refresh rotation races (H-2)', () => {
     expect(auth.getAccessToken()).toBe('access-2');
   });
 
-  it('keeps the current access token when the grace retry also loses', async () => {
+  it('does not clear the session when the grace retry also loses', async () => {
     const fetchMock = vi
       .fn()
-      .mockResolvedValueOnce(sessionResponse('access-1'))
       .mockImplementation(() => Promise.resolve(problemResponse(401, 'refresh-rotated')));
     vi.stubGlobal('fetch', fetchMock);
+    localStorage.setItem(SESSION_HINT_KEY, '1');
     const auth = await loadAuth();
-    await auth.verifyMagicLink('magic-token');
 
     await expect(auth.refreshSession()).resolves.toBeNull();
-    expect(fetchMock).toHaveBeenCalledTimes(3);
-    expect(auth.getAccessToken()).toBe('access-1');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(localStorage.getItem(SESSION_HINT_KEY)).toBe('1');
   });
 
   it('single-flights concurrent refreshes through the Web Locks API', async () => {
@@ -88,6 +158,7 @@ describe('refresh rotation races (H-2)', () => {
       configurable: true,
       value: { request },
     });
+    localStorage.setItem(SESSION_HINT_KEY, '1');
     const auth = await loadAuth();
 
     await Promise.all([auth.refreshSession(), auth.refreshSession()]);

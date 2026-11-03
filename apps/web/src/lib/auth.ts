@@ -12,10 +12,14 @@ import {
  * Access tokens deliberately live in a module variable, never localStorage:
  * a reload restores the session through the httpOnly `dt_refresh` cookie, so
  * XSS cannot exfiltrate a long-lived credential (spec §10.5).
+ *
+ * H-3 adds one non-sensitive localStorage hint (`trendr.hasSession`) so
+ * anonymous page loads do not call `/v1/auth/refresh` at all.
  */
 let accessToken: string | null = null;
 let refreshInFlight: Promise<AuthUser | null> | null = null;
 
+const SESSION_HINT_KEY = 'trendr.hasSession';
 const REFRESH_LOCK_NAME = 'trendr.auth.refresh';
 const REFRESH_CHANNEL_NAME = 'trendr.auth.refresh';
 const REFRESH_RETRY_DELAY_MS = 150;
@@ -31,14 +35,17 @@ export function requestMagicLink(email: string): Promise<void> {
 export async function verifyMagicLink(token: string): Promise<AuthUser> {
   const session = await publicJson('/v1/auth/verify', { token }, AuthSessionSchema);
   accessToken = session.accessToken;
+  setSessionHint(true);
   return session.user;
 }
 
 /**
  * Restore a session from the refresh cookie. Concurrent callers, including
- * other tabs when Web Locks is available, share one refresh (H-2).
+ * other tabs when Web Locks is available, share one refresh (H-2). Anonymous
+ * visitors with no session hint never send the request (H-3).
  */
 export function refreshSession(): Promise<AuthUser | null> {
+  if (!hasSessionHint()) return Promise.resolve(null);
   refreshInFlight ??= withRefreshLock(doRefreshWithRetry)
     .catch(() => null)
     .finally(() => {
@@ -48,7 +55,10 @@ export function refreshSession(): Promise<AuthUser | null> {
 }
 
 type RefreshAttempt =
-  { kind: 'session'; session: AuthSession } | { kind: 'rotated' } | { kind: 'failed' };
+  | { kind: 'session'; session: AuthSession }
+  | { kind: 'rotated' }
+  | { kind: 'invalid' }
+  | { kind: 'transient' };
 
 /** Retry once when another tab won the rotation race (H-2). */
 async function doRefreshWithRetry(): Promise<AuthUser | null> {
@@ -65,32 +75,39 @@ async function doRefresh(): Promise<RefreshAttempt> {
   try {
     response = await post('/v1/auth/refresh');
   } catch {
-    accessToken = null;
-    return { kind: 'failed' };
+    return { kind: 'transient' };
   }
 
   if (response.ok) {
     try {
       const session = AuthSessionSchema.parse(await response.json());
       accessToken = session.accessToken;
+      setSessionHint(true);
       return { kind: 'session', session };
     } catch {
-      accessToken = null;
-      return { kind: 'failed' };
+      // A malformed success response must not destroy a working session.
+      return { kind: 'transient' };
     }
   }
 
   const problem = await readProblem(response);
   if (response.status === 401 && isRefreshRotated(problem)) {
-    // Do not clear the token: another tab already holds the successor cookie.
     return { kind: 'rotated' };
   }
-  accessToken = null;
-  return { kind: 'failed' };
+  if (response.status === 429 || response.status >= 500) {
+    return { kind: 'transient' };
+  }
+  if (response.status === 401) {
+    accessToken = null;
+    setSessionHint(false);
+    return { kind: 'invalid' };
+  }
+  return { kind: 'transient' };
 }
 
 export async function signOut(): Promise<void> {
   accessToken = null;
+  setSessionHint(false);
   try {
     await post('/v1/auth/logout');
   } catch {
@@ -153,6 +170,7 @@ export function updateProfile(displayName: string | null): Promise<AuthUser> {
 export async function deleteAccount(): Promise<void> {
   await authFetchVoid('/v1/me', { method: 'DELETE' });
   accessToken = null;
+  setSessionHint(false);
 }
 
 export function authErrorMessage(error: unknown, fallback: string): string {
@@ -222,6 +240,26 @@ async function readProblem(response: Response): Promise<unknown> {
 function isRefreshRotated(problem: unknown): boolean {
   const parsed = ProblemSchema.safeParse(problem);
   return parsed.success && parsed.data.type.endsWith('/refresh-rotated');
+}
+
+function hasSessionHint(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    return window.localStorage.getItem(SESSION_HINT_KEY) === '1';
+  } catch {
+    // Private/storage-disabled contexts cannot keep the hint; attempt refresh.
+    return true;
+  }
+}
+
+function setSessionHint(active: boolean): void {
+  if (typeof window === 'undefined') return;
+  try {
+    if (active) window.localStorage.setItem(SESSION_HINT_KEY, '1');
+    else window.localStorage.removeItem(SESSION_HINT_KEY);
+  } catch {
+    // Storage is an optimization, never a correctness requirement.
+  }
 }
 
 /**

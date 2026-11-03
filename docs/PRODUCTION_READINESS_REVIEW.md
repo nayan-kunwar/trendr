@@ -49,8 +49,8 @@ gates pass; live-deployment acceptance is tracked separately in
 | ID  | Finding | Evidence | Planned remediation | Phase | Status |
 | --- | --- | --- | --- | --- | --- |
 | H-1 | Per-IP controls trust a client-supplied `CF-Connecting-IP`; the origin is reachable directly | `apps/api/src/plugins/rate-limit.ts:28-35`; `infra/nginx/trendr.conf:68-116`; `infra/scripts/bootstrap-vps.sh:99-105` | nginx overwrites the header after `real_ip`; API accepts only a parseable IP and falls back to `request.ip`; UFW allows 80/443 only from Cloudflare ranges | 1 | Verified |
-| H-2 | Refresh reuse detection has no grace window, so concurrent refreshes revoke the whole family | `apps/api/src/services/auth.service.ts:116-148`; `apps/web/src/lib/auth.ts:33-39`; `apps/web/src/components/auth-provider.tsx:30-40` | 15 s grace returns a benign typed 401 without revoking or clearing; Web Locks single-flight across tabs; parallel-refresh test | 2 | Planned |
-| H-3 | One 5/min-per-IP auth bucket is shared with the refresh call that runs on every page load | `apps/api/src/routes/auth.ts:162-167,352-374` | Keep 5/min on magic-link and verify; give refresh a separate, higher bucket keyed by session hash plus an IP guard; skip anonymous refresh; handle 429 without clearing the session | 2 | Planned |
+| H-2 | Refresh reuse detection has no grace window, so concurrent refreshes revoke the whole family | `apps/api/src/services/auth.service.ts:116-148`; `apps/web/src/lib/auth.ts:33-39`; `apps/web/src/components/auth-provider.tsx:30-40` | 15 s grace returns a typed 401 without revoking or clearing; Web Locks single-flight across tabs; typed one-shot client retry; parallel-refresh test | 2 | Verified |
+| H-3 | One 5/min-per-IP auth bucket is shared with the refresh call that runs on every page load | `apps/api/src/routes/auth.ts:162-167,352-374` | Keep 5/min on magic-link, verify and logout; refresh gets 60/min per presented-cookie hash plus a 120/min per-IP guard; anonymous refresh skips it; the web client uses a non-sensitive hint and treats 429/5xx as transient | 2 | Verified |
 | H-4 | Rename-back (A→B, then B→A) breaks the ingestion chunk with a unique violation on every retry | `packages/db/src/repositories/items.repo.ts:235-315,128-131`; `packages/db/migrations/0000_init.sql:282`; `apps/worker/src/ingestion/upsert.ts:63-182` | Stub-aware merge on rename-back; in-chunk dedupe; per-item failure isolation | 3 | Planned |
 
 ### Medium
@@ -74,7 +74,7 @@ gates pass; live-deployment acceptance is tracked separately in
 
 | ID   | Finding | Evidence | Planned remediation | Phase | Status |
 | ---- | --- | --- | --- | --- | --- |
-| L-1  | Non-atomic `INCR` then `EXPIRE`, and unbounded in-memory fallback maps | `apps/api/src/routes/auth.ts:72-73,334-335,359-360` | Lua `INCR`+`EXPIRE`; cap and evict the fallback map | 2 | Planned |
+| L-1  | Non-atomic `INCR` then `EXPIRE`, and unbounded in-memory fallback maps | `apps/api/src/routes/auth.ts:72-73,334-335,359-360` | Lua `INCR`+`EXPIRE`; cap and evict the fallback map | 2 | Verified |
 | L-2  | Wrong contact URL in the default User-Agent, and console output in the log email sender | `packages/config/src/env.ts:44` (`nayankunwar` vs `nayan-kunwar`); `packages/email/src/index.ts:86` | Correct the URL; inject the logger | 8 | Planned |
 | L-3  | Supply-chain and container-hardening gaps | `.github/workflows/ci.yml`; `infra/docker/node.Dockerfile` | Pin actions and base images by digest; non-root runtime; `no-new-privileges`, drop capabilities | 7 | Planned |
 | L-4  | API-key count cap is a check-then-insert race | `apps/api/src/services/api-key.service.ts:63-83` | Serialize per user with `pg_advisory_xact_lock`; parallel-create test | 7 | Planned |
@@ -189,12 +189,12 @@ item that must not lose the other items' snapshots.
 
 ## Spec contract deviations
 
-Two fixes change behaviour that §10.5 states explicitly. Both are deliberate and need an ADR.
+Two fixes change behaviour that §10.5 states explicitly. Both are deliberate and recorded as R-52/R-53.
 
-| Finding | Spec text | Planned deviation | Rationale | ADR |
+| Finding | Spec text | Deviation | Rationale | ADR |
 | --- | --- | --- | --- | --- |
 | H-2 | §10.5: “reusing a used refresh token revokes the whole family” | A 15 s grace returns a typed 401 without revoking; reuse outside the window still revokes | Prevents a routine multi-tab race from destroying a valid session. The grace response carries no token material and only applies to the immediately previous token | 0022 |
-| H-3 | §10.5 rate table: `auth` 5 req/min per IP for `/v1/auth/*` | Magic-link/verify keep 5/min; refresh gets 60/min per session hash plus a coarse IP guard | Refresh is machine-driven and runs on every load, unlike a human sign-in attempt. The strict bucket stays where it protects email sends and token guessing | 0023 |
+| H-3 | §10.5 rate table: `auth` 5 req/min per IP for `/v1/auth/*` | Magic-link/verify/logout keep 5/min; refresh gets 60/min per presented-cookie hash plus a 120/min per-IP guard | Refresh is machine-driven and runs on every load, unlike a human sign-in attempt. The strict bucket stays where it protects email sends and token guessing | 0023 |
 
 H-1 does not deviate: nginx writes the same `CF-Connecting-IP` header the spec names, so the API
 still keys on that header when the proxy is trusted.
@@ -254,10 +254,10 @@ list below.
 ### Phase 2 — Auth lifecycle (H-2, H-3, L-1)
 
 1. `feat(api): add a bounded refresh-reuse grace window`
-2. `fix(web): single-flight refresh across tabs`
-3. `fix(api): give refresh its own rate-limit bucket`
-4. `fix(web): skip anonymous refresh and treat 429 as transient`
-5. `fix(api): make auth counters atomic and bound fallback maps`
+2. `fix(api): give refresh its own rate-limit bucket`
+3. `fix(api): make auth counters atomic and bound fallback maps`
+4. `fix(web): single-flight refresh across tabs`
+5. `fix(web): skip anonymous refresh and treat 429 as transient`
 
 Key changes: typed `rotated | grace | invalid` outcome; 15 s grace; typed problem
 `refresh-rotated`; Web Locks; session-hash refresh bucket; local session hint; Lua `INCR`+`EXPIRE`;
@@ -335,7 +335,8 @@ stale-backup alert; reusable CI prerequisite; SHA-pinned actions; SBOM/Trivy/cos
 
 ## Execution rules
 
-- Reproduce H-2 and H-4 locally before fixing them; the review could not.
+- H-2 was reproduced locally with a parallel-refresh integration test before the fix; H-4 is still
+  pending reproduction in Phase 3.
 - Author each regression test first, confirm it fails for the documented reason, then implement.
   Tests land with their fix so every commit stays green.
 - One concern per commit. If a finding needs a migration and a code change, they land together.
@@ -387,7 +388,7 @@ These cannot be closed in this environment and remain tracked in
 ## Status checklist
 
 - [x] Phase 1 — H-1 fixed and reproduced
-- [ ] Phase 2 — H-2, H-3, L-1 fixed
+- [x] Phase 2 — H-2, H-3, L-1 fixed
 - [ ] Phase 3 — H-4, M-10 fixed; checkpoint after the Highs
 - [ ] Phase 4 — M-1, M-4, M-11 fixed
 - [ ] Phase 5 — M-3, L-5, L-8, L-9 fixed
