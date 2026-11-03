@@ -24,7 +24,7 @@
   "devDependencies": {
     "@types/node": "^22",
     "@types/nodemailer": "^7",
-    "eslint": "^9",
+    "eslint": "^10",
     "tsup": "^8",
     "typescript": "^5"
   }
