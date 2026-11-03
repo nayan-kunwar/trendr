@@ -38,7 +38,7 @@
     "@types/node": "^22",
     "eslint": "^10",
     "prettier": "^3.9.10",
-    "tsup": "^8",
+    "tsup": "^9",
     "tsx": "^4",
     "typescript": "^5"
   }
