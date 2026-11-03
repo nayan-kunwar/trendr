@@ -3,6 +3,7 @@ export * from './client.js';
 export * from './partitions.js';
 export * from './repositories/alerts.repo.js';
 export * from './repositories/api-keys.repo.js';
+export * from './repositories/audit.repo.js';
 export * from './repositories/auth-tokens.repo.js';
 export * from './repositories/cards.repo.js';
 export * from './repositories/digest.repo.js';

@@ -16,6 +16,7 @@ import {
   type Source,
 } from '@trendr/core';
 import {
+  adminAuditLog,
   apiKeys,
   createDb,
   finishRun,
@@ -464,6 +465,60 @@ describe('admin endpoints (task 4.6, spec §10.1/§10.5)', () => {
       payload: { tier: 'cold' },
     });
     expect(missing.statusCode).toBe(404);
+  });
+
+  it('audits admin mutations and keeps the entry with the change (M-6)', async () => {
+    await connection.db.delete(adminAuditLog);
+
+    const patched = await app.inject({
+      method: 'PATCH',
+      url: `/v1/admin/items/${itemId.toString()}`,
+      headers: bearer(asAdminJwt()),
+      payload: { tier: 'warm' },
+    });
+    expect(patched.statusCode).toBe(200);
+
+    const afterPatch = await connection.db.select().from(adminAuditLog);
+    expect(afterPatch).toHaveLength(1);
+    expect(afterPatch[0]).toMatchObject({
+      actorUserId: adminUserId,
+      action: 'item.patch',
+      target: String(itemId),
+    });
+    expect(afterPatch[0]?.payload).toMatchObject({ requested: { tier: 'warm' }, tier: 'warm' });
+
+    // A failed mutation writes nothing.
+    const missing = await app.inject({
+      method: 'PATCH',
+      url: '/v1/admin/items/9223372036854775807',
+      headers: bearer(asAdminJwt()),
+      payload: { tier: 'cold' },
+    });
+    expect(missing.statusCode).toBe(404);
+    expect(await connection.db.select().from(adminAuditLog)).toHaveLength(1);
+
+    const score = await app.inject({
+      method: 'POST',
+      url: '/v1/admin/score',
+      headers: bearer(asAdminJwt()),
+      payload: { source: 'github' },
+    });
+    expect(score.statusCode).toBe(202);
+    const jobId = score.json<{ jobs: { jobId: string }[] }>().jobs[0]?.jobId;
+    if (jobId !== undefined) {
+      const queued = await queues.scoring.getJob(jobId);
+      if (queued?.data.trigger === 'admin') {
+        createdJobs.push({ queue: queues.scoring, id: jobId });
+      }
+    }
+
+    const afterScore = await connection.db.select().from(adminAuditLog);
+    expect(afterScore).toHaveLength(2);
+    expect(afterScore[1]).toMatchObject({
+      actorUserId: adminUserId,
+      action: 'score.trigger',
+      target: 'github',
+    });
   });
 
   it('lists, replays and discards dead-letter jobs (admin-scope key)', async () => {

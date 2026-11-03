@@ -8,9 +8,11 @@ import {
   text,
   timestamp,
   unique,
+  uuid,
 } from 'drizzle-orm/pg-core';
 
 import { jobTypeEnum, runStatusEnum, sourceEnum } from './enums.js';
+import { users } from './users.js';
 
 /** Spec §6.2 ops/audit tables. */
 export const ingestionRuns = pgTable(
@@ -57,5 +59,27 @@ export const outboxEvents = pgTable(
     index('outbox_unpublished_idx')
       .on(t.id)
       .where(sql`${t.publishedAt} IS NULL`),
+  ],
+);
+
+/**
+ * M-6: durable operator audit trail. Every admin mutation writes one row —
+ * inside the mutation's transaction where the mutation is a database write,
+ * immediately after a successful enqueue otherwise. `ON DELETE SET NULL` keeps
+ * the trail when an operator account is removed.
+ */
+export const adminAuditLog = pgTable(
+  'admin_audit_log',
+  {
+    id: bigint('id', { mode: 'bigint' }).primaryKey().generatedAlwaysAsIdentity(),
+    actorUserId: uuid('actor_user_id').references(() => users.id, { onDelete: 'set null' }),
+    action: text('action').notNull(), // 'item.patch' | 'ingest.trigger' | ...
+    target: text('target'),
+    payload: jsonb('payload').$type<Record<string, unknown>>().notNull().default({}),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('admin_audit_log_created_idx').on(t.createdAt.desc()),
+    index('admin_audit_log_actor_idx').on(t.actorUserId, t.createdAt.desc()),
   ],
 );

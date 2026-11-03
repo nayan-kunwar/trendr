@@ -14,7 +14,14 @@ import {
   type IngestJob,
   type Source,
 } from '@trendr/core';
-import { getRun, listRuns as listRunRows, patchItemAdmin, type Db, type RunRow } from '@trendr/db';
+import {
+  getRun,
+  listRuns as listRunRows,
+  patchItemAdmin,
+  recordAdminAudit,
+  type Db,
+  type RunRow,
+} from '@trendr/db';
 import { BUCKET_NAMES, bucketSpec, githubCoreBucketSpec, type BucketName } from '@trendr/sources';
 
 import type { ApiQueues } from '../queues.js';
@@ -132,11 +139,20 @@ export function buildAdminIngestJob(
 export async function triggerIngest(
   deps: AdminDeps,
   body: AdminIngestBodyInput,
+  actorUserId: string | null,
 ): Promise<AdminIngestResponseBody> {
   const at = deps.now?.() ?? new Date();
   const trigger = buildAdminIngestJob(body, tenMinuteSlot(at), utcDay(at));
   const queue = deps.queues.ingest[body.source];
   await queue.add(trigger.name, trigger.job, { jobId: trigger.id });
+  // M-6: the enqueue is not transactional with Postgres; the audit row is
+  // written immediately after it succeeds.
+  await recordAdminAudit(deps.db, {
+    actorUserId,
+    action: 'ingest.trigger',
+    target: trigger.id,
+    payload: { ...body, type: trigger.name },
+  });
   return { jobId: trigger.id, queue: queue.name };
 }
 
@@ -144,6 +160,7 @@ export async function triggerIngest(
 export async function triggerScore(
   deps: AdminDeps,
   source: Source | 'all',
+  actorUserId: string | null,
 ): Promise<AdminScoreResponseBody> {
   const slot = tenMinuteSlot(deps.now?.() ?? new Date());
   const sources: Source[] = source === 'all' ? [...SOURCES] : [source];
@@ -158,6 +175,12 @@ export async function triggerScore(
     );
     jobs.push({ source: each, jobId: id, queue: deps.queues.scoring.name });
   }
+  await recordAdminAudit(deps.db, {
+    actorUserId,
+    action: 'score.trigger',
+    target: source,
+    payload: { sources: jobs.map((job) => job.source), windows: [...WINDOWS] },
+  });
   return { jobs };
 }
 
@@ -306,6 +329,7 @@ export async function listDlq(deps: AdminDeps, cursor?: string): Promise<AdminDl
 export async function retryDlq(
   deps: AdminDeps,
   dlqJobId: string,
+  actorUserId: string | null,
 ): Promise<AdminDlqRetryResponseBody> {
   const job = await deps.queues.deadLetter.getJob(dlqJobId);
   if (job === undefined) {
@@ -327,16 +351,31 @@ export async function retryDlq(
   const newJobId = `${entry.jobId ?? `dlq-${dlqJobId}`}.retry${attempt}`;
   await target.add(entry.name, entry.data, { jobId: newJobId });
   await job.remove();
+  await recordAdminAudit(deps.db, {
+    actorUserId,
+    action: 'dlq.retry',
+    target: dlqJobId,
+    payload: { queue: entry.originalQueue, jobId: newJobId },
+  });
   return { queue: entry.originalQueue, jobId: newJobId };
 }
 
 /** Spec §10.1 `DELETE /v1/admin/dlq/:jobId` — discard without replay. */
-export async function deleteDlq(deps: AdminDeps, dlqJobId: string): Promise<void> {
+export async function deleteDlq(
+  deps: AdminDeps,
+  dlqJobId: string,
+  actorUserId: string | null,
+): Promise<void> {
   const job = await deps.queues.deadLetter.getJob(dlqJobId);
   if (job === undefined) {
     throw new NotFoundError('dead-letter job not found');
   }
   await job.remove();
+  await recordAdminAudit(deps.db, {
+    actorUserId,
+    action: 'dlq.discard',
+    target: dlqJobId,
+  });
 }
 
 /** SCAN in batches; admin views must not KEYS a shared Redis (spec §9.1). */
@@ -476,12 +515,21 @@ export async function patchAdminItem(
   deps: AdminDeps,
   itemId: bigint,
   patch: AdminItemPatchInput,
+  actorUserId: string | null,
 ): Promise<AdminItemPatchResponseBody> {
-  const row = await patchItemAdmin(deps.db, itemId, {
-    ...(patch.tier === undefined ? {} : { tier: patch.tier }),
-    ...(patch.addFlags === undefined ? {} : { addFlags: patch.addFlags }),
-    ...(patch.removeFlags === undefined ? {} : { removeFlags: patch.removeFlags }),
-  });
+  const row = await patchItemAdmin(
+    deps.db,
+    itemId,
+    {
+      ...(patch.tier === undefined ? {} : { tier: patch.tier }),
+      ...(patch.addFlags === undefined ? {} : { addFlags: patch.addFlags }),
+      ...(patch.removeFlags === undefined ? {} : { removeFlags: patch.removeFlags }),
+    },
+    {
+      actorUserId,
+      payload: { requested: patch },
+    },
+  );
   if (row === null) {
     throw new NotFoundError('item not found');
   }

@@ -1742,6 +1742,7 @@ Appendix B.
 | `PartitionLeadShort`                  | alert          | M-11    | Warns when the partition lead is under 60 days                            |
 | `trendr_scoring_runs_total{outcome}`  | metric         | M-3     | Scored runs vs skips caused by a held source lock                         |
 | `trendr_rate_limit_degraded_total`    | metric         | L-11    | Rate-limit store failures after which the API failed open                 |
+| `admin_audit_log`                     | table          | M-6     | Durable operator mutation trail (actor, action, target, payload)          |
 
 ## Environment quirks worth knowing
 

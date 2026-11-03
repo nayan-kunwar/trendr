@@ -83,7 +83,7 @@ export function registerAdminRoutes(app: FastifyInstance, options: AdminRoutesOp
       },
     },
     async (request, reply) => {
-      const body = await triggerIngest(deps(), request.body);
+      const body = await triggerIngest(deps(), request.body, request.authUser?.id ?? null);
       return reply.code(202).send(body);
     },
   );
@@ -95,7 +95,7 @@ export function registerAdminRoutes(app: FastifyInstance, options: AdminRoutesOp
       schema: { body: AdminScoreBody, response: { 202: AdminScoreResponse } },
     },
     async (request, reply) => {
-      const body = await triggerScore(deps(), request.body.source);
+      const body = await triggerScore(deps(), request.body.source, request.authUser?.id ?? null);
       return reply.code(202).send(body);
     },
   );
@@ -163,7 +163,7 @@ export function registerAdminRoutes(app: FastifyInstance, options: AdminRoutesOp
       schema: { params: AdminDlqParams, response: { 202: AdminDlqRetryResponse } },
     },
     async (request, reply) => {
-      const body = await retryDlq(deps(), request.params.jobId);
+      const body = await retryDlq(deps(), request.params.jobId, request.authUser?.id ?? null);
       return reply.code(202).send(body);
     },
   );
@@ -172,7 +172,7 @@ export function registerAdminRoutes(app: FastifyInstance, options: AdminRoutesOp
     '/v1/admin/dlq/:jobId',
     { ...guard, schema: { params: AdminDlqParams } },
     async (request, reply) => {
-      await deleteDlq(deps(), request.params.jobId);
+      await deleteDlq(deps(), request.params.jobId, request.authUser?.id ?? null);
       return reply.code(204).send();
     },
   );
@@ -195,7 +195,7 @@ export function registerAdminRoutes(app: FastifyInstance, options: AdminRoutesOp
     },
     async (request) => {
       const id = BigInt(request.params.id);
-      return patchAdminItem(deps(), id, request.body);
+      return patchAdminItem(deps(), id, request.body, request.authUser?.id ?? null);
     },
   );
 }

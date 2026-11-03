@@ -6,6 +6,7 @@ import type { ItemFlag, ItemKind, Metric, Source, Tier, Window } from '@trendr/c
 
 import type { DbExecutor } from '../client.js';
 import { aliasRelEnum } from '../schema/enums.js';
+import { recordAdminAudit } from './audit.repo.js';
 import { itemAliases, itemTopics, items, topics } from '../schema/items.js';
 import { scoreRunsCurrent, scores } from '../schema/metrics.js';
 
@@ -748,6 +749,12 @@ export interface AdminItemPatch {
   removeFlags?: ItemFlag[];
 }
 
+/** M-6: audit fields written in the same transaction as the patch. */
+export interface AdminItemAudit {
+  actorUserId: string | null;
+  payload?: Record<string, unknown>;
+}
+
 export interface AdminItemPatchResult {
   id: bigint;
   /** Owning source; the admin service invalidates that source's board caches (L-8). */
@@ -767,6 +774,7 @@ export async function patchItemAdmin(
   db: DbExecutor,
   itemId: bigint,
   patch: AdminItemPatch,
+  audit?: AdminItemAudit,
 ): Promise<AdminItemPatchResult | null> {
   const set: { updatedAt: SQL; tier?: Tier; flags?: SQL } = { updatedAt: sql`now()` };
   if (patch.tier !== undefined) {
@@ -784,12 +792,31 @@ export async function patchItemAdmin(
     )`;
   }
 
-  const [row] = await db.update(items).set(set).where(eq(items.id, itemId)).returning({
-    id: items.id,
-    source: items.source,
-    tier: items.tier,
-    flags: items.flags,
-    updatedAt: items.updatedAt,
-  });
-  return row ?? null;
+  const apply = async (tx: DbExecutor): Promise<AdminItemPatchResult | null> => {
+    const [row] = await tx.update(items).set(set).where(eq(items.id, itemId)).returning({
+      id: items.id,
+      source: items.source,
+      tier: items.tier,
+      flags: items.flags,
+      updatedAt: items.updatedAt,
+    });
+    if (row === undefined) return null;
+    if (audit !== undefined) {
+      await recordAdminAudit(tx, {
+        actorUserId: audit.actorUserId,
+        action: 'item.patch',
+        target: String(itemId),
+        payload: {
+          tier: row.tier,
+          flags: row.flags,
+          ...audit.payload,
+        },
+      });
+    }
+    return row;
+  };
+
+  // M-6: the audit row must commit with the mutation, so both run in one
+  // transaction when an audit entry was requested.
+  return audit === undefined ? apply(db) : db.transaction(apply);
 }

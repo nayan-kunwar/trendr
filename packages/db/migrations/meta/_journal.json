@@ -50,6 +50,13 @@
       "when": 1793679344147,
       "tag": "0006_partition_lead",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1793686540004,
+      "tag": "0007_admin_audit_log",
+      "breakpoints": true
     }
   ]
 }
