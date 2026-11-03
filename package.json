@@ -27,8 +27,8 @@
     "prepare": "husky"
   },
   "devDependencies": {
-    "@commitlint/cli": "^19",
-    "@commitlint/config-conventional": "^19",
+    "@commitlint/cli": "^21",
+    "@commitlint/config-conventional": "^21",
     "@eslint/js": "^10",
     "@testcontainers/postgresql": "^12.2.1",
     "@testcontainers/redis": "^12.2.1",
@@ -39,7 +39,7 @@
     "fast-check": "^4.10.2",
     "globals": "^17",
     "husky": "^9",
-    "lint-staged": "^15",
+    "lint-staged": "^17",
     "prettier": "^3",
     "testcontainers": "^12.2.1",
     "turbo": "^2",
