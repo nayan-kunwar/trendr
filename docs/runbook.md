@@ -222,6 +222,27 @@ trendr_rate_limit_remaining{source="github", resource="core"}
 
 Old tokens can be revoked after the worker has scraped successfully.
 
+### Neon Postgres password
+
+The database password is part of `DATABASE_URL`, so rotating it means restarting
+every consumer rather than one worker.
+
+1. Neon Console → project → **Roles** → the application role (usually
+   `neondb_owner`) → **Reset password**. Copy the new password immediately; the
+   console does not show it again.
+2. Update `DATABASE_URL` in the deploy environment (Render env group or VPS
+   secret store) and in any local `.env` that points at Neon. Percent-encode
+   characters such as `@`, `:`, `/`, `?` and `#` in the password.
+3. Redeploy, or restart `migrate`, `api` and `worker`. Existing pooled
+   connections keep working until they are recycled, so do the environment
+   update before restarting to avoid a window of failed auth.
+4. Verify `/readyz` returns 200, `trendr_db_pool_connections` reports open
+   connections, and the API/worker logs contain no
+   `password authentication failed` entries.
+
+The reset takes effect immediately; there is no overlap window like the GitHub
+token's old-token grace period.
+
 ### Hugging Face token
 
 Read-only; update `HF_TOKEN` and restart only the worker. The API never receives
