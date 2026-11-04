@@ -472,7 +472,9 @@ These cannot be closed in this environment and remain tracked in
   and dry-run locally, but the real signature only exists after a tagged publish.
 - Offsite bucket lifecycle rules and a VPS restore rehearsal (M-8); the drill can run locally.
 - Scoring tuning against 2–4 weeks of production data.
-- Rotation of the exposed GitHub PAT and Neon password, before either credential is used again.
+- Neon password rotation, before it is used again. (The exposed GitHub PAT was rotated on
+  2026-11-04 and re-verified against the live API and the Actions secret — see
+  [`adr/0013-gap8-pat-expiry.md`](./adr/0013-gap8-pat-expiry.md).)
 
 ## Risks and mitigations
 

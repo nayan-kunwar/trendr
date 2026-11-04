@@ -1,6 +1,6 @@
 # 0013 — Fine-grained PAT expiry is surfaced, not guessed (GAP-8)
 
-- Status: Verified (header observed live 2026-10-19: `2027-01-17 16:40:21 UTC`)
+- Status: Verified (header observed live 2026-10-19 and re-observed after rotation on 2026-11-04)
 - Date: 2026-10-19
 - Phase: 4 (4.3)
 - Source: TRENDR_SPEC.md §7.3.1/§14.1; GAP-8
@@ -32,6 +32,23 @@ the GitHub adapter).
   `github-authentication-token-expiration: 2027-01-17 16:40:21 UTC`; the
   recorder stored the raw value in `meta.json` and `Date.parse` handles the
   format as designed.
+
+## Rotation log
+
+The review found a PAT exposed outside the secret store, so the token was rotated
+on 2026-11-04 (procedure in [`docs/runbook.md`](../runbook.md) §3):
+
+| Item | Value |
+| --- | --- |
+| Rotated | 2026-11-04 |
+| Retired token expiry | `2027-01-17 16:40:21 UTC` (revoked) |
+| Replacement expiry | `2026-12-04 14:22:13 UTC` |
+| Verification | `GET /user` → 200; `github-authentication-token-expiration` header parsed as designed |
+| Stores updated | local `.env` `GITHUB_TOKENS`; Actions secret `TRENDR_GITHUB_TOKENS` (2026-11-04T14:24:59Z) |
+
+The replacement expires 30 days after rotation (2026-12-04), so the 14-day warning
+fires around 2026-11-20. The runbook's 90-day default was not applied to this
+token; the next rotation should use it so the cadence is quarterly.
 
 ## Consequences
 
