@@ -35,9 +35,13 @@ jobs:
   # M-9: build nothing until the same commit passes the full CI workflow.
   verify:
     name: verify
+    # The reusable CI workflow runs the contract job on workflow_dispatch; it
+    # needs issues: write for its failure handler, and called workflows cannot
+    # elevate above the caller. Keep the grant scoped to this job.
+    permissions:
+      contents: read
+      issues: write
     uses: ./.github/workflows/ci.yml
-    # The reusable CI workflow runs the contract job on workflow_dispatch; pass
-    # the repository secrets through so a manual publish run can authenticate.
     secrets: inherit
 
   publish-node:
