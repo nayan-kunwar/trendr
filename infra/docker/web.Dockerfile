@@ -44,6 +44,11 @@ COPY --from=builder --chown=node:node /repo/apps/web/.next/standalone ./
 COPY --from=builder --chown=node:node /repo/apps/web/.next/static ./apps/web/.next/static
 # apps/web/public/.gitkeep must be committed (spec §17.2); Dockerfile COPY takes no trailing comments.
 COPY --from=builder --chown=node:node /repo/apps/web/public ./apps/web/public
+# The standalone server only runs `node`; npm/corepack are build-time tools.
+# Removing them also removes npm's bundled dependency tree from the scanned
+# image (Trivy flags its brace-expansion/pacote/sigstore copies as HIGH).
+RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack \
+    && rm -f /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack
 USER node
 EXPOSE 3000
 CMD ["node", "apps/web/server.js"]

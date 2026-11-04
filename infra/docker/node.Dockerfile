@@ -49,7 +49,12 @@ ARG APP
 # here so the runtime (not just the builder) avoids blackholed IPv6 egress.
 ENV NODE_ENV=production APP=${APP} NODE_OPTIONS="--dns-result-order=ipv4first --no-network-family-autoselection"
 WORKDIR /app
-RUN apk add --no-cache tini
+# The runtime only runs `node`; npm/corepack are build-time tools. Removing them
+# also removes npm's bundled dependency tree from the scanned image (Trivy flags
+# its brace-expansion/pacote/sigstore copies as HIGH).
+RUN apk add --no-cache tini \
+    && rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack \
+    && rm -f /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack
 COPY --from=builder --chown=node:node /out/ ./
 USER node
 EXPOSE 4000 4100 9464
