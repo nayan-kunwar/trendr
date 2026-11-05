@@ -35,6 +35,8 @@ jobs:
       - run: pnpm test:coverage
       - name: OpenAPI up to date
         run: pnpm --filter @trendr/api openapi:export && git diff --exit-code apps/api/openapi.json
+      - name: Postman collection matches the API
+        run: node scripts/check-postman.mjs
       - name: Prometheus alert rules
         run: |
           docker run --rm \
