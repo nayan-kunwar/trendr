@@ -1,0 +1,3488 @@
+{
+  "info": {
+    "name": "Trendr API",
+    "description": "Full-surface collection for the Trendr API (43 paths, 53 operations).\n\nPrerequisites: a seeded and scored stack, Mailpit for the magic-link flow, and the seed admin API key in adminApiKey.\n\nRun order: 00 Health & meta → 01 Auth → 02 Public → 03 Me → 04 Admin → 05 Negative. Folders 06 Manual and 99 Destructive are opt-in.\n\nAuth: the Me folder uses Bearer {{accessToken}}; the Admin folder uses X-API-Key {{adminApiKey}}; cookie writes carry x-requested-with: trendr. Postman’s cookie jar holds dt_refresh — use localhost consistently, not 127.0.0.1.\n\nSee docs/postman/README.md for setup, variables and Newman commands.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:4000",
+      "type": "string"
+    },
+    {
+      "key": "webUrl",
+      "value": "http://localhost:3000",
+      "type": "string"
+    },
+    {
+      "key": "mailpitUrl",
+      "value": "http://localhost:8025",
+      "type": "string"
+    },
+    {
+      "key": "metricsToken",
+      "value": "",
+      "type": "secret"
+    },
+    {
+      "key": "accessToken",
+      "value": "",
+      "type": "secret"
+    },
+    {
+      "key": "adminApiKey",
+      "value": "",
+      "type": "secret"
+    },
+    {
+      "key": "createdApiKey",
+      "value": "",
+      "type": "secret"
+    },
+    {
+      "key": "userEmail",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "magicLinkToken",
+      "value": "",
+      "type": "secret"
+    },
+    {
+      "key": "mailpitMessageId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "itemId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "itemSource",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "itemExternalId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "secondItemId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "runId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "adminRunId",
+      "value": "0",
+      "type": "string"
+    },
+    {
+      "key": "jobId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "dlqJobId",
+      "value": "0",
+      "type": "string"
+    },
+    {
+      "key": "dlqJobId2",
+      "value": "0",
+      "type": "string"
+    },
+    {
+      "key": "watchlistId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "alertId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "apiKeyId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "unsubscribeToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "etag",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "itemEtag",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "cursor",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "lastEventId",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "00 Health & meta",
+      "item": [
+        {
+          "name": "Liveness",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('process is live', () => { pm.expect(body.status).to.eql('ok'); pm.expect(body.uptimeSec).to.be.a('number'); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/healthz",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "healthz"
+              ]
+            },
+            "description": "Process liveness. No dependencies are probed."
+          }
+        },
+        {
+          "name": "Readiness",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('all dependencies are ready', () => { pm.expect(body.status).to.eql('ready'); pm.expect(body.checks.db).to.eql('ok'); pm.expect(body.checks.redis).to.eql('ok'); pm.expect(body.checks.migrations).to.eql('ok'); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/readyz",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "readyz"
+              ]
+            },
+            "description": "Database, Redis and migration-journal readiness. Returns 503 when degraded."
+          }
+        },
+        {
+          "name": "Prometheus metrics",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.collectionVariables.get('metricsToken')) {",
+                  "  pm.test('set metricsToken to assert a scrape', () => pm.expect(pm.response.code).to.be.oneOf([200, 401]));",
+                  "} else {",
+                  "  pm.test('metrics scrape succeeds', () => pm.response.to.have.status(200));",
+                  "  pm.test('Prometheus text exposition', () => pm.expect(pm.response.text()).to.include('# HELP'));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "text/plain"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{metricsToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/metrics",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "metrics"
+              ]
+            },
+            "description": "Guarded by METRICS_TOKEN, not a JWT. Set the collection variable metricsToken to assert a 200; without it the endpoint returns 401."
+          }
+        },
+        {
+          "name": "OpenAPI document",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('OpenAPI 3.1 with every route', () => { pm.expect(body.openapi).to.eql('3.1.0'); pm.expect(Object.keys(body.paths).length).to.be.at.least(43); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/openapi.json",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "openapi.json"
+              ]
+            },
+            "description": "The generated OpenAPI 3.1 document; the drift guard compares it with this collection."
+          }
+        }
+      ]
+    },
+    {
+      "name": "01 Auth",
+      "item": [
+        {
+          "name": "Send magic link",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const email = 'postman-' + Date.now() + '@example.test';",
+                  "pm.collectionVariables.set('userEmail', email);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 202', () => pm.response.to.have.status(202));",
+                  "const body = pm.response.json();",
+                  "pm.test('accepted without leaking whether the address exists', () => pm.expect(body.ok).to.eql(true));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{userEmail}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/auth/magic-link",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "auth",
+                "magic-link"
+              ]
+            },
+            "description": "Creates (or reuses) a user for the generated address and sends the link through the configured SMTP server. Each run uses a fresh address because the limit is 3 links per email per hour."
+          }
+        },
+        {
+          "name": "Mailpit: find the message",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Mailpit is reachable', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "const email = String(pm.collectionVariables.get('userEmail')).toLowerCase();",
+                  "const messages = body.messages || [];",
+                  "const match = messages.find((message) => (message.To || []).some((to) => String(to.Address).toLowerCase() === email));",
+                  "pm.test('a message exists for ' + email, () => pm.expect(match, 'No message yet. Is Mailpit running and SMTP_URL pointed at it?').to.be.ok);",
+                  "if (match) pm.collectionVariables.set('mailpitMessageId', match.ID);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{mailpitUrl}}/api/v1/messages?limit=50",
+              "host": [
+                "{{mailpitUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "messages"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "50",
+                  "description": "Newest messages to scan"
+                }
+              ]
+            },
+            "description": "Local-only: queries Mailpit for the newest message addressed to userEmail and stores its ID. Fails clearly when Mailpit or SMTP is not running."
+          }
+        },
+        {
+          "name": "Mailpit: extract the token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Mailpit message is readable', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "const text = String(body.Text || '') + '\\n' + String(body.HTML || '');",
+                  "const match = text.match(/\\/auth\\/verify\\?token=([A-Za-z0-9_-]+)/);",
+                  "pm.test('message contains a magic-link token', () => pm.expect(match, 'No /auth/verify?token= link in the message').to.be.ok);",
+                  "if (match) pm.collectionVariables.set('magicLinkToken', match[1]);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{mailpitUrl}}/api/v1/message/{{mailpitMessageId}}",
+              "host": [
+                "{{mailpitUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "message",
+                "{{mailpitMessageId}}"
+              ]
+            },
+            "description": "Reads the message body and extracts the token from the /auth/verify?token= link."
+          }
+        },
+        {
+          "name": "Verify magic link",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.collectionVariables.set('accessToken', body.accessToken);",
+                  "pm.test('15-minute access token', () => pm.expect(body.expiresIn).to.eql(900));",
+                  "pm.test('signed in as the generated user', () => pm.expect(body.user.email.toLowerCase()).to.eql(String(pm.collectionVariables.get('userEmail')).toLowerCase()));",
+                  "pm.test('refresh cookie captured', () => pm.expect(pm.cookies.has('dt_refresh')).to.eql(true));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"{{magicLinkToken}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/auth/verify",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "auth",
+                "verify"
+              ]
+            },
+            "description": "Exchanges the one-time token for a 15-minute access JWT and sets the httpOnly dt_refresh cookie in Postman’s cookie jar."
+          }
+        },
+        {
+          "name": "Current user",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('returns the signed-in user', () => { pm.expect(body.email.toLowerCase()).to.eql(String(pm.collectionVariables.get('userEmail')).toLowerCase()); pm.expect(body.role).to.be.oneOf(['user', 'admin']); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "me"
+              ]
+            },
+            "description": "Bearer-authenticated profile read; proves the token works before the Me folder runs."
+          }
+        },
+        {
+          "name": "Update display name",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('display name updated', () => pm.expect(body.displayName).to.eql('Postman User'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"displayName\": \"Postman User\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "me"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Refresh access token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.collectionVariables.set('accessToken', body.accessToken);",
+                  "pm.test('returns a usable access token', () => pm.expect(body.accessToken).to.be.a('string').that.is.not.empty);",
+                  "pm.test('still the same user', () => pm.expect(body.user.email.toLowerCase()).to.eql(String(pm.collectionVariables.get('userEmail')).toLowerCase()));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "x-requested-with",
+                "value": "trendr",
+                "description": "CSRF header required for cookie-authenticated writes"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/auth/refresh",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "auth",
+                "refresh"
+              ]
+            },
+            "description": "Cookie-authenticated write: requires the x-requested-with: trendr CSRF header. Rotates the refresh token and returns a new access token."
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 Public",
+      "item": [
+        {
+          "name": "Trending (default board)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('returns a ranked board', () => pm.expect(body.data.length, 'No board data. Seed and trigger a score first (POST /v1/admin/score or pnpm worker:score).').to.be.greaterThan(0));",
+                  "if (body.data.length > 0) {",
+                  "  const first = body.data[0].item;",
+                  "  pm.collectionVariables.set('itemId', first.id);",
+                  "  pm.collectionVariables.set('itemSource', first.source);",
+                  "  pm.collectionVariables.set('itemExternalId', first.externalId);",
+                  "  if (body.data.length > 1) pm.collectionVariables.set('secondItemId', body.data[1].item.id);",
+                  "}",
+                  "if (body.runId) pm.collectionVariables.set('runId', body.runId);",
+                  "const etag = pm.response.headers.get('etag');",
+                  "if (etag) pm.collectionVariables.set('etag', etag);",
+                  "if (body.page && body.page.nextCursor) pm.collectionVariables.set('cursor', body.page.nextCursor);",
+                  "pm.test('has a computedAt timestamp', () => pm.expect(body.computedAt).to.be.a('string'));",
+                  "pm.test('has a weak ETag', () => pm.expect(etag).to.be.a('string').that.is.not.empty);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/trending",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "trending"
+              ]
+            },
+            "description": "Saves the first two items, the scoring run ID, the ETag and the next cursor for later requests. Requires a scored board: run a seed and a score first."
+          }
+        },
+        {
+          "name": "Trending (filtered)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('echoes the filters', () => { pm.expect(body.scope).to.eql('github'); pm.expect(body.window).to.eql('7d'); });",
+                  "pm.test('every row is a GitHub repo', () => body.data.forEach((row) => pm.expect(row.item.source).to.eql('github')));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/trending?scope=github&window=7d&kind=repo&limit=10&newOnly=1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "trending"
+              ],
+              "query": [
+                {
+                  "key": "scope",
+                  "value": "github",
+                  "description": "Source scope"
+                },
+                {
+                  "key": "window",
+                  "value": "7d",
+                  "description": "Scoring window"
+                },
+                {
+                  "key": "kind",
+                  "value": "repo",
+                  "description": "Item kind"
+                },
+                {
+                  "key": "limit",
+                  "value": "10",
+                  "description": "Page size"
+                },
+                {
+                  "key": "newOnly",
+                  "value": "1",
+                  "description": "Only items first seen in the window"
+                }
+              ]
+            },
+            "description": "Exercises the scope/window/kind/newOnly filters."
+          }
+        },
+        {
+          "name": "Lookup by natural key",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200 after the 302', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('resolves to the trending item', () => pm.expect(String(body.id)).to.eql(String(pm.collectionVariables.get('itemId'))));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/items/lookup?source={{itemSource}}&externalId={{itemExternalId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "items",
+                "lookup"
+              ],
+              "query": [
+                {
+                  "key": "source",
+                  "value": "{{itemSource}}",
+                  "description": "Source from the trending board"
+                },
+                {
+                  "key": "externalId",
+                  "value": "{{itemExternalId}}",
+                  "description": "Upstream natural key"
+                }
+              ]
+            },
+            "description": "Returns a 302 to the item detail; Postman follows it. The final body is the item saved from the trending board."
+          }
+        },
+        {
+          "name": "Item detail",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('returns the requested item', () => pm.expect(String(body.id)).to.eql(String(pm.collectionVariables.get('itemId'))));",
+                  "pm.test('includes latest metrics', () => pm.expect(body.latestMetrics).to.be.an('object'));",
+                  "const itemEtag = pm.response.headers.get('etag');",
+                  "if (itemEtag) pm.collectionVariables.set('itemEtag', itemEtag);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/items/{{itemId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "items",
+                "{{itemId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Item detail (conditional)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 304', () => pm.response.to.have.status(304));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "If-None-Match",
+                "value": "{{itemEtag}}",
+                "description": "ETag saved by the previous request"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/items/{{itemId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "items",
+                "{{itemId}}"
+              ]
+            },
+            "description": "Repeats the detail request with If-None-Match; a matching body hash returns 304 with no body."
+          }
+        },
+        {
+          "name": "Item history",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('returns a points series', () => pm.expect(body.points).to.be.an('array'));",
+                  "pm.test('echoes the item and metric', () => { pm.expect(String(body.itemId)).to.eql(String(pm.collectionVariables.get('itemId'))); pm.expect(body.metric).to.be.a('string'); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/items/{{itemId}}/history?granularity=day",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "items",
+                "{{itemId}}",
+                "history"
+              ],
+              "query": [
+                {
+                  "key": "granularity",
+                  "value": "day",
+                  "description": "hour | day"
+                },
+                {
+                  "key": "metric",
+                  "value": "stars",
+                  "description": "Optional metric override",
+                  "disabled": true
+                },
+                {
+                  "key": "from",
+                  "value": "",
+                  "description": "Optional ISO timestamp",
+                  "disabled": true
+                },
+                {
+                  "key": "to",
+                  "value": "",
+                  "description": "Optional ISO timestamp",
+                  "disabled": true
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Item scores",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('returns score points', () => pm.expect(body.points).to.be.an('array'));",
+                  "pm.test('echoes the window', () => pm.expect(body.window).to.eql('7d'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/items/{{itemId}}/scores?window=7d&granularity=day&days=30",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "items",
+                "{{itemId}}",
+                "scores"
+              ],
+              "query": [
+                {
+                  "key": "window",
+                  "value": "7d",
+                  "description": "24h | 7d | 30d"
+                },
+                {
+                  "key": "granularity",
+                  "value": "day",
+                  "description": "hour | day"
+                },
+                {
+                  "key": "days",
+                  "value": "30",
+                  "description": "Retention-bounded lookback"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Score explain",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('explains the requested item', () => pm.expect(String(body.itemId)).to.eql(String(pm.collectionVariables.get('itemId'))));",
+                  "pm.test('has a components field', () => pm.expect(body).to.have.property('components'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/items/{{itemId}}/score-explain?window=24h",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "items",
+                "{{itemId}}",
+                "score-explain"
+              ],
+              "query": [
+                {
+                  "key": "window",
+                  "value": "24h",
+                  "description": "24h | 7d | 30d"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Item aliases",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('returns an aliases array', () => pm.expect(body.aliases).to.be.an('array'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/items/{{itemId}}/aliases",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "items",
+                "{{itemId}}",
+                "aliases"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Search",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('returns search items', () => pm.expect(body.items).to.be.an('array'));",
+                  "pm.test('returns a pagination envelope', () => pm.expect(body.page).to.be.an('object'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/search?q=react&limit=10",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "search"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "react",
+                  "description": "Minimum 2 characters"
+                },
+                {
+                  "key": "limit",
+                  "value": "10",
+                  "description": "Page size"
+                },
+                {
+                  "key": "source",
+                  "value": "",
+                  "description": "Optional source filter",
+                  "disabled": true
+                },
+                {
+                  "key": "kind",
+                  "value": "",
+                  "description": "Optional kind filter",
+                  "disabled": true
+                },
+                {
+                  "key": "cursor",
+                  "value": "{{cursor}}",
+                  "description": "Optional next-page cursor",
+                  "disabled": true
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "New items",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('returns new items', () => pm.expect(body.items).to.be.an('array'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/new?days=7",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "new"
+              ],
+              "query": [
+                {
+                  "key": "days",
+                  "value": "7",
+                  "description": "1–30 days"
+                },
+                {
+                  "key": "source",
+                  "value": "",
+                  "description": "Optional source filter",
+                  "disabled": true
+                },
+                {
+                  "key": "kind",
+                  "value": "",
+                  "description": "Optional kind filter",
+                  "disabled": true
+                },
+                {
+                  "key": "cursor",
+                  "value": "{{cursor}}",
+                  "description": "Optional next-page cursor",
+                  "disabled": true
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Topics",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('returns topics', () => pm.expect(body.topics).to.be.an('array'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/topics?limit=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "topics"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "20",
+                  "description": "1–200"
+                },
+                {
+                  "key": "source",
+                  "value": "",
+                  "description": "Optional source filter",
+                  "disabled": true
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Languages",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('returns languages', () => pm.expect(body.languages).to.be.an('array'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/languages",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "languages"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Compare two items",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('compares at least one item', () => pm.expect(body.items.length).to.be.at.least(1));",
+                  "pm.test('echoes the window', () => pm.expect(body.window).to.eql('24h'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/compare?ids={{itemId}},{{secondItemId}}&window=24h&granularity=day",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "compare"
+              ],
+              "query": [
+                {
+                  "key": "ids",
+                  "value": "{{itemId}},{{secondItemId}}",
+                  "description": "Comma-separated item IDs"
+                },
+                {
+                  "key": "window",
+                  "value": "24h",
+                  "description": "24h | 7d | 30d"
+                },
+                {
+                  "key": "granularity",
+                  "value": "day",
+                  "description": "hour | day"
+                },
+                {
+                  "key": "metric",
+                  "value": "",
+                  "description": "Optional metric",
+                  "disabled": true
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Stats",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('counts every source', () => { for (const source of ['github', 'npm', 'pypi', 'huggingface', 'arxiv', 'mcp']) pm.expect(body.items).to.have.property(source); });",
+                  "pm.test('returns run health', () => pm.expect(body.runs).to.be.an('array'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/stats",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "stats"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 Me",
+      "item": [
+        {
+          "name": "List watchlists",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('returns watchlists', () => pm.expect(body.watchlists).to.be.an('array'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/me/watchlists",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "me",
+                "watchlists"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create watchlist",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.collectionVariables.set('watchlistId', body.id);",
+                  "pm.test('names the watchlist', () => pm.expect(body.name).to.include('Postman watchlist'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Postman watchlist {{$timestamp}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/me/watchlists",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "me",
+                "watchlists"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Rename watchlist",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('applies the new name', () => pm.expect(body.name).to.eql('Postman watchlist (renamed)'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Postman watchlist (renamed)\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/me/watchlists/{{watchlistId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "me",
+                "watchlists",
+                "{{watchlistId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "List watchlist items",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('returns the watchlist and its items', () => { pm.expect(body.watchlist.id).to.eql(pm.collectionVariables.get('watchlistId')); pm.expect(body.items).to.be.an('array'); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/me/watchlists/{{watchlistId}}/items",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "me",
+                "watchlists",
+                "{{watchlistId}}",
+                "items"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Add item to watchlist",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('reports whether it was added', () => pm.expect(body.added).to.be.a('boolean'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/me/watchlists/{{watchlistId}}/items/{{itemId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "me",
+                "watchlists",
+                "{{watchlistId}}",
+                "items",
+                "{{itemId}}"
+              ]
+            },
+            "description": "Idempotent; also promotes the item to the hot tier."
+          }
+        },
+        {
+          "name": "Remove item from watchlist",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/me/watchlists/{{watchlistId}}/items/{{itemId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "me",
+                "watchlists",
+                "{{watchlistId}}",
+                "items",
+                "{{itemId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Delete watchlist",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/me/watchlists/{{watchlistId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "me",
+                "watchlists",
+                "{{watchlistId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "List alert rules",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('returns alerts', () => pm.expect(body.alerts).to.be.an('array'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/me/alerts",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "me",
+                "alerts"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create alert rule",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.collectionVariables.set('alertId', body.id);",
+                  "pm.test('creates a velocity-spike rule', () => pm.expect(body.type).to.eql('velocity_spike'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"itemId\": \"{{itemId}}\",\n  \"window\": \"24h\",\n  \"cooldownHours\": 24,\n  \"params\": {\n    \"type\": \"velocity_spike\",\n    \"minPercentile\": 95,\n    \"minDeltaMultiple\": 3\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/me/alerts",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "me",
+                "alerts"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Update alert rule",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('disables the rule', () => pm.expect(body.enabled).to.eql(false));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"enabled\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/me/alerts/{{alertId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "me",
+                "alerts",
+                "{{alertId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "List alert events",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('returns fired events', () => pm.expect(body.events).to.be.an('array'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/me/alert-events?limit=10",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "me",
+                "alert-events"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "10",
+                  "description": "1–100"
+                },
+                {
+                  "key": "cursor",
+                  "value": "{{cursor}}",
+                  "description": "Optional next-page cursor",
+                  "disabled": true
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Delete alert rule",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/me/alerts/{{alertId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "me",
+                "alerts",
+                "{{alertId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get digest subscription",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('returns the subscription envelope', () => pm.expect(body).to.have.property('subscription'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/me/digest",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "me",
+                "digest"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Put digest subscription",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('stores the selected sources', () => pm.expect(body.subscription.sources).to.include('github'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sources\": [\n    \"github\",\n    \"npm\"\n  ],\n  \"topics\": [],\n  \"includeWatchlist\": true,\n  \"dayOfWeek\": 1,\n  \"enabled\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/me/digest",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "me",
+                "digest"
+              ]
+            }
+          }
+        },
+        {
+          "name": "List API keys",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('returns key metadata', () => pm.expect(body.apiKeys).to.be.an('array'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/me/api-keys",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "me",
+                "api-keys"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create API key",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.collectionVariables.set('apiKeyId', body.apiKey.id);",
+                  "pm.collectionVariables.set('createdApiKey', body.key);",
+                  "pm.test('returns the full key once', () => pm.expect(body.key).to.match(/^dt_live_[A-Za-z0-9]+_[A-Za-z0-9]+$/));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"postman-{{$timestamp}}\",\n  \"expiresInDays\": 7\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/me/api-keys",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "me",
+                "api-keys"
+              ]
+            },
+            "description": "The full dt_live_… key is returned exactly once; it is stored in the secret collection variable createdApiKey."
+          }
+        },
+        {
+          "name": "Use the created API key",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('returns a board', () => pm.expect(body.data).to.be.an('array'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "apikey",
+              "apikey": [
+                {
+                  "key": "key",
+                  "value": "X-API-Key",
+                  "type": "string"
+                },
+                {
+                  "key": "value",
+                  "value": "{{createdApiKey}}",
+                  "type": "string"
+                },
+                {
+                  "key": "in",
+                  "value": "header",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/trending?limit=1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "trending"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "1",
+                  "description": "One row is enough"
+                }
+              ]
+            },
+            "description": "Overrides the folder bearer auth with X-API-Key; proves the key works before it is revoked."
+          }
+        },
+        {
+          "name": "Revoke API key",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/me/api-keys/{{apiKeyId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "me",
+                "api-keys",
+                "{{apiKeyId}}"
+              ]
+            }
+          }
+        }
+      ],
+      "auth": {
+        "type": "bearer",
+        "bearer": [
+          {
+            "key": "token",
+            "value": "{{accessToken}}",
+            "type": "string"
+          }
+        ]
+      }
+    },
+    {
+      "name": "04 Admin",
+      "item": [
+        {
+          "name": "Ingest: discover",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 202', () => pm.response.to.have.status(202));",
+                  "const body = pm.response.json();",
+                  "pm.collectionVariables.set('jobId', body.jobId);",
+                  "pm.test('queued a job', () => { pm.expect(body.jobId).to.be.a('string').that.is.not.empty; pm.expect(body.queue).to.be.a('string'); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"discover\",\n  \"source\": \"github\",\n  \"strategy\": \"new-hot\",\n  \"maxItems\": 10\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/admin/ingest",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "admin",
+                "ingest"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Ingest: snapshot",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 202', () => pm.response.to.have.status(202));",
+                  "pm.test('queued a snapshot job', () => pm.expect(pm.response.json().queue).to.be.a('string'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"snapshot\",\n  \"source\": \"github\",\n  \"tier\": \"hot\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/admin/ingest",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "admin",
+                "ingest"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Ingest: daily",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 202', () => pm.response.to.have.status(202));",
+                  "pm.test('queued a daily job', () => pm.expect(pm.response.json().queue).to.be.a('string'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"daily\",\n  \"source\": \"github\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/admin/ingest",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "admin",
+                "ingest"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Ingest: backfill",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 202', () => pm.response.to.have.status(202));",
+                  "pm.test('queued a backfill job', () => pm.expect(pm.response.json().queue).to.be.a('string'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"backfill\",\n  \"source\": \"github\",\n  \"itemId\": \"{{itemId}}\",\n  \"days\": 7\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/admin/ingest",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "admin",
+                "ingest"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Ingest: refresh item",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 202', () => pm.response.to.have.status(202));",
+                  "pm.test('queued a refresh job', () => pm.expect(pm.response.json().queue).to.be.a('string'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"refresh-item\",\n  \"source\": \"{{itemSource}}\",\n  \"itemId\": \"{{itemId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/admin/ingest",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "admin",
+                "ingest"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Trigger scoring",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 202', () => pm.response.to.have.status(202));",
+                  "const body = pm.response.json();",
+                  "pm.test('queues one job per source', () => pm.expect(body.jobs).to.have.lengthOf(6));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"source\": \"all\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/admin/score",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "admin",
+                "score"
+              ]
+            },
+            "description": "Scores every source; each job is queued independently."
+          }
+        },
+        {
+          "name": "List runs",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('returns runs', () => pm.expect(body.runs).to.be.an('array'));",
+                  "if (body.runs.length > 0) pm.collectionVariables.set('adminRunId', body.runs[0].id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/admin/runs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "admin",
+                "runs"
+              ],
+              "query": [
+                {
+                  "key": "source",
+                  "value": "",
+                  "description": "Optional source filter",
+                  "disabled": true
+                },
+                {
+                  "key": "jobType",
+                  "value": "",
+                  "description": "Optional job-type filter",
+                  "disabled": true
+                },
+                {
+                  "key": "status",
+                  "value": "",
+                  "description": "Optional status filter",
+                  "disabled": true
+                },
+                {
+                  "key": "from",
+                  "value": "",
+                  "description": "Optional ISO timestamp",
+                  "disabled": true
+                },
+                {
+                  "key": "cursor",
+                  "value": "{{cursor}}",
+                  "description": "Optional next-page cursor",
+                  "disabled": true
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get run",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const runId = String(pm.collectionVariables.get('adminRunId'));",
+                  "if (runId === '0') {",
+                  "  pm.test('missing run returns 404', () => pm.response.to.have.status(404));",
+                  "} else {",
+                  "  pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "  const body = pm.response.json();",
+                  "  pm.test('returns the requested run', () => pm.expect(String(body.id)).to.eql(runId));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/admin/runs/{{adminRunId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "admin",
+                "runs",
+                "{{adminRunId}}"
+              ]
+            },
+            "description": "Uses the newest run from the previous request. When the runs list is empty, adminRunId stays 0 and this asserts the 404."
+          }
+        },
+        {
+          "name": "Queue depths",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('returns every queue', () => { pm.expect(body.queues).to.be.an('array'); body.queues.forEach((queue) => pm.expect(queue.counts).to.include.keys('waiting', 'active', 'delayed', 'failed', 'completed')); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/admin/queues",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "admin",
+                "queues"
+              ]
+            }
+          }
+        },
+        {
+          "name": "List dead-letter jobs",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('returns a DLQ page', () => { pm.expect(body.jobs).to.be.an('array'); pm.expect(body.page).to.be.an('object'); });",
+                  "if (body.jobs.length > 0) pm.collectionVariables.set('dlqJobId', body.jobs[0].id);",
+                  "pm.collectionVariables.set('dlqJobId2', body.jobs.length > 1 ? body.jobs[1].id : '0');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/admin/dlq",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "admin",
+                "dlq"
+              ],
+              "query": [
+                {
+                  "key": "cursor",
+                  "value": "{{cursor}}",
+                  "description": "Optional next-page cursor",
+                  "disabled": true
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Retry dead-letter job",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const jobId = String(pm.collectionVariables.get('dlqJobId'));",
+                  "if (jobId === '0') {",
+                  "  pm.test('missing dead-letter job returns 404', () => pm.response.to.have.status(404));",
+                  "} else {",
+                  "  pm.test('status is 202', () => pm.response.to.have.status(202));",
+                  "  pm.test('returns the queue and job', () => { const body = pm.response.json(); pm.expect(body.queue).to.be.a('string'); pm.expect(body.jobId).to.be.a('string'); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/admin/dlq/{{dlqJobId}}/retry",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "admin",
+                "dlq",
+                "{{dlqJobId}}",
+                "retry"
+              ]
+            },
+            "description": "Uses the newest failed job from the previous request. When the DLQ is empty, dlqJobId stays 0 and this asserts the 404."
+          }
+        },
+        {
+          "name": "Delete dead-letter job",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const jobId = String(pm.collectionVariables.get('dlqJobId2'));",
+                  "if (jobId === '0') {",
+                  "  pm.test('no second dead-letter job returns 404', () => pm.response.to.have.status(404));",
+                  "} else {",
+                  "  pm.test('status is 204', () => pm.response.to.have.status(204));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/admin/dlq/{{dlqJobId2}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "admin",
+                "dlq",
+                "{{dlqJobId2}}"
+              ]
+            },
+            "description": "Deletes the second failed job from the DLQ list, because the retry above consumes the first. With fewer than two jobs, dlqJobId2 stays 0 and this asserts the 404."
+          }
+        },
+        {
+          "name": "Rate-limit state",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('returns API counters and buckets', () => { pm.expect(body.api).to.be.an('array'); pm.expect(body.buckets).to.be.an('array'); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/admin/rate-limits",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "admin",
+                "rate-limits"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Patch item tier",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('applies the tier', () => { pm.expect(String(body.id)).to.eql(String(pm.collectionVariables.get('itemId'))); pm.expect(body.tier).to.eql('hot'); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tier\": \"hot\",\n  \"addFlags\": [],\n  \"removeFlags\": []\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/admin/items/{{itemId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "admin",
+                "items",
+                "{{itemId}}"
+              ]
+            }
+          }
+        }
+      ],
+      "auth": {
+        "type": "apikey",
+        "apikey": [
+          {
+            "key": "key",
+            "value": "X-API-Key",
+            "type": "string"
+          },
+          {
+            "key": "value",
+            "value": "{{adminApiKey}}",
+            "type": "string"
+          },
+          {
+            "key": "in",
+            "value": "header",
+            "type": "string"
+          }
+        ]
+      }
+    },
+    {
+      "name": "05 Negative",
+      "item": [
+        {
+          "name": "401: /v1/me without a token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 401', () => pm.response.to.have.status(401));",
+                  "const body = pm.response.json();",
+                  "pm.test('problem details', () => { pm.expect(body.status).to.eql(401); pm.expect(body.title).to.be.a('string'); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "me"
+              ]
+            },
+            "description": "User surfaces reject anonymous callers with RFC 7807."
+          }
+        },
+        {
+          "name": "401: API key rejected on /v1/me",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 401', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "apikey",
+              "apikey": [
+                {
+                  "key": "key",
+                  "value": "X-API-Key",
+                  "type": "string"
+                },
+                {
+                  "key": "value",
+                  "value": "{{adminApiKey}}",
+                  "type": "string"
+                },
+                {
+                  "key": "in",
+                  "value": "header",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "me"
+              ]
+            },
+            "description": "Account management requires a live JWT; API keys are deliberately not accepted."
+          }
+        },
+        {
+          "name": "403: non-admin JWT on /v1/admin",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 403', () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/admin/queues",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "admin",
+                "queues"
+              ]
+            },
+            "description": "The generated magic-link user is a regular user, so an admin route returns 403."
+          }
+        },
+        {
+          "name": "403: refresh without the CSRF header",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const hasCookie = pm.cookies.has('dt_refresh');",
+                  "pm.test(hasCookie ? '403 without CSRF' : '401 without a refresh cookie', () => pm.expect(pm.response.code).to.eql(hasCookie ? 403 : 401));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/auth/refresh",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "auth",
+                "refresh"
+              ]
+            },
+            "description": "Run after 01 Auth so the dt_refresh cookie exists. Without the x-requested-with: trendr header the cookie-authenticated write is rejected."
+          }
+        },
+        {
+          "name": "401: verify with a bad token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 401', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-requested-with",
+                "value": "trendr",
+                "description": "CSRF header required while the refresh cookie exists"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"not-a-real-magic-link-token\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/auth/verify",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "auth",
+                "verify"
+              ]
+            },
+            "description": "Includes the CSRF header because the refresh cookie from 01 Auth is present; without it the CSRF hook returns 403 before the token is checked."
+          }
+        },
+        {
+          "name": "401: revoked API key",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 401', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "apikey",
+              "apikey": [
+                {
+                  "key": "key",
+                  "value": "X-API-Key",
+                  "type": "string"
+                },
+                {
+                  "key": "value",
+                  "value": "{{createdApiKey}}",
+                  "type": "string"
+                },
+                {
+                  "key": "in",
+                  "value": "header",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/trending?limit=1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "trending"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "1",
+                  "description": "One row is enough"
+                }
+              ]
+            },
+            "description": "Run after 03 Me revokes the key created earlier in the run."
+          }
+        }
+      ]
+    },
+    {
+      "name": "06 Manual",
+      "item": [
+        {
+          "name": "SSE leaderboard (manual)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('streams text/event-stream', () => pm.expect(pm.response.headers.get('content-type') || '').to.include('text/event-stream'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "text/event-stream"
+              },
+              {
+                "key": "Last-Event-ID",
+                "value": "{{lastEventId}}",
+                "description": "Optional resume cursor",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/stream/leaderboard?scope=all&window=24h",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "stream",
+                "leaderboard"
+              ],
+              "query": [
+                {
+                  "key": "scope",
+                  "value": "all",
+                  "description": "Source scope"
+                },
+                {
+                  "key": "window",
+                  "value": "24h",
+                  "description": "24h | 7d | 30d"
+                }
+              ]
+            },
+            "description": "Server-Sent Events. Postman buffers the stream until it is cancelled; the 25 s heartbeat keeps it open. Run manually in Postman; Newman would time out."
+          }
+        },
+        {
+          "name": "Preview unsubscribe token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.collectionVariables.get('unsubscribeToken')) {",
+                  "  pm.test('set unsubscribeToken from an email to exercise this', () => pm.expect(pm.response.code).to.be.oneOf([200, 400, 401, 404]));",
+                  "} else {",
+                  "  pm.test('previews the purpose', () => { const body = pm.response.json(); pm.expect(body.ok).to.eql(true); pm.expect(body.purpose).to.be.oneOf(['digest', 'alerts', 'all']); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/unsubscribe?token={{unsubscribeToken}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "unsubscribe"
+              ],
+              "query": [
+                {
+                  "key": "token",
+                  "value": "{{unsubscribeToken}}",
+                  "description": "Token from an email footer"
+                }
+              ]
+            },
+            "description": "Requires a token from a digest or alert email. Set the unsubscribeToken collection variable; without it the request is expected to be rejected."
+          }
+        },
+        {
+          "name": "One-click unsubscribe",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.collectionVariables.get('unsubscribeToken')) {",
+                  "  pm.test('set unsubscribeToken from an email to exercise this', () => pm.expect(pm.response.code).to.be.oneOf([200, 400, 401, 404]));",
+                  "} else {",
+                  "  pm.test('confirms the unsubscribe', () => { const body = pm.response.json(); pm.expect(body.ok).to.eql(true); pm.expect(body.purpose).to.be.oneOf(['digest', 'alerts', 'all']); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/unsubscribe?token={{unsubscribeToken}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "unsubscribe"
+              ],
+              "query": [
+                {
+                  "key": "token",
+                  "value": "{{unsubscribeToken}}",
+                  "description": "Token from an email footer"
+                }
+              ]
+            },
+            "description": "RFC 8058 one-click unsubscribe. Requires the unsubscribeToken collection variable."
+          }
+        },
+        {
+          "name": "Admin via JWT (optional)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('admin JWT accepted or role rejected', () => pm.expect(pm.response.code).to.be.oneOf([200, 403]));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/admin/queues",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "admin",
+                "queues"
+              ]
+            },
+            "description": "Proves the admin-role JWT path. The generated magic-link user is a regular user, so this returns 403 unless you sign in with an ADMIN_EMAILS address. The Admin folder uses the admin-scope API key instead."
+          }
+        }
+      ]
+    },
+    {
+      "name": "99 Destructive",
+      "item": [
+        {
+          "name": "Logout",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "x-requested-with",
+                "value": "trendr",
+                "description": "CSRF header required for cookie-authenticated writes"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/auth/logout",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "auth",
+                "logout"
+              ]
+            },
+            "description": "Revokes the refresh session and clears the dt_refresh cookie. Access JWTs stay valid until they expire."
+          }
+        },
+        {
+          "name": "Refresh after logout",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 401', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "x-requested-with",
+                "value": "trendr"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/auth/refresh",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "auth",
+                "refresh"
+              ]
+            },
+            "description": "The cookie was cleared by logout, so the refresh is rejected."
+          }
+        },
+        {
+          "name": "Delete account",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "me"
+              ]
+            },
+            "description": "Deletes the throwaway Postman user and cascades its watchlists, alerts and keys. Run last."
+          }
+        }
+      ],
+      "auth": {
+        "type": "bearer",
+        "bearer": [
+          {
+            "key": "token",
+            "value": "{{accessToken}}",
+            "type": "string"
+          }
+        ]
+      }
+    }
+  ]
+}

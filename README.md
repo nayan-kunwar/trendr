@@ -383,5 +383,6 @@ rate-limit caveat and the result template; results are recorded after the first 
 - [`docs/REMEDIATION_PLAN.md`](./docs/REMEDIATION_PLAN.md) — CI remediation and Phase 10 plan
 - [`docs/PRODUCTION_READINESS_REVIEW.md`](./docs/PRODUCTION_READINESS_REVIEW.md) — 27-finding review and remediation plan
 - [`docs/runbook.md`](./docs/runbook.md) — operations, deployment, backups and incident checklists
+- [`docs/postman/`](./docs/postman) — Postman collection covering every API operation, plus local and production environments
 - [`render.yaml`](./render.yaml) / [`docker-compose.prod.yml`](./docker-compose.prod.yml) — deployment artifacts
 - [`docs/mockups/`](./docs/mockups) — UI mockups (reference for Phase 6)
