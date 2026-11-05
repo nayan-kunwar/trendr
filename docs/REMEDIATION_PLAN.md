@@ -47,9 +47,10 @@ environment.
 
 | Item | Evidence |
 | --- | --- |
-| Repo state | `main` synced with `origin/main`; remediation at `a22dcac`, toolchain queue cleared through `d1f5193` |
+| Repo state | `main` synced with `origin/main`; remediation at `a22dcac`, toolchain queue cleared through `d1f5193`, release dry run at `96d933c` |
 | Unit suite | 85 files / 612 tests pass locally (2026-11-03) |
 | Latest CI | Run `41710700703` for `d1f5193`: security, lint/typecheck/unit, integration and compose-smoke all green |
+| Release dry run | `v0.1.0-rc.3` (run `41889652046`) published api, worker, mcp and web to GHCR; Trivy 0 HIGH/CRITICAL; each digest cosign-signed and verified; prerelease tags did not move `latest` or `0.1` |
 | Security gate | `pnpm audit --prod --audit-level high` green since `a839fc2`; `deepmerge@4.3.1` remains an accepted low-risk advisory |
 | Integration gate | time-dependent partition fixture fixed; `snapshots_default` assertion passes since `3ff3441` |
 | Compose flake | corepack retry added in `f2ee1d7`; compose smoke green in `41448937581` |

@@ -393,6 +393,8 @@ publishing web.
 # 1. Publish a release tag (runs .github/workflows/publish.yml).
 git tag v1.0.0
 git push origin v1.0.0
+#    Prerelease tags are supported and do not move the `latest` or `0.1` tags:
+#    git tag v0.1.0-rc.1 && git push origin v0.1.0-rc.1
 
 # 2. On the VPS, bootstrap Docker, the deploy user, firewall and backup timer.
 #    Clone the repo somewhere first so the script is available.

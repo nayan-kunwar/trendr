@@ -430,6 +430,13 @@ tests** ✅ · integration **34 files / 173 tests** ✅ · Compose smoke healthy
 `nginx -t` on the updated proxy config ✅ · backup dump verified and **restore drill passed** (37
 tables, 118 680 items) ✅ · `promtool check rules` (9 rules) ✅.
 
+**Release dry run (2026-11-04):** `v0.1.0-rc.3` (commit `96d933c`, run `41889652046`) published
+all four images to GHCR. The first attempt surfaced 10 HIGH Trivy findings in npm's bundled
+dependencies, so `c05ca0b` removes npm/corepack from the runtime stages; the rebuilt images scan
+clean. Each image was cosign-signed and verified against the publish workflow's OIDC identity, and
+carried only `0.1.0-rc.3`, `v0.1.0-rc.3` and `sha-96d933c` — the prerelease did not move `latest`
+or `0.1`.
+
 ---
 
 ## Execution rules
@@ -468,8 +475,6 @@ These cannot be closed in this environment and remain tracked in
 
 - Live VPS acceptance, deployed screenshots and the 200 RPS k6 acceptance run.
 - Render Blueprint sync and live proxy verification (M-12).
-- Keyless cosign signature verification and GHCR publishing (M-9); the workflow can be implemented
-  and dry-run locally, but the real signature only exists after a tagged publish.
 - Offsite bucket lifecycle rules and a VPS restore rehearsal (M-8); the drill can run locally.
 - Scoring tuning against 2–4 weeks of production data.
 
