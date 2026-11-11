@@ -7,6 +7,12 @@ const csv = z.string().transform((s) =>
     .filter(Boolean),
 );
 const bool = z.enum(['true', 'false']).transform((v) => v === 'true');
+/** Optional credentials: an empty env var (Render, Compose) means "not configured". */
+const optionalCredential = z
+  .string()
+  .trim()
+  .optional()
+  .transform((value) => (value === undefined || value.length === 0 ? undefined : value));
 
 /**
  * The single source of truth for environment configuration (spec §15).
@@ -40,6 +46,12 @@ const baseEnvSchema = z.object({
   UNSUBSCRIBE_SECRET: z.string().min(32),
   METRICS_TOKEN: z.string().min(16),
   ADMIN_EMAILS: csv.prefault(''),
+  // ADR-0034: a provider is enabled only when both halves are configured.
+  // Callback URLs derive from API_PUBLIC_URL, so no separate env var exists.
+  GOOGLE_CLIENT_ID: optionalCredential,
+  GOOGLE_CLIENT_SECRET: optionalCredential,
+  GITHUB_CLIENT_ID: optionalCredential,
+  GITHUB_CLIENT_SECRET: optionalCredential,
   GITHUB_TOKENS: csv.optional(), // required when WORKER_ROLES includes ingest
   GITHUB_RESERVE: z.coerce.number().int().default(200),
   HF_TOKEN: z.string().optional(),
@@ -97,6 +109,21 @@ export const EnvSchema = baseEnvSchema.superRefine((e, ctx) => {
   }
   if (e.EMAIL_PROVIDER === 'resend' && !e.RESEND_API_KEY) {
     ctx.addIssue({ code: 'custom', path: ['RESEND_API_KEY'], message: 'required for resend' });
+  }
+  // ADR-0034: half-configured OAuth is a boot error, not a silently hidden
+  // button. Both halves or neither.
+  const oauthPairs = [
+    ['GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET', e.GOOGLE_CLIENT_ID, e.GOOGLE_CLIENT_SECRET],
+    ['GITHUB_CLIENT_ID', 'GITHUB_CLIENT_SECRET', e.GITHUB_CLIENT_ID, e.GITHUB_CLIENT_SECRET],
+  ] as const;
+  for (const [idKey, secretKey, id, secret] of oauthPairs) {
+    if ((id === undefined) !== (secret === undefined)) {
+      ctx.addIssue({
+        code: 'custom',
+        path: [id === undefined ? idKey : secretKey],
+        message: `must be set together with ${id === undefined ? secretKey : idKey}`,
+      });
+    }
   }
   if (
     e.WORKER_ROLES.includes('ingest') &&

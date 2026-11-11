@@ -83,6 +83,54 @@ describe('@trendr/config env schema', () => {
     expect(result.env.GITHUB_TOKENS).toBeUndefined();
   });
 
+  it('enables OAuth providers only when both credentials are present (ADR-0034)', () => {
+    const disabled = readEnv({ ...MINIMAL_VALID });
+    expect(disabled.ok).toBe(true);
+    if (disabled.ok) {
+      expect(disabled.env.GOOGLE_CLIENT_ID).toBeUndefined();
+      expect(disabled.env.GITHUB_CLIENT_SECRET).toBeUndefined();
+    }
+
+    const enabled = readEnv({
+      ...MINIMAL_VALID,
+      GOOGLE_CLIENT_ID: 'google-client',
+      GOOGLE_CLIENT_SECRET: 'google-secret',
+      GITHUB_CLIENT_ID: 'github-client',
+      GITHUB_CLIENT_SECRET: 'github-secret',
+    });
+    expect(enabled.ok).toBe(true);
+    if (enabled.ok) {
+      expect(enabled.env.GOOGLE_CLIENT_ID).toBe('google-client');
+      expect(enabled.env.GITHUB_CLIENT_SECRET).toBe('github-secret');
+    }
+
+    const halfGoogle = readEnv({ ...MINIMAL_VALID, GOOGLE_CLIENT_ID: 'google-client' });
+    expect(halfGoogle.ok).toBe(false);
+    if (!halfGoogle.ok) {
+      expect(halfGoogle.message).toContain('GOOGLE_CLIENT_SECRET');
+    }
+
+    const halfGithub = readEnv({ ...MINIMAL_VALID, GITHUB_CLIENT_SECRET: 'github-secret' });
+    expect(halfGithub.ok).toBe(false);
+    if (!halfGithub.ok) {
+      expect(halfGithub.message).toContain('GITHUB_CLIENT_ID');
+    }
+
+    // Empty values from Compose/Render mean "disabled", not half-configured.
+    const empty = readEnv({
+      ...MINIMAL_VALID,
+      GOOGLE_CLIENT_ID: '',
+      GOOGLE_CLIENT_SECRET: '',
+      GITHUB_CLIENT_ID: '',
+      GITHUB_CLIENT_SECRET: '',
+    });
+    expect(empty.ok).toBe(true);
+    if (empty.ok) {
+      expect(empty.env.GOOGLE_CLIENT_ID).toBeUndefined();
+      expect(empty.env.GITHUB_CLIENT_SECRET).toBeUndefined();
+    }
+  });
+
   it('enforces cross-field rules (resend requires an api key)', () => {
     const result = readEnv({ ...MINIMAL_VALID, EMAIL_PROVIDER: 'resend' });
     expect(result.ok).toBe(false);
