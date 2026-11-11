@@ -4,8 +4,10 @@ import {
   AuthMessageSchema,
   AuthSessionSchema,
   AuthUserSchema,
+  OAuthProvidersSchema,
   type AuthSession,
   type AuthUser,
+  type OAuthProviderInfo,
 } from './auth-schemas';
 
 /**
@@ -42,16 +44,47 @@ export async function verifyMagicLink(token: string): Promise<AuthUser> {
 /**
  * Restore a session from the refresh cookie. Concurrent callers, including
  * other tabs when Web Locks is available, share one refresh (H-2). Anonymous
- * visitors with no session hint never send the request (H-3).
+ * visitors with no session hint never send the request (H-3) unless `force` is
+ * set — the OAuth callback page needs one refresh even though the hint is
+ * absent because the session was just created on the API origin.
  */
-export function refreshSession(): Promise<AuthUser | null> {
-  if (!hasSessionHint()) return Promise.resolve(null);
+export function refreshSession(options: { force?: boolean } = {}): Promise<AuthUser | null> {
+  if (options.force !== true && !hasSessionHint()) return Promise.resolve(null);
   refreshInFlight ??= withRefreshLock(doRefreshWithRetry)
     .catch(() => null)
     .finally(() => {
       refreshInFlight = null;
     });
   return refreshInFlight;
+}
+
+/** Providers enabled on this deployment; discovery failures hide the buttons. */
+export async function fetchOAuthProviders(): Promise<OAuthProviderInfo[]> {
+  try {
+    const response = await fetch(`${apiBaseUrl()}/v1/auth/oauth/providers`, {
+      headers: { accept: 'application/json' },
+      credentials: 'include',
+      cache: 'no-store',
+    });
+    if (!response.ok) return [];
+    const body: unknown = await response.json();
+    const parsed = OAuthProvidersSchema.safeParse(body);
+    return parsed.success ? parsed.data.providers : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Absolute API URL for a full-page authorization navigation. The state cookie
+ * is set by the API response, so this must be a top-level navigation rather
+ * than a fetch.
+ */
+export function oauthStartUrl(provider: OAuthProviderInfo['id'], returnTo?: string): string {
+  const params = new URLSearchParams();
+  if (returnTo !== undefined && returnTo.length > 0) params.set('return_to', returnTo);
+  const query = params.toString();
+  return `${apiBaseUrl()}/v1/auth/oauth/${provider}/start${query.length > 0 ? `?${query}` : ''}`;
 }
 
 type RefreshAttempt =
@@ -309,4 +342,4 @@ function delay(ms: number): Promise<void> {
   });
 }
 
-export type { AuthSession, AuthUser };
+export type { AuthSession, AuthUser, OAuthProviderInfo };

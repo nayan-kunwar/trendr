@@ -168,3 +168,38 @@ describe('refresh rotation races (H-2)', () => {
     delete (navigator as { locks?: unknown }).locks;
   });
 });
+
+describe('OAuth helpers (ADR-0034)', () => {
+  it('forces a refresh for the callback page despite the missing hint', async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(sessionResponse('access-oauth'));
+    vi.stubGlobal('fetch', fetchMock);
+    const auth = await loadAuth();
+
+    await expect(auth.refreshSession({ force: true })).resolves.toMatchObject({
+      email: USER.email,
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(localStorage.getItem(SESSION_HINT_KEY)).toBe('1');
+    expect(auth.getAccessToken()).toBe('access-oauth');
+  });
+
+  it('builds an API start URL with an encoded same-origin return path', async () => {
+    const auth = await loadAuth();
+    expect(auth.oauthStartUrl('google', '/items/42?tab=scores')).toBe(
+      'http://localhost:4000/v1/auth/oauth/google/start?return_to=%2Fitems%2F42%3Ftab%3Dscores',
+    );
+    expect(auth.oauthStartUrl('github')).toBe('http://localhost:4000/v1/auth/oauth/github/start');
+  });
+
+  it('returns enabled providers and degrades to none on discovery failure', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ providers: [{ id: 'github', label: 'GitHub' }] }))
+      .mockRejectedValueOnce(new Error('offline'));
+    vi.stubGlobal('fetch', fetchMock);
+    const auth = await loadAuth();
+
+    await expect(auth.fetchOAuthProviders()).resolves.toEqual([{ id: 'github', label: 'GitHub' }]);
+    await expect(auth.fetchOAuthProviders()).resolves.toEqual([]);
+  });
+});

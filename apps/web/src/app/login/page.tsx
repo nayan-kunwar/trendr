@@ -5,7 +5,7 @@ import { LoginForm } from '@/components/login-form';
 
 export const metadata: Metadata = {
   title: 'Sign in',
-  description: 'Sign in to Trendr with a one-time email link.',
+  description: 'Sign in to Trendr with Google, GitHub or a one-time email link.',
   robots: { index: false, follow: false },
 };
 
@@ -18,8 +18,8 @@ export default function LoginPage() {
         </span>
         <h1 className="mt-4 text-xl font-semibold tracking-tight">Sign in to Trendr</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Watchlists, alerts and the weekly digest live in your account. We&apos;ll email you a
-          one-time link — no password to remember.
+          Watchlists, alerts and the weekly digest live in your account. Use Google or GitHub, or
+          we&apos;ll email you a one-time link — no password to remember.
         </p>
         <div className="mt-6">
           <LoginForm />

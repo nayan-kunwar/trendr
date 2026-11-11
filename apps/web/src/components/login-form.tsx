@@ -3,6 +3,7 @@
 import { Loader2, MailCheck, Send } from 'lucide-react';
 import { useState, type SyntheticEvent } from 'react';
 
+import { OAuthButtons } from '@/components/oauth-buttons';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { authErrorMessage, requestMagicLink } from '@/lib/auth';
@@ -56,52 +57,55 @@ export function LoginForm() {
   }
 
   return (
-    <form
-      onSubmit={(event) => {
-        void onSubmit(event);
-      }}
-      className="space-y-4"
-    >
-      <div className="space-y-1.5">
-        <label htmlFor="email" className="text-xs font-medium">
-          Email address
-        </label>
-        <Input
-          id="email"
-          name="email"
-          type="email"
-          autoComplete="email"
-          autoFocus
-          required
-          maxLength={320}
-          placeholder="you@example.com"
-          value={email}
-          onChange={(event) => {
-            setEmail(event.target.value);
-          }}
-          disabled={sending}
-        />
-      </div>
-      {error !== null ? (
-        <p
-          role="alert"
-          className="rounded-md border border-rose-500/30 bg-rose-500/5 px-3 py-2 text-xs text-rose-600 dark:text-rose-400"
-        >
-          {error}
+    <div className="space-y-5">
+      <OAuthButtons />
+      <form
+        onSubmit={(event) => {
+          void onSubmit(event);
+        }}
+        className="space-y-4"
+      >
+        <div className="space-y-1.5">
+          <label htmlFor="email" className="text-xs font-medium">
+            Email address
+          </label>
+          <Input
+            id="email"
+            name="email"
+            type="email"
+            autoComplete="email"
+            autoFocus
+            required
+            maxLength={320}
+            placeholder="you@example.com"
+            value={email}
+            onChange={(event) => {
+              setEmail(event.target.value);
+            }}
+            disabled={sending}
+          />
+        </div>
+        {error !== null ? (
+          <p
+            role="alert"
+            className="rounded-md border border-rose-500/30 bg-rose-500/5 px-3 py-2 text-xs text-rose-600 dark:text-rose-400"
+          >
+            {error}
+          </p>
+        ) : null}
+        <Button type="submit" className="w-full" disabled={sending || email.trim().length === 0}>
+          {sending ? (
+            <Loader2 aria-hidden="true" className="animate-spin" />
+          ) : (
+            <Send aria-hidden="true" />
+          )}
+          {sending ? 'Sending link…' : 'Email me a sign-in link'}
+        </Button>
+        <p className="text-center text-[11px] leading-relaxed text-muted-foreground">
+          No password needed. Your email is only used to sign you in and deliver the alerts you
+          choose.
         </p>
-      ) : null}
-      <Button type="submit" className="w-full" disabled={sending || email.trim().length === 0}>
-        {sending ? (
-          <Loader2 aria-hidden="true" className="animate-spin" />
-        ) : (
-          <Send aria-hidden="true" />
-        )}
-        {sending ? 'Sending link…' : 'Email me a sign-in link'}
-      </Button>
-      <p className="text-center text-[11px] leading-relaxed text-muted-foreground">
-        No password needed. Your email is only used to sign you in and deliver the alerts you
-        choose.
-      </p>
-    </form>
+      </form>
+    </div>
   );
 }
