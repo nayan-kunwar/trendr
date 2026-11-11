@@ -132,6 +132,9 @@ importers:
       ioredis:
         specifier: ^6.0.0
         version: 6.0.0
+      jose:
+        specifier: ^6.2.14
+        version: 6.2.14
       prom-client:
         specifier: ^15
         version: 15.1.3

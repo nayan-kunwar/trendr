@@ -5,6 +5,7 @@ import { createLogger } from '@trendr/logger';
 import { Redis } from 'ioredis';
 
 import { buildApp } from './app.js';
+import { createOAuthProviders } from './services/oauth/providers.js';
 
 const logger = createLogger({ service: 'api', level: env.LOG_LEVEL });
 
@@ -38,6 +39,28 @@ queueRedis.on('error', (error: Error) => {
   logger.warn({ err: error }, 'queue redis connection error');
 });
 
+// ADR-0034: only fully configured providers are advertised; env validation
+// already rejects a half-configured pair at boot.
+const oauthProviders = createOAuthProviders({
+  apiPublicUrl: env.API_PUBLIC_URL,
+  ...(env.GOOGLE_CLIENT_ID === undefined || env.GOOGLE_CLIENT_SECRET === undefined
+    ? {}
+    : {
+        google: {
+          clientId: env.GOOGLE_CLIENT_ID,
+          clientSecret: env.GOOGLE_CLIENT_SECRET,
+        },
+      }),
+  ...(env.GITHUB_CLIENT_ID === undefined || env.GITHUB_CLIENT_SECRET === undefined
+    ? {}
+    : {
+        github: {
+          clientId: env.GITHUB_CLIENT_ID,
+          clientSecret: env.GITHUB_CLIENT_SECRET,
+        },
+      }),
+});
+
 const app = await buildApp({
   loggerInstance: logger,
   trustProxy: env.TRUST_PROXY,
@@ -53,6 +76,14 @@ const app = await buildApp({
     adminEmails: env.ADMIN_EMAILS,
     refreshTtlDays: env.REFRESH_TTL_DAYS,
     accessTokenTtlSeconds: env.JWT_ACCESS_TTL_SEC,
+    cookieSecure: env.NODE_ENV === 'production',
+    cookieSameSite: env.COOKIE_SAME_SITE,
+  },
+  oauth: {
+    providers: oauthProviders,
+    webPublicUrl: env.WEB_PUBLIC_URL,
+    adminEmails: env.ADMIN_EMAILS,
+    refreshTtlDays: env.REFRESH_TTL_DAYS,
     cookieSecure: env.NODE_ENV === 'production',
     cookieSameSite: env.COOKIE_SAME_SITE,
   },

@@ -188,6 +188,20 @@ export async function revokeRefreshSession(
   }
 }
 
+/**
+ * Start a new refresh-token family for an already-authenticated identity
+ * (OAuth callback, ADR-0034). Magic-link verification uses the private
+ * transaction-aware variant below.
+ */
+export async function createSessionForUser(
+  db: Db,
+  user: UserRecord,
+  now: Date,
+  ttlDays = 30,
+): Promise<AuthSession> {
+  return createRefreshSession(db, user, now, undefined, ttlDays);
+}
+
 async function createRefreshSession(
   db: Parameters<typeof insertAuthToken>[0],
   user: UserRecord,

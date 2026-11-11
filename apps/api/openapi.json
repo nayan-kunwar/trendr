@@ -2675,6 +2675,110 @@
       },
       "delete": { "responses": { "200": { "description": "Default Response" } } }
     },
+    "/v1/auth/oauth/providers": {
+      "get": {
+        "summary": "List the OAuth providers enabled on this deployment",
+        "tags": ["auth"],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "providers": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": { "type": "string", "enum": ["google", "github"] },
+                          "label": { "type": "string" }
+                        },
+                        "required": ["id", "label"],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": ["providers"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/auth/oauth/{provider}/start": {
+      "get": {
+        "summary": "Start an OAuth authorization-code + PKCE login",
+        "tags": ["auth"],
+        "parameters": [
+          {
+            "schema": { "type": "string", "maxLength": 512 },
+            "in": "query",
+            "name": "return_to",
+            "required": false
+          },
+          {
+            "schema": { "type": "string", "enum": ["google", "github"] },
+            "in": "path",
+            "name": "provider",
+            "required": true
+          }
+        ],
+        "responses": {
+          "302": {
+            "description": "Default Response",
+            "content": { "application/json": { "schema": {} } }
+          }
+        }
+      }
+    },
+    "/v1/auth/oauth/{provider}/callback": {
+      "get": {
+        "summary": "OAuth provider callback; sets the rotating refresh cookie",
+        "tags": ["auth"],
+        "parameters": [
+          {
+            "schema": { "type": "string", "minLength": 1, "maxLength": 4096 },
+            "in": "query",
+            "name": "code",
+            "required": false
+          },
+          {
+            "schema": { "type": "string", "minLength": 16, "maxLength": 512 },
+            "in": "query",
+            "name": "state",
+            "required": false
+          },
+          {
+            "schema": { "type": "string", "maxLength": 256 },
+            "in": "query",
+            "name": "error",
+            "required": false
+          },
+          {
+            "schema": { "type": "string", "maxLength": 1024 },
+            "in": "query",
+            "name": "error_description",
+            "required": false
+          },
+          {
+            "schema": { "type": "string", "enum": ["google", "github"] },
+            "in": "path",
+            "name": "provider",
+            "required": true
+          }
+        ],
+        "responses": {
+          "302": {
+            "description": "Default Response",
+            "content": { "application/json": { "schema": {} } }
+          }
+        }
+      }
+    },
     "/v1/me/watchlists": {
       "get": {
         "summary": "List the current user’s watchlists",

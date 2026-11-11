@@ -28,6 +28,7 @@ import { registerDigestRoutes, registerUnsubscribeRoutes } from './routes/digest
 import { registerHealthRoutes } from './routes/health.js';
 import { registerItemRoutes } from './routes/items.js';
 import { registerNewRoutes } from './routes/new.js';
+import { registerOAuthRoutes, type OAuthRoutesOptions } from './routes/oauth.js';
 import { registerSearchRoutes } from './routes/search.js';
 import { registerStatsRoutes } from './routes/stats.js';
 import { registerStreamRoutes } from './routes/stream.js';
@@ -60,6 +61,8 @@ export interface BuildAppDeps {
   jwtSecret?: string;
   /** Magic-link/refresh/profile configuration (task 7.1). */
   auth?: Omit<AuthRoutesOptions, 'emailSender'> & { emailSender: EmailSender };
+  /** OAuth provider clients and cookie policy (ADR-0034). */
+  oauth?: Omit<OAuthRoutesOptions, 'trustProxy' | 'trustCfConnectingIp'>;
   /**
    * Dedicated BullMQ producer connection (spec §10.1 admin triggers, §7.7 DLQ
    * replay). Caller-owned; the app closes the queues but not the client.
@@ -165,6 +168,11 @@ export async function buildApp(deps: BuildAppDeps = {}): Promise<FastifyInstance
   registerAdminRoutes(app, queues === undefined ? {} : { queues });
   registerAuthRoutes(app, {
     ...(deps.auth ?? {}),
+    trustProxy: deps.trustProxy ?? false,
+    trustCfConnectingIp: deps.trustCfConnectingIp ?? false,
+  });
+  registerOAuthRoutes(app, {
+    ...(deps.oauth ?? {}),
     trustProxy: deps.trustProxy ?? false,
     trustCfConnectingIp: deps.trustCfConnectingIp ?? false,
   });

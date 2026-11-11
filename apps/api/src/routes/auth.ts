@@ -14,7 +14,6 @@ import {
 import { deleteUser, findUserById, updateUserDisplayName, type UserRecord } from '@trendr/db';
 
 import { requireUser } from '../plugins/auth.js';
-import { bumpMemoryCounter, incrementWithTtl } from '../plugins/counters.js';
 import { CACHE_CONTROL } from '../plugins/etag.js';
 import type { RefreshReuseOutcome } from '../plugins/metrics.js';
 import { clientIp } from '../plugins/rate-limit.js';
@@ -36,6 +35,17 @@ import {
   type AuthServiceOptions,
   type AuthSession,
 } from '../services/auth.service.js';
+import { allowCounter } from './auth-counters.js';
+import {
+  REFRESH_COOKIE,
+  clearRefreshCookie as clearSessionRefreshCookie,
+  setRefreshCookie as setSessionRefreshCookie,
+  type RefreshCookieSameSite,
+} from './auth-cookies.js';
+
+// Kept as a re-export for the existing auth route tests.
+export { REFRESH_COOKIE, REFRESH_COOKIE_PATH, refreshCookieOptions } from './auth-cookies.js';
+export type { RefreshCookieSameSite } from './auth-cookies.js';
 
 /**
  * Spec §10.5 — magic-link authentication, 15-minute access JWTs, rotating
@@ -44,8 +54,6 @@ import {
  * known and unknown emails (always 202); only the email's SHA-256 is stored.
  */
 
-const REFRESH_COOKIE = 'dt_refresh';
-const REFRESH_COOKIE_PATH = '/v1/auth';
 const MAGIC_LINKS_PER_EMAIL_PER_HOUR = 3;
 const AUTH_WINDOW_SECONDS = 60;
 const MAGIC_LINK_WINDOW_SECONDS = 3_600;
@@ -54,33 +62,6 @@ const MAGIC_LINK_WINDOW_SECONDS = 3_600;
 export const REFRESH_SESSION_MAX = 60;
 /** H-3: coarse per-IP guard so random cookies cannot create unbounded keys. */
 export const REFRESH_IP_MAX = 120;
-
-/** SameSite mode for the refresh cookie (env: COOKIE_SAME_SITE). */
-export type RefreshCookieSameSite = 'lax' | 'strict' | 'none';
-
-/** Attributes for the rotating refresh cookie (exported for unit tests). */
-export function refreshCookieOptions(
-  sameSite: RefreshCookieSameSite,
-  secure: boolean,
-  ttlDays: number,
-): {
-  path: string;
-  httpOnly: boolean;
-  secure: boolean;
-  sameSite: RefreshCookieSameSite;
-  maxAge: number;
-} {
-  return {
-    path: REFRESH_COOKIE_PATH,
-    httpOnly: true,
-    secure,
-    sameSite,
-    maxAge: ttlDays * 24 * 60 * 60,
-  };
-}
-
-/** Per-process fallback when Redis is absent (tests/tooling). Bounded by L-1. */
-const memoryAuthCounters = new Map<string, { count: number; resetAt: number }>();
 
 export interface AuthRoutesOptions {
   /** Omitted only by tooling builds (OpenAPI export). */
@@ -152,23 +133,18 @@ export function registerAuthRoutes(app: FastifyInstance, options: AuthRoutesOpti
     user: toAuthUser(session.user),
   });
 
+  const refreshCookieConfig = {
+    sameSite: cookieSameSite,
+    secure: cookieSecure,
+    ttlDays: options.refreshTtlDays ?? 30,
+  } as const;
+
   const setRefreshCookie = (reply: FastifyReply, session: AuthSession): void => {
-    const ttlDays = options.refreshTtlDays ?? 30;
-    reply.setCookie(
-      REFRESH_COOKIE,
-      session.refreshToken,
-      refreshCookieOptions(cookieSameSite, cookieSecure, ttlDays),
-    );
+    setSessionRefreshCookie(reply, session, refreshCookieConfig);
   };
 
   const clearRefreshCookie = (reply: FastifyReply): void => {
-    // Match the attributes used when setting it so the deletion is accepted
-    // in browsers that partition or reject mismatched cookies.
-    reply.clearCookie(REFRESH_COOKIE, {
-      path: REFRESH_COOKIE_PATH,
-      secure: cookieSecure,
-      sameSite: cookieSameSite,
-    });
+    clearSessionRefreshCookie(reply, refreshCookieConfig);
   };
 
   const guard = {
@@ -394,23 +370,6 @@ async function requireCurrentUser(
 function getRefreshCookie(request: FastifyRequest): string | undefined {
   const cookie = request.cookies[REFRESH_COOKIE];
   return typeof cookie === 'string' && cookie.length > 0 ? cookie : undefined;
-}
-
-async function allowCounter(
-  app: FastifyInstance,
-  key: string,
-  windowSeconds: number,
-  max: number,
-): Promise<boolean> {
-  if (max <= 0) return true;
-
-  if (app.hasDecorator('redis')) {
-    const count = await incrementWithTtl(app.redis, key, windowSeconds);
-    if (count !== null) return count <= max;
-    // Redis is a best-effort limiter; fall through to the bounded local map.
-  }
-
-  return bumpMemoryCounter(memoryAuthCounters, key, Date.now(), windowSeconds * 1_000, max);
 }
 
 /** H-2/H-3: stable, short key for one refresh session (never the raw token). */
