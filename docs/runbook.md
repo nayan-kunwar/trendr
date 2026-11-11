@@ -564,6 +564,8 @@ or you use custom domains, edit those values and rebuild web.
    an address on the verified Resend domain, then enter the `sync: false` values:
    `ADMIN_EMAILS`, `RESEND_API_KEY` (API and worker), `GITHUB_TOKENS`, optional
    `HF_TOKEN`, `MCP_API_KEY`, and at least one `MCP_HTTP_AUTH_TOKENS` value.
+   For OAuth, also enter both halves of a provider (`GOOGLE_CLIENT_ID` +
+   `GOOGLE_CLIENT_SECRET` and/or `GITHUB_CLIENT_ID` + `GITHUB_CLIENT_SECRET`).
 3. Confirm the paid plans (API, worker, Postgres, Key Value). Web and MCP stay
    free.
 4. On the first sync, wait for the API deploy to finish its pre-deploy
@@ -594,6 +596,42 @@ The API is paid and stays warm, so SSE should stream without a cold-start gap:
 curl -N 'https://trendr-api.onrender.com/v1/stream/leaderboard?scope=all&window=7d&limit=5'
 ```
 
+### OAuth provider setup
+
+OAuth is optional. A provider is enabled only when both its id and secret are
+set; empty values mean disabled, and a half-configured pair fails API boot.
+The callback URL is derived from `API_PUBLIC_URL`:
+
+```text
+${API_PUBLIC_URL}/v1/auth/oauth/google/callback
+${API_PUBLIC_URL}/v1/auth/oauth/github/callback
+```
+
+**Google (OAuth client, Web application)**
+
+1. In Google Cloud Console → APIs & Services → Credentials, create an OAuth
+   client ID of type **Web application**.
+2. Add the callback URL above under **Authorized redirect URIs**. Add the local
+   `http://localhost:4000/v1/auth/oauth/google/callback` too if you test locally.
+3. Set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` on the API service.
+4. Google returns an OIDC ID token; Trendr verifies its signature/JWKS, issuer,
+   audience, expiry and nonce, and requires `email_verified=true`.
+
+**GitHub (OAuth app)**
+
+1. GitHub → Settings → Developer settings → OAuth Apps → **New OAuth App**.
+2. Set the callback URL to the GitHub URL above (and the localhost equivalent
+   for local testing). `GITHUB_CLIENT_ID`/`GITHUB_CLIENT_SECRET` are OAuth app
+   credentials, **not** the worker's `GITHUB_TOKENS` PAT.
+3. Set both values on the API service. GitHub PKCE is sent as S256 (supported
+   and recommended since 2025-07-14; not required by GitHub).
+4. Trendr reads `/user` for the numeric id/login/display name and `/user/emails`
+   for the primary verified address. The profile email is ignored.
+
+Restart/redeploy the API after changing credentials. `GET
+/v1/auth/oauth/providers` lists only enabled providers, and the web login page
+hides the rest.
+
 ### Auth cookies
 
 `onrender.com` is on the Public Suffix List, so the default
@@ -610,10 +648,22 @@ POST. Safari blocks third-party cookies by default, and other browsers may
 partition or throttle them, so session restore on the default Render hosts is
 not reliable in every browser.
 
+**Render manual checklist (do this after the first deploy):**
+
+1. Open the web origin in Safari (macOS or iOS) with **Prevent cross-site
+   tracking** enabled (the default), sign in with Google and GitHub, reload,
+   then sign out. Session restore must survive the reload.
+2. Repeat in Chrome with third-party cookies blocked, and in a private window.
+3. In DevTools → Application → Cookies, confirm `dt_refresh` is `HttpOnly`,
+   `Secure`, `SameSite=None`, and `Path=/v1/auth`.
+4. If either browser fails, do not weaken CSRF or cookie flags. Move to custom
+   subdomains instead.
+
 For a browser-complete demo, add custom subdomains under one registrable domain
 you own (`app.example.com` and `api.example.com`, not two `*.onrender.com`
 hosts), then set `COOKIE_SAME_SITE=lax`. Same-site subdomains work with `Lax`
-even though the requests are cross-origin.
+even though the requests are cross-origin. A BFF/proxy is the fallback if
+third-party cookies must be avoided entirely.
 
 ### Custom domains
 

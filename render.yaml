@@ -130,6 +130,16 @@ services:
         sync: false
       - key: RESEND_API_KEY
         sync: false
+      # ADR-0034: optional OAuth. Set both halves of a provider to enable it;
+      # callback URLs are ${API_PUBLIC_URL}/v1/auth/oauth/{google,github}/callback.
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: GITHUB_CLIENT_ID
+        sync: false
+      - key: GITHUB_CLIENT_SECRET
+        sync: false
       - fromGroup: trendr-shared
 
   # Worker: runs ingestion + scoring. M-12 moves it off 512 MB, which was not

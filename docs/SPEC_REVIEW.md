@@ -1753,6 +1753,32 @@ Appendix B.
 | `TRUST_CF_CONNECTING_IP`              | env            | M-12    | Trust the Cloudflare client header only behind the VPS nginx              |
 | `TRENDR_TAG`                          | env (required) | M-9     | Exact GHCR image tag for `docker-compose.prod.yml`; no implicit `latest`  |
 
+### OAuth login (ADR-0034, 2026-11-11)
+
+| Name | Kind | Purpose |
+| --- | --- | --- |
+| `oauth_provider_t` | Postgres enum | `google`/`github` provider labels |
+| `oauth_accounts` | table | Stable provider identity linked to one `users` row |
+| `oauth_accounts_provider_account_uq` | unique constraint | One Trendr user per `(provider, provider_account_id)` |
+| `oauth_accounts_user_provider_uq` | unique constraint | At most one account per provider per user |
+| `oauth:state:{sha256(state)}` | Redis key | 10-minute authorization request (PKCE verifier + nonce), `GETDEL` single-use |
+| `apirl:oauth:{ip}` | Redis key | Dedicated OAuth start/callback bucket (20/min/IP) |
+| `dt_oauth_state` | cookie | Opaque state only; `HttpOnly`, `SameSite=Lax`, `Path=/v1/auth/oauth` |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | env | Enable Google OAuth when both are non-empty |
+| `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` | env | Enable GitHub OAuth when both are non-empty |
+| `/v1/auth/oauth/providers` | endpoint | List enabled providers for the web UI |
+| `/v1/auth/oauth/:provider/start` | endpoint | Authorization Code + PKCE start |
+| `/v1/auth/oauth/:provider/callback` | endpoint | Provider callback; sets `dt_refresh` and redirects to web |
+
+**R-33 (§10.5 strict auth limiter).** OAuth start/callback are top-level browser
+navigations and do not share the 5/minute `strictAuthGuard` used by magic-link,
+verify and logout. They use `apirl:oauth:{ip}` at 20/minute/IP instead; refresh
+keeps its existing per-session and per-IP budgets. Rationale and the full flow
+are in [ADR-0034](./adr/0034-oauth-login.md). The callback failure codes are
+`access_denied`, `invalid_state`, `invalid_request`, `email_unverified`,
+`account_conflict`, `provider_unavailable` and `oauth_failed`; they are redirect
+query parameters, not RFC 7807 bodies, because the callback is a navigation.
+
 ## Environment quirks worth knowing
 
 
