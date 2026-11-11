@@ -1,11 +1,11 @@
 # Trendr Postman collection
 
-A hand-authored Postman v2.1 collection covering **all 43 paths / 53 operations** of the Trendr
+A hand-authored Postman v2.1 collection covering **all 46 paths / 56 operations** of the Trendr
 API, plus the health, Mailpit and negative-path checks the OpenAPI document cannot express.
 
 | File | Purpose |
 | --- | --- |
-| `Trendr.postman_collection.json` | The collection (8 folders, 71 requests). |
+| `Trendr.postman_collection.json` | The collection (8 folders, 74 requests). |
 | `Trendr.local.postman_environment.json` | Local stack: API `:4000`, web `:3000`, Mailpit `:8025`. |
 | `Trendr.production.postman_environment.json` | Placeholder origins; fill in the real values locally. |
 
@@ -57,12 +57,12 @@ Run the folders top to bottom:
 | Folder | Requests | What it covers |
 | --- | --- | --- |
 | `00 Health & meta` | 4 | `/healthz`, `/readyz`, `/metrics`, `/openapi.json` |
-| `01 Auth` | 7 | magic link → Mailpit → verify → `/v1/me` → refresh |
+| `01 Auth` | 9 | OAuth providers/callback, magic link → Mailpit → verify → `/v1/me` → refresh |
 | `02 Public` | 15 | trending, lookup, item detail (+ conditional ETag), history, scores, explain, aliases, search, new, topics, languages, compare, stats |
 | `03 Me` | 18 | watchlists, alerts, digest, API-key create/use/revoke |
 | `04 Admin` | 14 | all five ingest variants, scoring, runs, queues, DLQ, rate limits, item patch |
 | `05 Negative` | 6 | 401/403 paths, missing CSRF header, revoked key |
-| `06 Manual` | 4 | SSE stream, unsubscribe (needs an email token), admin-via-JWT (needs an admin user) |
+| `06 Manual` | 5 | SSE stream, unsubscribe (needs an email token), OAuth start (needs a configured provider), admin-via-JWT (needs an admin user) |
 | `99 Destructive` | 3 | logout, refresh-after-logout, delete the throwaway user |
 
 `02 Public` is self-contained: it saves the item IDs that later folders use. `03 Me` depends on the
@@ -73,7 +73,8 @@ key from `03 Me` and the refresh cookie from `01 Auth`. Run in order.
 
 Newman runs the deterministic folders (`00`–`05`) plus `99 Destructive`, which cleans up the
 throwaway user in the same invocation. It cannot run `06 Manual`: the SSE request stays open until
-cancelled, and the unsubscribe request needs a token from a real email. Use Postman for `06`.
+cancelled, the unsubscribe request needs a token from a real email, and OAuth start needs provider
+credentials. Use Postman for `06`.
 
 ```bash
 npx --yes newman run docs/postman/Trendr.postman_collection.json \
@@ -93,7 +94,9 @@ manually or leave it; it has no privileges.
 ## Auth model
 
 - **`01 Auth`** sends a magic link to a fresh `postman-<timestamp>@example.test` address. Magic links
-  are limited to 3 per email per hour, so every run gets a new address.
+  are limited to 3 per email per hour, so every run gets a new address. It also checks OAuth
+  provider discovery and that an invalid OAuth callback redirects to the web error page; the
+  provider round-trip itself is opt-in in `06 Manual` because it needs real client credentials.
 - **Mailpit** (`http://localhost:8025`) is queried through its HTTP API. The second request extracts
   the token from the `/auth/verify?token=…` link. This folder only works locally.
 - **`03 Me`** uses Bearer `{{accessToken}}`. API keys are deliberately rejected on `/v1/me/*`.
@@ -113,6 +116,7 @@ manually or leave it; it has no privileges.
 | `adminApiKey` | you (seed output) | Admin folder, negative API-key tests |
 | `metricsToken` | you (optional) | `/metrics` |
 | `userEmail` | magic-link pre-request | Mailpit filter, verify assertion |
+| `oauthProvider` | collection (`google`) | OAuth start/callback path; set `github` to exercise the other provider |
 | `magicLinkToken`, `mailpitMessageId` | Mailpit requests | verify |
 | `accessToken` | verify / refresh | Me, Negative, Destructive |
 | `itemId`, `itemSource`, `itemExternalId`, `secondItemId` | trending | lookup, item routes, compare, alerts, watchlists |

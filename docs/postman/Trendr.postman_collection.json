@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "Trendr API",
-    "description": "Full-surface collection for the Trendr API (43 paths, 53 operations).\n\nPrerequisites: a seeded and scored stack, Mailpit for the magic-link flow, and the seed admin API key in adminApiKey.\n\nRun order: 00 Health & meta → 01 Auth → 02 Public → 03 Me → 04 Admin → 05 Negative. Folders 06 Manual and 99 Destructive are opt-in.\n\nAuth: the Me folder uses Bearer {{accessToken}}; the Admin folder uses X-API-Key {{adminApiKey}}; cookie writes carry x-requested-with: trendr. Postman’s cookie jar holds dt_refresh — use localhost consistently, not 127.0.0.1.\n\nSee docs/postman/README.md for setup, variables and Newman commands.",
+    "description": "Full-surface collection for the Trendr API (46 paths, 56 operations).\n\nPrerequisites: a seeded and scored stack, Mailpit for the magic-link flow, and the seed admin API key in adminApiKey.\n\nRun order: 00 Health & meta → 01 Auth → 02 Public → 03 Me → 04 Admin → 05 Negative. Folders 06 Manual and 99 Destructive are opt-in.\n\nAuth: the Me folder uses Bearer {{accessToken}}; the Admin folder uses X-API-Key {{adminApiKey}}; cookie writes carry x-requested-with: trendr. Postman’s cookie jar holds dt_refresh — use localhost consistently, not 127.0.0.1.\n\nSee docs/postman/README.md for setup, variables and Newman commands.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -138,6 +138,11 @@
     {
       "key": "lastEventId",
       "value": "",
+      "type": "string"
+    },
+    {
+      "key": "oauthProvider",
+      "value": "google",
       "type": "string"
     }
   ],
@@ -645,6 +650,96 @@
               ]
             },
             "description": "Cookie-authenticated write: requires the x-requested-with: trendr CSRF header. Rotates the refresh token and returns a new access token."
+          }
+        },
+        {
+          "name": "OAuth providers",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('lists enabled providers', () => { pm.expect(body.providers).to.be.an('array'); for (const provider of body.providers) { pm.expect(provider.id).to.be.oneOf(['google', 'github']); pm.expect(provider.label).to.be.a('string'); } });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/auth/oauth/providers",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "auth",
+                "oauth",
+                "providers"
+              ]
+            },
+            "description": "ADR-0034. Lists only providers whose client id and secret are configured; the web login page hides the rest. An empty array is valid."
+          }
+        },
+        {
+          "name": "OAuth callback (invalid state)",
+          "protocolProfileBehavior": {
+            "followRedirects": false
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 302', () => pm.response.to.have.status(302));",
+                  "const location = pm.response.headers.get('location') || '';",
+                  "pm.test('redirects to the web callback with a stable error code', () => { pm.expect(location).to.include('/auth/oauth/callback?error='); pm.expect(location).to.match(/error=(invalid_state|oauth_failed)/); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/auth/oauth/{{oauthProvider}}/callback?code=postman-invalid-code&state=postman-invalid-state-123456",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "auth",
+                "oauth",
+                "{{oauthProvider}}",
+                "callback"
+              ],
+              "query": [
+                {
+                  "key": "code",
+                  "value": "postman-invalid-code"
+                },
+                {
+                  "key": "state",
+                  "value": "postman-invalid-state-123456"
+                }
+              ]
+            },
+            "description": "No dt_oauth_state cookie is sent, so the callback answers with a 302 to the web error page: invalid_state when the provider is configured, oauth_failed when it is not. A real provider round-trip is manual."
           }
         }
       ]
@@ -3352,6 +3447,59 @@
               ]
             },
             "description": "Proves the admin-role JWT path. The generated magic-link user is a regular user, so this returns 403 unless you sign in with an ADMIN_EMAILS address. The Admin folder uses the admin-scope API key instead."
+          }
+        },
+        {
+          "name": "OAuth start (manual)",
+          "protocolProfileBehavior": {
+            "followRedirects": false
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const status = pm.response.code;",
+                  "if (status === 404) {",
+                  "  pm.test('provider is not configured (set GOOGLE_CLIENT_ID/SECRET to exercise)', () => pm.expect(status).to.eql(404));",
+                  "} else {",
+                  "  pm.test('status is 302', () => pm.expect(status).to.eql(302));",
+                  "  pm.test('redirects to the provider', () => pm.expect(pm.response.headers.get('location') || '').to.match(/^https://(accounts.google.com|github.com)//));",
+                  "  pm.test('sets the opaque state cookie', () => { const cookie = pm.response.headers.get('set-cookie') || ''; pm.expect(cookie).to.include('dt_oauth_state='); pm.expect(cookie.toLowerCase()).to.include('httponly'); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/auth/oauth/{{oauthProvider}}/start?return_to=%2Fdashboard",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "auth",
+                "oauth",
+                "{{oauthProvider}}",
+                "start"
+              ],
+              "query": [
+                {
+                  "key": "return_to",
+                  "value": "/dashboard"
+                }
+              ]
+            },
+            "description": "Opt-in: requires GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET (or the GitHub pair) on the API. Redirect following is off so the request stops at the provider authorization URL and does not consume the state."
           }
         }
       ]
