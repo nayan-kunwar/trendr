@@ -6,6 +6,7 @@ export * from './http/backoff.js';
 export * from './http/fetch-json.js';
 export * from './ids.js';
 export * from './leaderboard.js';
+export * from './oauth.js';
 export * from './queues.js';
 export * from './rate-limit/token-bucket.js';
 export * from './redis-keys.js';

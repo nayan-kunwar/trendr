@@ -86,6 +86,16 @@ export const redisKeys = {
   /** `apirl:auth:refresh:ip:{ip}` — coarse guard against random-cookie floods (H-3). */
   authRefreshIpBucket: (ip: string): string => `apirl:auth:refresh:ip:${ip}`,
 
+  /** `apirl:oauth:{ip}` — dedicated OAuth start/callback bucket (20/min). */
+  oauthRateBucket: (ip: string): string => `apirl:oauth:${ip}`,
+
+  /**
+   * `oauth:state:<sha256(state)>` — ten-minute authorization request
+   * (provider, PKCE verifier, nonce, returnTo). Consumed with GETDEL so each
+   * state is single-use; the raw state is never a Redis key.
+   */
+  oauthState: (stateHash: string): string => `oauth:state:${stateHash}`,
+
   /** `apirl:sse:{keyId|ip}` — concurrent SSE stream counter with INCR/DECR (spec §9.1, §10.5). */
   sseConnections: (identity: string): string => `apirl:sse:${identity}`,
 
