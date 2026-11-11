@@ -21,7 +21,7 @@
     "@trendr/email": "workspace:*",
     "@trendr/logger": "workspace:*",
     "@trendr/sources": "workspace:*",
-    "bullmq": "^6.5.3",
+    "bullmq": "^6.7.2",
     "drizzle-orm": "^0.45.4",
     "ioredis": "^6",
     "prom-client": "^15",
