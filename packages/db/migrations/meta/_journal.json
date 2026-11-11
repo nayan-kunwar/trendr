@@ -57,6 +57,13 @@
       "when": 1793686540004,
       "tag": "0007_admin_audit_log",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1794364025570,
+      "tag": "0008_skinny_richard_fisk",
+      "breakpoints": true
     }
   ]
 }

@@ -1,4 +1,4 @@
-import { ITEM_KINDS, METRICS, SOURCES, TIERS, WINDOWS } from '@trendr/core';
+import { ITEM_KINDS, METRICS, OAUTH_PROVIDERS, SOURCES, TIERS, WINDOWS } from '@trendr/core';
 import { pgEnum } from 'drizzle-orm/pg-core';
 
 // Postgres enum types (spec §6.2); labels come from the core const arrays so
@@ -48,3 +48,5 @@ export const alertTypeEnum = pgEnum('alert_type_t', [
 ]);
 export const userRoleEnum = pgEnum('user_role_t', ['user', 'admin']);
 export const tokenKindEnum = pgEnum('token_kind_t', ['magic_link', 'refresh']);
+/** OAuth identity providers; labels come from core so schema and runtime agree. */
+export const oauthProviderEnum = pgEnum('oauth_provider_t', OAUTH_PROVIDERS);

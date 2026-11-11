@@ -71,6 +71,29 @@ export async function revokeAuthToken(db: DbExecutor, id: string, revokedAt: Dat
   await db.update(authTokens).set({ revokedAt }).where(eq(authTokens.id, id));
 }
 
+/**
+ * OAuth claim of an unverified placeholder: any magic link requested before
+ * the provider proved ownership must stop working, otherwise whoever
+ * requested it could still sign in to the claimed account.
+ */
+export async function revokeUnusedMagicLinks(
+  db: DbExecutor,
+  userId: string,
+  revokedAt: Date,
+): Promise<void> {
+  await db
+    .update(authTokens)
+    .set({ revokedAt })
+    .where(
+      and(
+        eq(authTokens.userId, userId),
+        eq(authTokens.kind, 'magic_link'),
+        isNull(authTokens.usedAt),
+        isNull(authTokens.revokedAt),
+      ),
+    );
+}
+
 /** Maintenance: drop expired and long-revoked rows (spec §7.10 cleanup-tokens). */
 export async function deleteExpiredAuthTokens(db: DbExecutor, before: Date): Promise<number> {
   const rows = await db

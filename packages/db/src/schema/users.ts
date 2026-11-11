@@ -1,7 +1,7 @@
 import { index, integer, pgTable, text, timestamp, unique, uuid } from 'drizzle-orm/pg-core';
 
 import { bytea, citext, inet } from './columns.js';
-import { tokenKindEnum, userRoleEnum } from './enums.js';
+import { oauthProviderEnum, tokenKindEnum, userRoleEnum } from './enums.js';
 
 /** Spec §6.2 users & auth. */
 export const users = pgTable('users', {
@@ -35,6 +35,30 @@ export const authTokens = pgTable(
     index('auth_tokens_user_idx').on(t.userId, t.kind),
     index('auth_tokens_family_idx').on(t.familyId),
     index('auth_tokens_expiry_idx').on(t.expiresAt),
+  ],
+);
+
+/**
+ * OAuth identities (ADR-0034). A user may link both providers; the stable
+ * account key is the provider's immutable subject (`sub` for Google, numeric
+ * `id` for GitHub), never the email address.
+ */
+export const oauthAccounts = pgTable(
+  'oauth_accounts',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    provider: oauthProviderEnum('provider').notNull(),
+    providerAccountId: text('provider_account_id').notNull(),
+    providerEmail: citext('provider_email'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    lastLoginAt: timestamp('last_login_at', { withTimezone: true }),
+  },
+  (t) => [
+    unique('oauth_accounts_provider_account_uq').on(t.provider, t.providerAccountId),
+    unique('oauth_accounts_user_provider_uq').on(t.userId, t.provider),
   ],
 );
 
