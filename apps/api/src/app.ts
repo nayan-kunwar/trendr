@@ -40,6 +40,12 @@ export interface BuildAppDeps {
   /** Pre-built pino logger from main.ts; tests omit it for a silent app. */
   loggerInstance?: FastifyBaseLogger;
   trustProxy?: boolean;
+  /**
+   * Number of trusted proxy hops (implemented as a Fastify trust function).
+   * Prefer 1 for a single nginx/Render hop so a caller-supplied
+   * X-Forwarded-For prefix cannot choose the client identity.
+   */
+  trustProxyHops?: number;
   /** M-12: trust `CF-Connecting-IP` only when a proxy overwrites it (VPS nginx). */
   trustCfConnectingIp?: boolean;
   /** CORS allowlist (env: CORS_ORIGINS). */
@@ -87,8 +93,14 @@ export interface BuildAppDeps {
  * awaited before routes so their hooks cover every route.
  */
 export async function buildApp(deps: BuildAppDeps = {}): Promise<FastifyInstance> {
+  const hops = deps.trustProxyHops;
   const app = Fastify({
-    trustProxy: deps.trustProxy ?? false,
+    // `hop` is zero-based from the socket; trusting one hop means trusting
+    // only the platform/nginx address and taking the address it appended.
+    trustProxy:
+      hops === undefined
+        ? (deps.trustProxy ?? false)
+        : (_address: string, hop: number): boolean => hop < hops,
     // Spec §15: reject oversized bodies before validation or handlers run.
     bodyLimit: 64 * 1024,
     // Spec §14.3: accept the caller's correlation id and echo it back.
@@ -129,12 +141,16 @@ export async function buildApp(deps: BuildAppDeps = {}): Promise<FastifyInstance
   if (deps.apiKeyPepper !== undefined && deps.db !== undefined) {
     await app.register(registerApiKey, {
       pepper: deps.apiKeyPepper,
+      trustProxy: deps.trustProxy ?? false,
+      trustCfConnectingIp: deps.trustCfConnectingIp ?? false,
       ...(deps.redis ? { redis: deps.redis } : {}),
     });
   }
   if (deps.jwtSecret !== undefined) {
     await app.register(registerAuth, {
       secret: deps.jwtSecret,
+      trustProxy: deps.trustProxy ?? false,
+      trustCfConnectingIp: deps.trustCfConnectingIp ?? false,
       ...(deps.auth?.accessTokenTtlSeconds === undefined
         ? {}
         : { accessTtlSeconds: deps.auth.accessTokenTtlSeconds }),

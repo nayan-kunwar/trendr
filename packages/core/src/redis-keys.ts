@@ -90,6 +90,14 @@ export const redisKeys = {
   oauthRateBucket: (ip: string): string => `apirl:oauth:${ip}`,
 
   /**
+   * `apirl:auth-fail:{api-key|bearer}:{ip}` — failed-credential guard checked
+   * before the API-key/JWT hooks do database or crypto work. It counts only
+   * rejected credentials, so valid traffic keeps its normal tier.
+   */
+  authFailureBucket: (kind: 'api-key' | 'bearer', ip: string): string =>
+    `apirl:auth-fail:${kind}:${ip}`,
+
+  /**
    * `oauth:state:<sha256(state)>` — ten-minute authorization request
    * (provider, PKCE verifier, nonce, returnTo). Consumed with GETDEL so each
    * state is single-use; the raw state is never a Redis key.

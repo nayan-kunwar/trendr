@@ -75,7 +75,9 @@ export async function issueMagicLink(
     userAgent: input.userAgent ?? null,
   });
 
-  const url = `${options.webPublicUrl.replace(/\/$/, '')}/auth/verify?token=${encodeURIComponent(rawToken)}`;
+  // The fragment is never sent to nginx, Next.js or the API, so the one-time
+  // sign-in secret cannot be recovered from access logs or a Referer header.
+  const url = `${options.webPublicUrl.replace(/\/$/, '')}/auth/verify#token=${encodeURIComponent(rawToken)}`;
   const message = renderMagicLinkEmail(url);
   await options.emailSender.send({
     to: email,

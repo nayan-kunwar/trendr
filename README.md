@@ -89,38 +89,43 @@ policy and incident checklists — live in the [runbook](./docs/runbook.md).
 | `pnpm lint` / `pnpm typecheck`                          | ESLint (type-checked) / `tsc --noEmit`                |
 | `pnpm test` / `pnpm test:coverage` / `pnpm test:int`    | Vitest unit / unit + coverage / integration           |
 | `CONTRACT=1 pnpm test:contract`                         | Live upstream schema probes (nightly CI)              |
-| `pnpm db:generate` / `pnpm db:migrate` / `pnpm db:seed` | Drizzle migrations and seed data                      |
+| `pnpm db:generate` / `pnpm db:migrate` / `pnpm db:seed` | Drizzle migrations and (development-only) seed data   |
 | `pnpm fixtures:record`                                  | Record upstream API fixtures for adapter tests        |
 | `pnpm ingest:bootstrap` / `pnpm worker:score`           | Manual ingestion / scoring triggers                   |
 | `pnpm obs:smoke`                                        | Validate the `obs` profile: rules, targets, dashboard |
+
+`pnpm db:seed` is a development/demo command. It refuses `NODE_ENV=production` unless
+`SEED_ALLOW_PRODUCTION=true` is explicitly set, and it generates a fresh admin API key on every run
+(printed once; the previous key stops working).
 
 ## Environment
 
 Key variables — the full annotated list is in [`.env.example`](./.env.example).
 
-| Variable                                    | Default                           | Purpose                                                          |
-| ------------------------------------------- | --------------------------------- | ---------------------------------------------------------------- |
-| `NODE_ENV` / `LOG_LEVEL`                    | `development` / `info`            | Runtime mode and pino level                                      |
-| `DATABASE_URL`                              | `…localhost:5432/trendr`          | Postgres connection (compose overrides host)                     |
-| `REDIS_URL`                                 | `redis://localhost:6379`          | Cache, queue and rate-limit store                                |
-| `API_PORT`                                  | `4000`                            | Fastify listen port                                              |
-| `CORS_ORIGINS`                              | `http://localhost:3000`           | Allowed browser origins                                          |
-| `TRUST_PROXY` / `TRUST_CF_CONNECTING_IP`    | `false` / `false`                 | Trust the platform proxy / nginx's `CF-Connecting-IP` (VPS only) |
-| `JWT_SECRET` / `API_KEY_PEPPER`             | `change-me…`                      | Auth signing / key hashing (replace in prod)                     |
-| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | empty                             | Google OAuth sign-in (set both halves to enable)                 |
-| `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` | empty                             | GitHub OAuth sign-in (distinct from worker `GITHUB_TOKENS`)      |
-| `UNSUBSCRIBE_SECRET`                        | `change-me…`                      | HMAC key for alert/digest unsubscribe links                      |
-| `METRICS_TOKEN`                             | `change-me-metrics-token`         | Bearer token for `/metrics`                                      |
-| `WORKER_ROLES`                              | `scheduler,ingest,scoring,notify` | Comma-separated worker roles                                     |
-| `WORKER_METRICS_PORT`                       | `9464`                            | Worker health/metrics port (never published)                     |
-| `SCHEDULER_ENABLED`                         | `true`                            | Enables BullMQ job schedulers                                    |
-| `GITHUB_TOKENS` / `HF_TOKEN`                | empty                             | Upstream credentials (worker only)                               |
-| `EMAIL_PROVIDER` / `SMTP_URL`               | `smtp` / `…localhost:1025`        | Email delivery (Mailpit locally)                                 |
-| `MCP_TRANSPORT` / `MCP_PORT`                | `http` / `4100`                   | MCP server mode and port                                         |
-| `MCP_API_KEY`                               | empty                             | Read-only API key used by MCP tool calls                         |
-| `MCP_HTTP_AUTH_TOKENS`                      | empty                             | Comma-separated bearer tokens for `/mcp`                         |
-| `API_INTERNAL_URL`                          | `http://api:4000`                 | API base URL used by the MCP server                              |
-| `NEXT_PUBLIC_API_URL`                       | `http://localhost:4000`           | Browser-facing API base (web image only)                         |
+| Variable                                    | Default                           | Purpose                                                     |
+| ------------------------------------------- | --------------------------------- | ----------------------------------------------------------- |
+| `NODE_ENV` / `LOG_LEVEL`                    | `development` / `info`            | Runtime mode and pino level                                 |
+| `DATABASE_URL`                              | `…localhost:5432/trendr`          | Postgres connection (compose overrides host)                |
+| `REDIS_URL`                                 | `redis://localhost:6379`          | Cache, queue and rate-limit store                           |
+| `API_PORT`                                  | `4000`                            | Fastify listen port                                         |
+| `CORS_ORIGINS`                              | `http://localhost:3000`           | Allowed browser origins                                     |
+| `TRUST_PROXY` / `TRUST_PROXY_HOPS`          | `false` / unset                   | Trust the platform proxy / exact number of trusted hops     |
+| `TRUST_CF_CONNECTING_IP`                    | `false`                           | Trust nginx's `CF-Connecting-IP` (VPS only)                 |
+| `JWT_SECRET` / `API_KEY_PEPPER`             | `change-me…`                      | Auth signing / key hashing (replace in prod)                |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | empty                             | Google OAuth sign-in (set both halves to enable)            |
+| `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` | empty                             | GitHub OAuth sign-in (distinct from worker `GITHUB_TOKENS`) |
+| `UNSUBSCRIBE_SECRET`                        | `change-me…`                      | HMAC key for alert/digest unsubscribe links                 |
+| `METRICS_TOKEN`                             | `change-me-metrics-token`         | Bearer token for `/metrics`                                 |
+| `WORKER_ROLES`                              | `scheduler,ingest,scoring,notify` | Comma-separated worker roles                                |
+| `WORKER_METRICS_PORT`                       | `9464`                            | Worker health/metrics port (never published)                |
+| `SCHEDULER_ENABLED`                         | `true`                            | Enables BullMQ job schedulers                               |
+| `GITHUB_TOKENS` / `HF_TOKEN`                | empty                             | Upstream credentials (worker only)                          |
+| `EMAIL_PROVIDER` / `SMTP_URL`               | `smtp` / `…localhost:1025`        | Email delivery (Mailpit locally)                            |
+| `MCP_TRANSPORT` / `MCP_PORT`                | `http` / `4100`                   | MCP server mode and port                                    |
+| `MCP_API_KEY`                               | empty                             | Read-only API key used by MCP tool calls                    |
+| `MCP_HTTP_AUTH_TOKENS`                      | empty                             | Comma-separated bearer tokens for `/mcp`                    |
+| `API_INTERNAL_URL`                          | `http://api:4000`                 | API base URL used by the MCP server                         |
+| `NEXT_PUBLIC_API_URL`                       | `http://localhost:4000`           | Browser-facing API base (web image only)                    |
 
 OAuth sign-in is optional. Set both halves of `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` and/or
 `GITHUB_CLIENT_ID`/`GITHUB_CLIENT_SECRET`, then register

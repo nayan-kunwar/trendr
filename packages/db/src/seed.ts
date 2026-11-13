@@ -1,4 +1,4 @@
-import { createHash, createHmac } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import { existsSync, realpathSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
@@ -6,6 +6,7 @@ import { inArray, sql } from 'drizzle-orm';
 
 import {
   METRIC_KIND,
+  createApiKeyMaterial,
   mcpGitHubFallback,
   mcpNpmFallback,
   normalizeArxivId,
@@ -38,8 +39,10 @@ import { apiKeys, users } from './schema/users.js';
  * repositories and their natural keys, which is what makes `pnpm db:seed`
  * idempotent; the series comes from a seeded PRNG (and its timestamps from the
  * run's UTC day), so re-runs inside one UTC day are byte-identical. One admin
- * user and one deterministic API key are created; the raw key is printed to
- * stdout because only its HMAC is stored (spec §15).
+ * user and one random API key are created; the raw key is printed to stdout
+ * because only its HMAC is stored (spec §15). Production seeding is refused
+ * unless explicitly allowed: a seed key is a development convenience, never a
+ * production credential.
  */
 
 /** Series length in days (spec §7.3 backfill windows; UI sparklines). */
@@ -55,9 +58,6 @@ const HOUR_MS = 3_600_000;
 const HOURLY_TAIL_HOURS = 48;
 /** Fixed PRNG seed — the whole fixture series is reproducible. */
 const PRNG_SEED = 0x7f3d2a19;
-/** Deterministic dev key material: `dt_live_` + 8-char prefix + 32 base62 chars. */
-const SEED_KEY_PREFIX = 'seedkey1';
-const SEED_KEY_MATERIAL = 'trendr:seed:api-key:v1';
 const SEED_KEY_NAME = 'seed-dev-key';
 
 export interface SeedOptions {
@@ -67,6 +67,24 @@ export interface SeedOptions {
   adminEmail: string;
   /** Anchor "now" for the generated series; defaults to the current time. */
   now?: Date;
+  /** Environment gate; defaults to `process.env.NODE_ENV`. */
+  nodeEnv?: string | undefined;
+  /** Explicit escape hatch for a deliberate production seed (default false). */
+  allowProduction?: boolean | undefined;
+}
+
+/**
+ * The seed owns fixture data and a convenience admin key. It must never run
+ * against production by accident; the CLI can opt in with
+ * `SEED_ALLOW_PRODUCTION=true`, and library callers can pass
+ * `allowProduction: true` after a reviewed decision.
+ */
+export function assertSeedAllowed(nodeEnv: string | undefined, allowProduction = false): void {
+  if (nodeEnv === 'production' && !allowProduction) {
+    throw new Error(
+      'seed is disabled in production; set SEED_ALLOW_PRODUCTION=true only for an intentional fixture load',
+    );
+  }
 }
 
 export interface SeedReport {
@@ -954,14 +972,12 @@ function assignTiers(seriesData: ItemSeries[]): Map<string, Tier> {
   return tiers;
 }
 
+/**
+ * A fresh key on every seed. A deterministic key would let anyone who can read
+ * the repository derive a working admin credential from a seeded database.
+ */
 function buildSeedApiKey(pepper: string): { raw: string; prefix: string; hash: Buffer } {
-  const suffix = stableToken(SEED_KEY_MATERIAL, 32);
-  const raw = `dt_live_${SEED_KEY_PREFIX}_${suffix}`;
-  return {
-    raw,
-    prefix: `dt_live_${SEED_KEY_PREFIX}`,
-    hash: createHmac('sha256', pepper).update(raw).digest(),
-  };
+  return createApiKeyMaterial(pepper);
 }
 
 // ---------------------------------------------------------------------------
@@ -969,6 +985,7 @@ function buildSeedApiKey(pepper: string): { raw: string; prefix: string; hash: B
 // ---------------------------------------------------------------------------
 
 export async function seed(db: Db, options: SeedOptions): Promise<SeedReport> {
+  assertSeedAllowed(options.nodeEnv ?? process.env.NODE_ENV, options.allowProduction === true);
   const now = options.now ?? new Date();
   const anchorDay = utcMidnight(now);
   const anchorHour = utcHour(now);
@@ -1117,7 +1134,7 @@ export async function seed(db: Db, options: SeedOptions): Promise<SeedReport> {
         SET item_count = (SELECT count(*) FROM item_topics it WHERE it.topic_id = topics.id)::int`);
     }
 
-    // 6. Admin user + deterministic API key (spec §15; raw key only printed).
+    // 6. Admin user + per-run random API key (spec §15; raw key only printed).
     const [userRow] = await tx
       .insert(users)
       .values({
@@ -1148,9 +1165,11 @@ export async function seed(db: Db, options: SeedOptions): Promise<SeedReport> {
         rateLimitPerMin: 600,
       })
       .onConflictDoUpdate({
-        target: apiKeys.prefix,
+        // Re-seeding replaces the previous dev key for this user/name instead
+        // of inserting a second row. The random prefix changes every run.
+        target: [apiKeys.userId, apiKeys.name],
         set: {
-          userId: userRow.id,
+          prefix: apiKeyMaterial.prefix,
           keyHash: apiKeyMaterial.hash,
           scopes: ['read', 'admin'],
           revokedAt: null,
@@ -1219,9 +1238,16 @@ if (isDirectRun()) {
     process.exit(1);
   }
 
+  const nodeEnv = process.env.NODE_ENV;
+  const allowProduction = process.env.SEED_ALLOW_PRODUCTION === 'true';
   const { db, pool } = createDb(databaseUrl, { max: 1 });
   try {
-    const report = await seed(db, { pepper, adminEmail });
+    const report = await seed(db, {
+      pepper,
+      adminEmail,
+      nodeEnv,
+      allowProduction,
+    });
     const breakdown = Object.entries(report.sources)
       .map(([source, count]) => `${source} ${count}`)
       .join(', ');

@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { ForbiddenError, JWT_AUDIENCE, JWT_ISSUER, UnauthorizedError } from '@trendr/core';
 
 import type { AuthenticatedApiKey } from './api-key.js';
+import { clearAuthFailureMemory } from './auth-failures.js';
 import { registerAuth, requireAdmin, type AuthenticatedUser } from './auth.js';
 
 /**
@@ -37,7 +38,12 @@ function fakeRequest(parts: {
   apiKey?: AuthenticatedApiKey;
   authUser?: AuthenticatedUser;
 }): FastifyRequest {
-  return parts as unknown as FastifyRequest;
+  return {
+    ...parts,
+    // These unit tests exercise the claim fallback; the int suite covers the
+    // database-backed admin revalidation.
+    server: { hasDecorator: () => false },
+  } as unknown as FastifyRequest;
 }
 
 const READ_KEY: AuthenticatedApiKey = {
@@ -159,6 +165,39 @@ describe('registerAuth (spec §10.5, §15)', () => {
       });
       expect(admin.statusCode).toBe(200);
     } finally {
+      await app.close();
+    }
+  });
+
+  it('throttles rejected bearer tokens before the route rate limiter', async () => {
+    clearAuthFailureMemory();
+    const app = Fastify();
+    try {
+      await app.register(registerAuth, {
+        secret: SECRET,
+        failureMax: 2,
+        failureWindowSeconds: 60,
+      });
+      app.get('/whoami', () => ({ ok: true }));
+      await app.ready();
+
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        const rejected = await app.inject({
+          method: 'GET',
+          url: '/whoami',
+          headers: { authorization: 'Bearer not-a-jwt' },
+        });
+        expect(rejected.statusCode).toBe(401);
+      }
+
+      const throttled = await app.inject({
+        method: 'GET',
+        url: '/whoami',
+        headers: { authorization: 'Bearer not-a-jwt' },
+      });
+      expect(throttled.statusCode).toBe(429);
+    } finally {
+      clearAuthFailureMemory();
       await app.close();
     }
   });

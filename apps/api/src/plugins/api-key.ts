@@ -3,6 +3,7 @@ import type { Redis } from 'ioredis';
 import { z } from 'zod';
 
 import {
+  RateLimitedError,
   UnauthorizedError,
   apiKeyHashesMatch,
   hashApiKey,
@@ -10,6 +11,8 @@ import {
   redisKeys,
 } from '@trendr/core';
 import { findApiKeyByPrefix, touchApiKeyLastUsed, type ApiKeyRecord } from '@trendr/db';
+
+import { authFailureBudgetExhausted, noteAuthFailure } from './auth-failures.js';
 
 declare module 'fastify' {
   interface FastifyRequest {
@@ -35,6 +38,13 @@ export interface ApiKeyPluginOptions {
   redis?: Redis;
   /** Debounce window; default 60 s (spec §10.5). */
   debounceMs?: number;
+  /** Trusted-proxy flags for the failed-credential guard. */
+  trustProxy?: boolean;
+  trustCfConnectingIp?: boolean;
+  /** Rejected keys allowed per IP per window; 0 disables the guard (tests). */
+  failureMax?: number;
+  /** Failed-credential window in seconds. */
+  failureWindowSeconds?: number;
 }
 
 /** Spec §10.5: `last_used_at` is written at most once per minute. */
@@ -103,9 +113,26 @@ const API_KEY_CACHE_MISS = '0';
  * header stay anonymous.
  */
 export const registerApiKey = fp<ApiKeyPluginOptions>(
-  (app, { pepper, redis, debounceMs = API_KEY_DEBOUNCE_MS }) => {
+  (
+    app,
+    {
+      pepper,
+      redis,
+      debounceMs = API_KEY_DEBOUNCE_MS,
+      trustProxy = false,
+      trustCfConnectingIp = false,
+      failureMax,
+      failureWindowSeconds,
+    },
+  ) => {
     const ttlSeconds = Math.max(1, Math.ceil(debounceMs / 1000));
     const memoryWindow = new Map<string, number>();
+    const failureOptions = {
+      trustProxy,
+      trustCfConnectingIp,
+      ...(failureMax === undefined ? {} : { max: failureMax }),
+      ...(failureWindowSeconds === undefined ? {} : { windowSeconds: failureWindowSeconds }),
+    } as const;
 
     /**
      * First caller within the window wins; used to skip redundant
@@ -130,12 +157,22 @@ export const registerApiKey = fp<ApiKeyPluginOptions>(
       if (header === undefined) {
         return;
       }
+
+      // This hook runs before the route-level @fastify/rate-limit handler, so
+      // rejected keys need their own pre-work budget. Check it before parsing,
+      // the Redis lookup, or the database query.
+      if (await authFailureBudgetExhausted(app, request, 'api-key', failureOptions)) {
+        throw new RateLimitedError('too many invalid API keys; try again in a minute');
+      }
+
       const raw = Array.isArray(header) ? header[0] : header;
       if (typeof raw !== 'string' || raw.length === 0) {
+        await noteAuthFailure(app, request, 'api-key', failureOptions);
         throw new UnauthorizedError('invalid API key');
       }
       const parsed = parseApiKey(raw);
       if (parsed === null) {
+        await noteAuthFailure(app, request, 'api-key', failureOptions);
         throw new UnauthorizedError('invalid API key');
       }
 
@@ -172,15 +209,19 @@ export const registerApiKey = fp<ApiKeyPluginOptions>(
         }
       }
       if (record === null) {
+        await noteAuthFailure(app, request, 'api-key', failureOptions);
         throw new UnauthorizedError('invalid API key');
       }
       if (record.revokedAt !== null) {
+        await noteAuthFailure(app, request, 'api-key', failureOptions);
         throw new UnauthorizedError('API key revoked');
       }
       if (record.expiresAt !== null && record.expiresAt.getTime() <= Date.now()) {
+        await noteAuthFailure(app, request, 'api-key', failureOptions);
         throw new UnauthorizedError('API key expired');
       }
       if (!apiKeyHashesMatch(record.keyHash, hashApiKey(pepper, raw))) {
+        await noteAuthFailure(app, request, 'api-key', failureOptions);
         throw new UnauthorizedError('invalid API key');
       }
 

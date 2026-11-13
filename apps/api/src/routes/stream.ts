@@ -10,6 +10,7 @@ import {
   type Window,
 } from '@trendr/core';
 
+import { incrementWithTtl } from '../plugins/counters.js';
 import { CACHE_CONTROL } from '../plugins/etag.js';
 import { rateLimitKey } from '../plugins/rate-limit.js';
 import { StreamQuery } from '../schemas/stream.js';
@@ -133,21 +134,18 @@ export function registerStreamRoutes(app: FastifyInstance, options: StreamRouteO
         rateLimitKey(request, trustProxy, trustCfConnectingIp),
       );
       let counted = false;
-      try {
-        const count = await app.redis.incr(counterKey);
-        if (count > SSE_MAX_CONNECTIONS) {
-          await app.redis.decr(counterKey).catch(() => undefined);
-          throw new RateLimitedError(
-            `at most ${SSE_MAX_CONNECTIONS} concurrent leaderboard streams per client`,
-          );
-        }
+      const count = await incrementWithTtl(app.redis, counterKey, SSE_COUNTER_LEASE_SECONDS);
+      if (count === null) {
+        // L-11-style fail-open: the stream still works, but the concurrency
+        // cap is not enforced while Redis is unavailable.
+        app.log.warn('sse concurrency counter unavailable; failing open');
+      } else if (count > SSE_MAX_CONNECTIONS) {
+        await app.redis.decr(counterKey).catch(() => undefined);
+        throw new RateLimitedError(
+          `at most ${SSE_MAX_CONNECTIONS} concurrent leaderboard streams per client`,
+        );
+      } else {
         counted = true;
-        await app.redis.expire(counterKey, SSE_COUNTER_LEASE_SECONDS).catch(() => undefined);
-      } catch (error) {
-        if (error instanceof RateLimitedError) {
-          throw error;
-        }
-        app.log.warn({ err: error }, 'sse concurrency counter unavailable; failing open');
       }
 
       // `reply.hijack()` bypasses Fastify's normal header serialization, so

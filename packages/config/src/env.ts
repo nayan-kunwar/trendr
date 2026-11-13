@@ -7,6 +7,11 @@ const csv = z.string().transform((s) =>
     .filter(Boolean),
 );
 const bool = z.enum(['true', 'false']).transform((v) => v === 'true');
+/** Optional integer: an empty env var (Render, Compose) means "not configured". */
+const optionalInt = z.preprocess(
+  (value) => (value === '' || value === undefined ? undefined : value),
+  z.coerce.number().int().min(1).max(10).optional(),
+);
 /** Optional credentials: an empty env var (Render, Compose) means "not configured". */
 const optionalCredential = z
   .string()
@@ -30,6 +35,10 @@ const baseEnvSchema = z.object({
   WEB_PUBLIC_URL: z.url(),
   CORS_ORIGINS: csv,
   TRUST_PROXY: bool.prefault('false'),
+  // A single-platform proxy must trust exactly its own hop, not the whole
+  // caller-supplied X-Forwarded-For chain. `1` is correct for both nginx and
+  // Render; omit it only when the actual chain is longer.
+  TRUST_PROXY_HOPS: optionalInt,
   // M-12: only the VPS nginx overwrites CF-Connecting-IP. On Render,
   // TRUST_PROXY is true for X-Forwarded-For but this header is caller data.
   TRUST_CF_CONNECTING_IP: bool.prefault('false'),

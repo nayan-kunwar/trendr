@@ -83,7 +83,7 @@ async function main() {
   assert(issued.status === 202, `magic-link -> HTTP ${issued.status}`);
 
   const message = await waitForMessage();
-  const token = /\/auth\/verify\?token=([A-Za-z0-9_-]+)/.exec(message.Text ?? '')?.[1];
+  const token = /\/auth\/verify#token=([A-Za-z0-9_-]+)/.exec(message.Text ?? '')?.[1];
   assert(token, 'magic-link email had no token');
 
   const verified = await apiPost('/v1/auth/verify', { token });

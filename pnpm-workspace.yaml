@@ -27,3 +27,11 @@ overrides:
   # minimatch. glob 14.0.3 pulls minimatch 11; verify the Swagger UI/static
   # routes after install (semver override).
   glob: ^14.0.3
+  # MCP SDK 1.32.2 pulls Hono 4.13.14 / @hono/node-server 2.1.5. The server in
+  # apps/mcp uses node:http, but the transitive packages still carry patched
+  # path-handling and CSRF advisories.
+  hono: ^4.13.16
+  '@hono/node-server': ^2.1.6
+  # deepmerge 4.3.1 is the latest 4.x; GHSA-gcqx-w48m-w2h4 claims a 4.3.2
+  # patch that is not published. Keep it visible in `pnpm audit` rather than
+  # pinning a non-existent version.

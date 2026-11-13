@@ -81,6 +81,22 @@ describe('@trendr/config env schema', () => {
     expect(result.env.SNAPSHOT_RETENTION_MONTHS).toBe(3);
     expect(result.env.EMAIL_PROVIDER).toBe('smtp');
     expect(result.env.GITHUB_TOKENS).toBeUndefined();
+    expect(result.env.TRUST_PROXY_HOPS).toBeUndefined();
+  });
+
+  it('accepts an explicit proxy hop count and rejects empty/non-positive values', () => {
+    const configured = readEnv({ ...MINIMAL_VALID, TRUST_PROXY_HOPS: '1' });
+    expect(configured.ok).toBe(true);
+    if (configured.ok) expect(configured.env.TRUST_PROXY_HOPS).toBe(1);
+
+    const empty = readEnv({ ...MINIMAL_VALID, TRUST_PROXY_HOPS: '' });
+    expect(empty.ok).toBe(true);
+    if (empty.ok) expect(empty.env.TRUST_PROXY_HOPS).toBeUndefined();
+
+    for (const value of ['0', '-1', '11', 'not-a-number']) {
+      const invalid = readEnv({ ...MINIMAL_VALID, TRUST_PROXY_HOPS: value });
+      expect(invalid.ok).toBe(false);
+    }
   });
 
   it('enables OAuth providers only when both credentials are present (ADR-0034)', () => {

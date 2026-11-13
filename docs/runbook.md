@@ -438,11 +438,17 @@ The SSE command must stream the snapshot and then updates without buffering.
 
 ### Deploy a new release
 
+Install `cosign` from <https://docs.sigstore.dev/cosign/installation/> on the
+deploy host (or set `REQUIRE_COSIGN=0` only for a documented exception). The
+release images are keyless-signed by `.github/workflows/publish.yml`; the
+verification step below checks all four against that identity.
+
 ```bash
 cd /opt/trendr
 git fetch --tags
 sudo -u deploy sed -i 's/^TRENDR_TAG=.*/TRENDR_TAG=v1.1.0/' .env.production
 COMPOSE='docker compose --env-file .env.production -f docker-compose.prod.yml'
+REQUIRE_COSIGN=1 bash infra/scripts/verify-release-images.sh
 $COMPOSE pull
 $COMPOSE up -d --wait --wait-timeout 300
 $COMPOSE ps -a migrate   # must exit 0
@@ -458,6 +464,7 @@ only safe while the schema remains compatible with the older code.
 ```bash
 sudo -u deploy sed -i 's/^TRENDR_TAG=.*/TRENDR_TAG=v1.0.0/' .env.production
 COMPOSE='docker compose --env-file .env.production -f docker-compose.prod.yml'
+REQUIRE_COSIGN=1 bash infra/scripts/verify-release-images.sh
 $COMPOSE pull
 $COMPOSE up -d --wait --wait-timeout 300
 curl -fsS https://<host>/readyz

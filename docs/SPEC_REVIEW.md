@@ -85,11 +85,13 @@ be re-checked later. Decisions with alternatives get an ADR in [`docs/adr/`](./a
   `min()` / `max()` helpers (or cast in SQL) when the JS value matters.
 - Seed (task 1.6): 200 fixtures across the six sources, 60 days of series from a fixed-seed
   PRNG, anchored to the run's UTC day (so scoring staleness stays satisfied and re-runs inside a
-  day are byte-identical). The dev API key is deterministic (`dt_live_seedkey1_…`, printed every
-  run; only `HMAC-SHA256(API_KEY_PEPPER, raw)` is stored) so re-seeding can never invalidate a
-  key a developer already saved. Items are marked `metadata.seed = true`; integration tests scope
-  their assertions to that marker. CLI loading of `.env` uses `process.loadEnvFile` (existing
-  env vars win — compose supplies them), same symlink-safe direct-run detection as the migrator.
+  day are byte-identical). The dev API key is random on every run (`createApiKeyMaterial`), so a
+  key read from a seeded database cannot be derived from the repository; re-seeding replaces the
+  `seed-dev-key` row and invalidates the previously printed key. `seed()` refuses
+  `NODE_ENV=production` unless `SEED_ALLOW_PRODUCTION=true` is explicitly set. Items are marked
+  `metadata.seed = true`; integration tests scope their assertions to that marker. CLI loading of
+  `.env` uses `process.loadEnvFile` (existing env vars win — compose supplies them), same
+  symlink-safe direct-run detection as the migrator.
 - Seed HF fixtures follow §7.3.4/§8.3 exactly: `primary_metric = likes` for **all** HF kinds (the
   params table has no `huggingface:downloads`, so a dataset scored on `downloads` would throw in
   `paramsFor`), and the generated `downloads` values feed `latest_metrics` only — never persisted
@@ -615,7 +617,7 @@ be re-checked later. Decisions with alternatives get an ADR in [`docs/adr/`](./a
   while `score-cli` (`dist/score-cli.js`, a worker tsup entry) runs in the **worker** image.
   Both containers carry `DATABASE_URL`/`REDIS_URL` via `env_file` and `node-env`.
 - Verified locally with the exact workflow commands (Docker 29.7, Compose v5.4): the seed
-  is idempotent (`200 items … API key dt_live_seedkey1…`), the CLI enqueues the run and the
+  is idempotent (`200 items … API key dt_live_<random>…`), the CLI enqueues the run and the
   first poll already answered `entries=50 runId=9`; `/readyz` reports ready; the web image
   serves HTML in-network. The web service's host port 3000 is occupied on this machine by
   an unrelated project, so the job's `localhost:3000` check effectively runs on CI only
@@ -1459,7 +1461,8 @@ be re-checked later. Decisions with alternatives get an ADR in [`docs/adr/`](./a
 ## Phase 7 notes
 
 - **Task 7.1.** `packages/email` centralizes the `EmailSender` boundary (ADR-0017); the API sends
-  the `${WEB_PUBLIC_URL}/auth/verify?token=…` link through SMTP to Mailpit in development.
+  the `${WEB_PUBLIC_URL}/auth/verify#token=…` link through SMTP to Mailpit in development. The
+  token lives in the fragment (ADR-0035) so nginx, Next.js and the API never receive it.
   Magic links are single-use 15-minute rows whose SHA-256 is stored; verification creates an
   unverified user when needed, sets `email_verified_at`/`last_login_at`, synchronizes the role
   from the authoritative `ADMIN_EMAILS` list (promoting or demoting), and returns a 15-minute
@@ -1752,6 +1755,11 @@ Appendix B.
 | `REQUIRE_OFFSITE`, `BACKUP_METRIC_DIR` | env           | M-8     | Backup policy and textfile output directory                               |
 | `TRUST_CF_CONNECTING_IP`              | env            | M-12    | Trust the Cloudflare client header only behind the VPS nginx              |
 | `TRENDR_TAG`                          | env (required) | M-9     | Exact GHCR image tag for `docker-compose.prod.yml`; no implicit `latest`  |
+| `TRUST_PROXY_HOPS`                    | env            | ADR-0035 | Trust exactly this many proxy hops instead of the whole XFF chain        |
+| `apirl:auth-fail:{kind}:{ip}`          | Redis key      | ADR-0035 | Rejected-credential budget checked before DB/crypto work                 |
+| `SEED_ALLOW_PRODUCTION`               | env (seed CLI) | ADR-0035 | Explicit opt-in required to seed a production database                    |
+| `trendr`                              | nginx log format | ADR-0035 | Access log with `$uri` and no query string/Referer                       |
+| `infra/scripts/verify-release-images.sh` | script      | ADR-0035 | Verifies GHCR cosign signatures before pulling a release                  |
 
 ### OAuth login (ADR-0034, 2026-11-11)
 

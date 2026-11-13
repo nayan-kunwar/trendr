@@ -17,6 +17,10 @@
 #   TRENDR_REF   (main)           branch/tag to clone
 #   SSH_PORT     (22)             port allowed through ufw
 #   GHCR_USER / GHCR_TOKEN        credentials for private GHCR packages
+#   REQUIRE_COSIGN (0)            1 = fail the start if images are not signed
+#                                 (install cosign and set 1 in production)
+#   TRENDR_REPO_SLUG              GitHub owner/repo that owns publish.yml
+#                                 (default nayan-kunwar/trendr; set for a fork)
 set -euo pipefail
 
 DEPLOY_USER="${DEPLOY_USER:-deploy}"
@@ -165,6 +169,15 @@ if [[ -n "$GHCR_TOKEN" ]]; then
 fi
 
 log "pulling images and starting the stack"
+if ! sudo -u "$DEPLOY_USER" env \
+  TRENDR_TAG="$(grep -E '^TRENDR_TAG=' "$ENV_FILE" | tail -n 1 | cut -d= -f2-)" \
+  GHCR_OWNER="$(grep -E '^GHCR_OWNER=' "$ENV_FILE" | tail -n 1 | cut -d= -f2-)" \
+  TRENDR_REPO_SLUG="${TRENDR_REPO_SLUG:-nayan-kunwar/trendr}" \
+  REQUIRE_COSIGN="${REQUIRE_COSIGN:-0}" \
+  bash "$TRENDR_DIR/infra/scripts/verify-release-images.sh"; then
+  warn "release image verification failed; refusing to start unverified images"
+  exit 1
+fi
 sudo -u "$DEPLOY_USER" docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" pull
 sudo -u "$DEPLOY_USER" docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" \
   up -d --wait --wait-timeout 300

@@ -36,6 +36,21 @@ async function withApp(
   }
 }
 
+describe('proxy hop identity (ADR-0035)', () => {
+  it('trusts only the last proxy hop, not a caller-supplied XFF prefix', async () => {
+    await withApp({ ...DEPS, trustProxy: true, trustProxyHops: 1 }, async (app) => {
+      app.get('/ip', (request) => ({ ip: request.ip }));
+      const response = await app.inject({
+        method: 'GET',
+        url: '/ip',
+        headers: { 'x-forwarded-for': '203.0.113.9, 198.51.100.7' },
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.json<{ ip: string }>().ip).toBe('198.51.100.7');
+    });
+  });
+});
+
 describe('rate-limit store observability (L-11)', () => {
   it('reports store failures and keeps the plugin callback contract', async () => {
     const failures: unknown[] = [];

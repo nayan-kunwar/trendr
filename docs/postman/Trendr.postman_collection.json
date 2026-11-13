@@ -421,8 +421,8 @@
                   "pm.test('Mailpit message is readable', () => pm.response.to.have.status(200));",
                   "const body = pm.response.json();",
                   "const text = String(body.Text || '') + '\\n' + String(body.HTML || '');",
-                  "const match = text.match(/\\/auth\\/verify\\?token=([A-Za-z0-9_-]+)/);",
-                  "pm.test('message contains a magic-link token', () => pm.expect(match, 'No /auth/verify?token= link in the message').to.be.ok);",
+                  "const match = text.match(/\\/auth\\/verify#token=([A-Za-z0-9_-]+)/);",
+                  "pm.test('message contains a magic-link token', () => pm.expect(match, 'No /auth/verify#token= link in the message').to.be.ok);",
                   "if (match) pm.collectionVariables.set('magicLinkToken', match[1]);"
                 ]
               }
@@ -448,7 +448,7 @@
                 "{{mailpitMessageId}}"
               ]
             },
-            "description": "Reads the message body and extracts the token from the /auth/verify?token= link."
+            "description": "Reads the message body and extracts the token from the /auth/verify#token= link."
           }
         },
         {

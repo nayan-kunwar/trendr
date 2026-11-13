@@ -34,6 +34,9 @@ x-node-env: &node-env
   # nginx terminates TLS and forwards the client address; Fastify must trust it
   # or rate limiting sees every request as the proxy.
   TRUST_PROXY: 'true'
+  # Exactly one proxy hop (nginx); a caller-supplied XFF chain cannot choose
+  # the client identity.
+  TRUST_PROXY_HOPS: '1'
   # M-12: nginx overwrites CF-Connecting-IP, so the API may trust it here.
   TRUST_CF_CONNECTING_IP: 'true'
 

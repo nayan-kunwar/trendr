@@ -52,6 +52,9 @@ envVarGroups:
         value: https://trendr-web.onrender.com
       - key: TRUST_PROXY
         value: 'true'
+      # M-12: exactly one platform proxy; do not trust a caller-supplied XFF prefix.
+      - key: TRUST_PROXY_HOPS
+        value: '1'
       # The default onrender.com web/API hosts are cross-site (Public Suffix
       # List), so the refresh cookie needs SameSite=None. NODE_ENV=production
       # makes it Secure, which browsers require for None. Use `lax` when both

@@ -89,7 +89,11 @@ beforeAll(async () => {
   const insertedUsers = await db
     .insert(users)
     .values([
-      { email: `${EMAIL_PREFIX}${randomUUID()}@example.test`, displayName: 'Int admin' },
+      {
+        email: `${EMAIL_PREFIX}${randomUUID()}@example.test`,
+        displayName: 'Int admin',
+        role: 'admin',
+      },
       { email: `${EMAIL_PREFIX}${randomUUID()}@example.test`, displayName: 'Int user' },
     ])
     .returning({ id: users.id });
@@ -247,6 +251,34 @@ describe('admin endpoints (task 4.6, spec §10.1/§10.5)', () => {
       headers: { 'x-api-key': adminKey.raw },
     });
     expect(adminKeyResponse.statusCode).toBe(200);
+  });
+
+  it('revalidates a JWT admin against the stored role on every request', async () => {
+    const before = await app.inject({
+      method: 'GET',
+      url: '/v1/admin/queues',
+      headers: bearer(asAdminJwt()),
+    });
+    expect(before.statusCode).toBe(200);
+
+    await connection.db.update(users).set({ role: 'user' }).where(eq(users.id, adminUserId));
+
+    const demoted = await app.inject({
+      method: 'GET',
+      url: '/v1/admin/queues',
+      headers: bearer(asAdminJwt()),
+    });
+    expect(demoted.statusCode).toBe(403);
+
+    const demotedKey = await app.inject({
+      method: 'GET',
+      url: '/v1/admin/queues',
+      headers: { 'x-api-key': adminKey.raw },
+    });
+    expect(demotedKey.statusCode).toBe(403);
+
+    // Keep the rest of the file's admin fixtures usable.
+    await connection.db.update(users).set({ role: 'admin' }).where(eq(users.id, adminUserId));
   });
 
   it('serves runs newest-first with filters, detail and 404 problem+json', async () => {

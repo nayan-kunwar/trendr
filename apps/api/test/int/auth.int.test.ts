@@ -103,7 +103,7 @@ async function latestMessageTo(email: string): Promise<{ Text: string; HTML: str
 }
 
 function extractToken(text: string): string {
-  const match = /\/auth\/verify\?token=([A-Za-z0-9_-]+)/.exec(text);
+  const match = /\/auth\/verify#token=([A-Za-z0-9_-]+)/.exec(text);
   if (match?.[1] === undefined) throw new Error('magic-link email had no token');
   return match[1];
 }

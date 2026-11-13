@@ -64,6 +64,7 @@ const oauthProviders = createOAuthProviders({
 const app = await buildApp({
   loggerInstance: logger,
   trustProxy: env.TRUST_PROXY,
+  ...(env.TRUST_PROXY_HOPS === undefined ? {} : { trustProxyHops: env.TRUST_PROXY_HOPS }),
   corsOrigins: env.CORS_ORIGINS,
   metricsToken: env.METRICS_TOKEN,
   db: connection,

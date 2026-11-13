@@ -10,7 +10,9 @@ import { Button } from '@/components/ui/button';
 import { authErrorMessage, verifyMagicLink } from '@/lib/auth';
 
 export function VerifyClient() {
-  const token = useSearchParams().get('token');
+  // New links carry the token in the fragment so it never reaches server or
+  // proxy logs. Keep reading `?token=` for links already in flight.
+  const token = useSearchParams().get('token') ?? readHashToken();
   const router = useRouter();
   const { setSessionUser } = useAuth();
   const [error, setError] = useState<string | null>(null);
@@ -64,4 +66,14 @@ export function VerifyClient() {
       <p className="mt-1 text-sm text-muted-foreground">One moment while we verify the link.</p>
     </div>
   );
+}
+
+/** `#token=…` is client-only and never appears in an access log. */
+function readHashToken(): string | null {
+  if (typeof window === 'undefined') return null;
+  const hash = window.location.hash.startsWith('#')
+    ? window.location.hash.slice(1)
+    : window.location.hash;
+  if (hash === '') return null;
+  return new URLSearchParams(hash).get('token');
 }

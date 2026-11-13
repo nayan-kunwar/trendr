@@ -69,6 +69,12 @@ describe('redisKeys (spec §9.1)', () => {
       'apirl:auth:refresh:deadbeefdeadbeef',
     );
     expect(redisKeys.authRefreshIpBucket('2001:db8::1')).toBe('apirl:auth:refresh:ip:2001:db8::1');
+    expect(redisKeys.authFailureBucket('api-key', '203.0.113.9')).toBe(
+      'apirl:auth-fail:api-key:203.0.113.9',
+    );
+    expect(redisKeys.authFailureBucket('bearer', '2001:db8::1')).toBe(
+      'apirl:auth-fail:bearer:2001:db8::1',
+    );
   });
 
   it('exports the inbound rate-limit prefix and the events channel', () => {

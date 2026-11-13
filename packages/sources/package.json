@@ -22,7 +22,7 @@
   "dependencies": {
     "@trendr/core": "workspace:*",
     "@trendr/logger": "workspace:*",
-    "fast-xml-parser": "^5.11.2",
+    "fast-xml-parser": "^5.11.3",
     "zod": "^4.6.7"
   },
   "devDependencies": {

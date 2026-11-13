@@ -55,6 +55,40 @@ function makeRedactionCensor(env: string) {
 }
 
 /**
+ * Access logs must not retain bearer material in query strings. Magic-link,
+ * unsubscribe, OAuth code/state and API-key test secrets all travel as query
+ * parameters in at least one flow; the path is enough for operations.
+ */
+export function redactRequestUrl(raw: unknown): string | undefined {
+  if (typeof raw !== 'string') return undefined;
+  const query = raw.indexOf('?');
+  return query === -1 ? raw : raw.slice(0, query);
+}
+
+interface RequestLike {
+  method?: unknown;
+  url?: unknown;
+  host?: unknown;
+  ip?: unknown;
+  socket?: { remotePort?: unknown } | null;
+}
+
+/** Fastify's default `req` serializer, with the query string removed. */
+export function serializeRequest(value: unknown): Record<string, unknown> {
+  if (typeof value !== 'object' || value === null) return {};
+  const request = value as RequestLike;
+  const url = redactRequestUrl(request.url);
+  const remotePort = request.socket?.remotePort;
+  return {
+    method: request.method,
+    ...(url === undefined ? {} : { url }),
+    host: request.host,
+    remoteAddress: request.ip,
+    ...(remotePort === undefined ? {} : { remotePort }),
+  };
+}
+
+/**
  * Pino options shared by `createLogger` and Fastify's built-in logger (0.5):
  * JSON with `level, time, service, env, version, msg` and secret redaction.
  */
@@ -69,6 +103,11 @@ export function buildLoggerOptions(options: CreateLoggerOptions): LoggerOptions 
     redact: {
       paths: [...SECRET_PATHS, ...EMAIL_PATHS],
       censor: makeRedactionCensor(env),
+    },
+    // Fastify logs `{ req: request }` for every request. Its default serializer
+    // keeps the raw URL (including `?token=`); this one keeps the path only.
+    serializers: {
+      req: serializeRequest,
     },
   };
 }

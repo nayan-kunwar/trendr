@@ -7,8 +7,12 @@ import {
   JWT_ACCESS_TTL_SECONDS,
   JWT_AUDIENCE,
   JWT_ISSUER,
+  RateLimitedError,
   UnauthorizedError,
 } from '@trendr/core';
+import { findUserById } from '@trendr/db';
+
+import { authFailureBudgetExhausted, noteAuthFailure } from './auth-failures.js';
 
 /**
  * Spec §10.5 — access-token authentication. Every `Authorization: Bearer`
@@ -46,10 +50,33 @@ export interface AuthPluginOptions {
   secret: string;
   /** Access-token lifetime in seconds (env JWT_ACCESS_TTL_SEC, spec default 900). */
   accessTtlSeconds?: number;
+  /** Trusted-proxy flags for the failed-credential guard. */
+  trustProxy?: boolean;
+  trustCfConnectingIp?: boolean;
+  /** Rejected bearer tokens allowed per IP per window; 0 disables the guard (tests). */
+  failureMax?: number;
+  /** Failed-credential window in seconds. */
+  failureWindowSeconds?: number;
 }
 
 export const registerAuth = fp<AuthPluginOptions>(
-  async (app, { secret, accessTtlSeconds }) => {
+  async (
+    app,
+    {
+      secret,
+      accessTtlSeconds,
+      trustProxy = false,
+      trustCfConnectingIp = false,
+      failureMax,
+      failureWindowSeconds,
+    },
+  ) => {
+    const failureOptions = {
+      trustProxy,
+      trustCfConnectingIp,
+      ...(failureMax === undefined ? {} : { max: failureMax }),
+      ...(failureWindowSeconds === undefined ? {} : { windowSeconds: failureWindowSeconds }),
+    } as const;
     await app.register(jwt, {
       secret,
       sign: {
@@ -72,8 +99,16 @@ export const registerAuth = fp<AuthPluginOptions>(
       if (request.url.split('?', 1)[0] === '/metrics') {
         return;
       }
+
+      // This instance-level hook runs before the route-level rate limiter;
+      // reject invalid credentials before spending a signature verification.
+      if (await authFailureBudgetExhausted(app, request, 'bearer', failureOptions)) {
+        throw new RateLimitedError('too many invalid access tokens; try again in a minute');
+      }
+
       const [scheme, token] = header.split(' ', 2);
       if (scheme !== 'Bearer' || token === undefined || token.length === 0) {
+        await noteAuthFailure(app, request, 'bearer', failureOptions);
         throw new UnauthorizedError('invalid authorization header');
       }
 
@@ -81,10 +116,12 @@ export const registerAuth = fp<AuthPluginOptions>(
       try {
         verified = await request.jwtVerify();
       } catch {
+        await noteAuthFailure(app, request, 'bearer', failureOptions);
         throw new UnauthorizedError('invalid or expired access token');
       }
       const claims = verified as { sub?: unknown; role?: unknown };
       if (typeof claims.sub !== 'string' || (claims.role !== 'admin' && claims.role !== 'user')) {
+        await noteAuthFailure(app, request, 'bearer', failureOptions);
         throw new UnauthorizedError('invalid access token claims');
       }
       request.authUser = { id: claims.sub, role: claims.role };
@@ -98,16 +135,25 @@ export const registerAuth = fp<AuthPluginOptions>(
  * API key or a JWT whose role claim is `admin`. Missing credentials are 401;
  * authenticated non-admins are 403 (the task 4.6 acceptance).
  *
- * Deliberately `async` although there is nothing to await: Fastify's hook
- * runner only advances the chain when a hook returns a promise or calls
- * `done`, so a synchronous `(request) => void` guard would stall every
- * authorised request forever (observed while building task 4.6).
+ * `async` is required both by Fastify's hook contract (a synchronous
+ * `(request) => void` guard would stall the chain) and by the optional stored-
+ * role lookup below.
  */
-// eslint-disable-next-line @typescript-eslint/require-await -- Fastify hook contract, see comment.
 export async function requireAdmin(request: FastifyRequest): Promise<void> {
   if (request.apiKey !== undefined) {
     if (!request.apiKey.scopes.includes('admin')) {
       throw new ForbiddenError('admin scope required');
+    }
+    // The key carries an explicit scope, but the owning account remains the
+    // authority. A demoted admin's key stops working immediately.
+    if (request.server.hasDecorator('db')) {
+      const user = await findUserById(request.server.db, request.apiKey.userId);
+      if (user === null) {
+        throw new UnauthorizedError('API-key owner no longer exists');
+      }
+      if (user.role !== 'admin') {
+        throw new ForbiddenError('admin role required');
+      }
     }
     return;
   }
@@ -116,6 +162,21 @@ export async function requireAdmin(request: FastifyRequest): Promise<void> {
   }
   if (request.authUser.role !== 'admin') {
     throw new ForbiddenError('admin role required');
+  }
+
+  // A JWT role claim is a 15-minute snapshot. Re-read the account when the
+  // deployment has a database so removing an admin (or deleting the account)
+  // takes effect immediately rather than waiting for the access token to
+  // expire. Unit tests that build the auth plugin without a database fall back
+  // to the claim.
+  if (request.server.hasDecorator('db')) {
+    const user = await findUserById(request.server.db, request.authUser.id);
+    if (user === null) {
+      throw new UnauthorizedError('admin account no longer exists');
+    }
+    if (user.role !== 'admin') {
+      throw new ForbiddenError('admin role required');
+    }
   }
 }
 

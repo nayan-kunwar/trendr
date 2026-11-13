@@ -185,20 +185,31 @@ describe('seed.ts (spec §7.3 bootstrap, task 1.6)', () => {
     expect(hfWithDownloads.n).toBe(36);
   }, 180_000);
 
-  it('re-running is idempotent: identical report and identical rows', async () => {
+  it('re-running is idempotent for catalog rows and rotates the dev key', async () => {
     const before = await scopedCounts();
 
     const second = await seed(db, { pepper: PEPPER, adminEmail: ADMIN_EMAIL, now: ANCHOR });
-    expect(second).toEqual(report);
+    expect({
+      ...second,
+      apiKey: report.apiKey,
+      apiKeyPrefix: report.apiKeyPrefix,
+    }).toEqual(report);
+    expect(second.apiKey).not.toBe(report.apiKey);
+    expect(second.apiKeyPrefix).not.toBe(report.apiKeyPrefix);
 
     expect(await scopedCounts()).toEqual(before);
 
-    // Still exactly one key per prefix and no duplicate admin accounts.
+    // Still exactly one seed key for the admin and no duplicate admin accounts.
+    const admin = single(await db.select().from(users).where(eq(users.email, ADMIN_EMAIL)));
     const keyRows = await db
-      .select({ n: count() })
+      .select()
       .from(apiKeys)
-      .where(eq(apiKeys.prefix, report.apiKeyPrefix));
-    expect(single(keyRows).n).toBe(1);
+      .where(and(eq(apiKeys.userId, admin.id), eq(apiKeys.name, 'seed-dev-key')));
+    const key = single(keyRows);
+    expect(key.prefix).toBe(second.apiKeyPrefix);
+    expect(key.keyHash.equals(createHmac('sha256', PEPPER).update(second.apiKey).digest())).toBe(
+      true,
+    );
     const adminRows = await db
       .select({ n: count() })
       .from(users)

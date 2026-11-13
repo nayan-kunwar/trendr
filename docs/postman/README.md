@@ -98,9 +98,10 @@ manually or leave it; it has no privileges.
   provider discovery and that an invalid OAuth callback redirects to the web error page; the
   provider round-trip itself is opt-in in `06 Manual` because it needs real client credentials.
 - **Mailpit** (`http://localhost:8025`) is queried through its HTTP API. The second request extracts
-  the token from the `/auth/verify?token=…` link. This folder only works locally.
+  the token from the `/auth/verify#token=…` link. This folder only works locally.
 - **`03 Me`** uses Bearer `{{accessToken}}`. API keys are deliberately rejected on `/v1/me/*`.
-- **`04 Admin`** uses `X-API-Key: {{adminApiKey}}` (the seeded `read+admin` key). An admin-role JWT
+- **`04 Admin`** uses `X-API-Key: {{adminApiKey}}` (the seeded `read+admin` key; it rotates on every
+  `pnpm db:seed`, so copy the newly printed value). An admin-role JWT
   also works; `06 Manual` has an optional request for that path.
 - **Cookie writes** (`refresh`, `logout`) need `x-requested-with: trendr`. Postman's cookie jar
   captures `dt_refresh` from the verify response automatically.

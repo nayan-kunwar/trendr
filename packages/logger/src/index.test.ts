@@ -21,14 +21,14 @@ interface LoggedLine {
   env: string;
   version: string;
   msg: string;
-  req: { headers: { authorization: string; cookie: string; 'x-api-key': string } };
+  req: { method: string; url: string; host: string; remoteAddress: string };
   user: { email: string };
   token: string;
   GITHUB_TOKENS: string;
 }
 
 describe('createLogger', () => {
-  it('redacts secrets and emails outside production', () => {
+  it('redacts secrets and emails outside production, and strips request queries', () => {
     const { chunks, stream } = capturingDestination();
     const logger = createLogger({
       service: 'api',
@@ -40,11 +40,11 @@ describe('createLogger', () => {
     logger.info(
       {
         req: {
-          headers: {
-            authorization: 'Bearer supersecret',
-            cookie: 'sid=abc',
-            'x-api-key': 'key123',
-          },
+          method: 'GET',
+          url: '/v1/unsubscribe?token=supersecret',
+          host: 'api.example.test',
+          ip: '203.0.113.9',
+          headers: { authorization: 'Bearer supersecret' },
         },
         user: { email: 'dev@example.com' },
         token: 'tok-1',
@@ -59,9 +59,12 @@ describe('createLogger', () => {
     expect(line.env).toBe('test');
     expect(line.version).toBe('dev');
     expect(typeof line.time).toBe('string');
-    expect(line.req.headers.authorization).toBe('[REDACTED]');
-    expect(line.req.headers.cookie).toBe('[REDACTED]');
-    expect(line.req.headers['x-api-key']).toBe('[REDACTED]');
+    expect(line.req).toEqual({
+      method: 'GET',
+      url: '/v1/unsubscribe',
+      host: 'api.example.test',
+      remoteAddress: '203.0.113.9',
+    });
     expect(line.user.email).toBe('[REDACTED]');
     expect(line.token).toBe('[REDACTED]');
     expect(line.GITHUB_TOKENS).toBe('[REDACTED]');

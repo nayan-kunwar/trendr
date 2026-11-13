@@ -154,6 +154,30 @@ describe('X-API-Key auth and rate-limit tiers (task 3.5)', () => {
     await resetRateLimitCounters();
   });
 
+  it('throttles a flood of invalid keys before the database lookup', async () => {
+    await resetRateLimitCounters();
+    await withApp(async (app) => {
+      for (let index = 0; index < 20; index += 1) {
+        const response = await app.inject({
+          method: 'GET',
+          url: '/healthz',
+          headers: { 'x-api-key': keyMaterial(20 + index).raw },
+        });
+        expect(response.statusCode, `invalid key ${index + 1}`).toBe(401);
+      }
+
+      const throttled = await app.inject({
+        method: 'GET',
+        url: '/healthz',
+        headers: { 'x-api-key': keyMaterial(99).raw },
+      });
+      expect(throttled.statusCode).toBe(429);
+      expect(throttled.headers['content-type']).toContain('application/problem+json');
+      expect(throttled.headers['retry-after']).toBeDefined();
+    });
+    await resetRateLimitCounters();
+  });
+
   it('raises the limit for a valid key and keeps its own counter', async () => {
     await resetRateLimitCounters();
     await withApp(async (app) => {
