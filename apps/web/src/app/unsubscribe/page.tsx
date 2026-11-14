@@ -3,6 +3,9 @@ import { Suspense } from 'react';
 
 import { UnsubscribeClient } from '@/components/unsubscribe-client';
 
+// Nonce-based CSP: static shells get no script nonce and cannot hydrate.
+export const dynamic = 'force-dynamic';
+
 export const metadata: Metadata = {
   title: 'Unsubscribe',
   robots: { index: false, follow: false },

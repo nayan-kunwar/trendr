@@ -3,6 +3,11 @@ import { Suspense } from 'react';
 
 import { OAuthCallbackClient } from '@/components/oauth-callback-client';
 
+// The nonce-based CSP only reaches scripts on per-request renders. A static
+// shell ships chunk tags without a nonce, which `strict-dynamic` blocks, so
+// this page would never hydrate and never run the forced session refresh.
+export const dynamic = 'force-dynamic';
+
 export const metadata: Metadata = {
   title: 'Finishing sign-in',
   robots: { index: false, follow: false },

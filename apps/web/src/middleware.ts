@@ -4,6 +4,10 @@ import { NextResponse, type NextRequest } from 'next/server';
  * Spec §15 — nonce-based CSP for the Next.js surface. Next reads the nonce
  * from this header and applies it to its bootstrap and chunk scripts. There
  * are no third-party script origins; images allow remote avatars/covers.
+ *
+ * Client-interactive pages must render per request (`force-dynamic`): a
+ * prerendered shell has no nonce, so `strict-dynamic` blocks its chunks and
+ * the page never hydrates.
  */
 export function middleware(request: NextRequest): NextResponse {
   const nonce = Buffer.from(crypto.randomUUID()).toString('base64');

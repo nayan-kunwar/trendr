@@ -3,6 +3,9 @@ import type { Metadata } from 'next';
 
 import { LoginForm } from '@/components/login-form';
 
+// Nonce-based CSP: static shells get no script nonce and cannot hydrate.
+export const dynamic = 'force-dynamic';
+
 export const metadata: Metadata = {
   title: 'Sign in',
   description: 'Sign in to Trendr with Google, GitHub or a one-time email link.',

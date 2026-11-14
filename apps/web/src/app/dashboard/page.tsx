@@ -5,6 +5,9 @@ import { AlertsPanel } from '@/components/alerts-panel';
 import { WatchlistsPanel } from '@/components/watchlists-panel';
 import { Button } from '@/components/ui/button';
 
+// Nonce-based CSP: static shells get no script nonce and cannot hydrate.
+export const dynamic = 'force-dynamic';
+
 export const metadata: Metadata = {
   title: 'Dashboard',
   robots: { index: false, follow: false },

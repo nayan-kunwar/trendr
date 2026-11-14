@@ -6,6 +6,9 @@ import { ApiKeysPanel } from '@/components/api-keys-panel';
 import { DigestPreferences } from '@/components/digest-preferences';
 import { Button } from '@/components/ui/button';
 
+// Nonce-based CSP: static shells get no script nonce and cannot hydrate.
+export const dynamic = 'force-dynamic';
+
 export const metadata: Metadata = {
   title: 'Settings',
   robots: { index: false, follow: false },
