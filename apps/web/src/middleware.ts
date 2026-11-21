@@ -7,7 +7,8 @@ import { NextResponse, type NextRequest } from 'next/server';
  *
  * Client-interactive pages must render per request (`force-dynamic`): a
  * prerendered shell has no nonce, so `strict-dynamic` blocks its chunks and
- * the page never hydrates.
+ * the page never hydrates. The root layout reads the nonce, which keeps the
+ * whole app dynamic; do not opt a page back into static prerendering.
  */
 export function middleware(request: NextRequest): NextResponse {
   const nonce = Buffer.from(crypto.randomUUID()).toString('base64');

@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import { GeistMono } from 'geist/font/mono';
 import { GeistSans } from 'geist/font/sans';
+import { headers } from 'next/headers';
 import type { ReactNode } from 'react';
 
 import { AuthProvider } from '@/components/auth-provider';
@@ -53,7 +54,11 @@ export const viewport: Viewport = {
   colorScheme: 'light dark',
 };
 
-export default function RootLayout({ children }: { children: ReactNode }) {
+export default async function RootLayout({ children }: { children: ReactNode }) {
+  // Middleware mints a per-request CSP nonce; next-themes needs it for its
+  // inline theme bootstrap, which would otherwise be blocked by strict-dynamic.
+  const nonce = (await headers()).get('x-nonce') ?? undefined;
+
   return (
     <html
       lang="en"
@@ -61,7 +66,13 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       className={`${GeistSans.variable} ${GeistMono.variable}`}
     >
       <body className="flex min-h-screen flex-col font-sans antialiased">
-        <ThemeProvider attribute="class" defaultTheme="dark" enableSystem disableTransitionOnChange>
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="dark"
+          enableSystem
+          disableTransitionOnChange
+          nonce={nonce}
+        >
           <AuthProvider>
             <SiteHeader />
             <div className="flex-1">{children}</div>
