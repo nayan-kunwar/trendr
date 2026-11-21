@@ -30,7 +30,7 @@ an MCP server for agents.
 - **API** — Fastify 5 + Zod (schema-first, RFC 7807 errors, OpenAPI from the same schemas)
 - **Worker** — BullMQ on Redis 7 (schedulers, retries, rate-limited source adapters)
 - **Data** — PostgreSQL 16 + Drizzle ORM (monthly-partitioned `snapshots`, raw-SQL migrations)
-- **Web** — Next.js 15 App Router + Tailwind v4 and local shadcn-style primitives
+- **Web** — Next.js 16 App Router + Tailwind v4 and local shadcn-style primitives
 - **MCP** — Model Context Protocol server (stdio + Streamable HTTP)
 - **Tooling** — TypeScript 5 strict, pnpm 11 workspaces + Turborepo, Vitest, ESLint 9, Prettier,
   Docker Compose, GitHub Actions
